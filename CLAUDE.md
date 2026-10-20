@@ -19,7 +19,7 @@ Reglas y contexto para cualquier asistente de IA que continúe este proyecto.
 
 ## Convenciones de código
 
-- Filtro de negocio: **solo** se envía alerta si alguno de los 3 antimicrobianos formulados (AM1/AM2/AM3) coincide (por prefijo, insensible a mayúsculas) con: `LINEZOLID`, `CEFTAZIDIMA / AVIBACTAM`, `ANFOTERICINA`, `AZTREONAM`, `ERTAPENEM`. El nombre del formulario viene con un sufijo tipo ` - UT-XXXXXXX` que se descarta con `nombreLimpio()` antes de comparar y antes de mostrarlo en el mensaje.
+- Filtro de negocio: **solo** se envía alerta si alguno de los 3 antimicrobianos formulados (AM1/AM2/AM3) contiene alguno de los nombres de la lista de restringidos. La lista se lee de la hoja `ANTIMICROBIANOS_RESTRINGIDOS` de la matriz (columna A, desde la fila 2); si la hoja no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO` (Linezolid, Ceftazidima/Avibactam, Anfotericina, Aztreonam, Ertapenem, Vancomicina, Caspofungina, Anfotericina B liposomal, Tygeciclina, Doripenem, Rifampicina, Polimixina B, Daptomicina). Los nombres deben escribirse como aparecen en el formulario (p. ej. `TYGECICLINA` con Y, `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`). El nombre del formulario viene con un sufijo tipo ` - UT-XXXXXXX` que se descarta con `nombreLimpio()` antes de comparar y antes de mostrarlo en el mensaje.
 - Los emojis del mensaje se generan con `String.fromCodePoint()`, nunca como caracteres literales (mismo criterio que los otros dos bots, para evitar corrupción de codificación en editores de código).
 - Este bot **no** envía correo electrónico (a diferencia de Farmacovigilancia y Tecnovigilancia); solo WhatsApp.
 - La edad se toma de "Edad del paciente en años"; si está vacío, se usa "Edad del paciente meses". Nunca se muestran ambos.
@@ -47,3 +47,7 @@ Programa de Optimización de Antimicrobianos (PROA), Resolución 4816 de 2008, R
 - Hoja de respuestas: `https://docs.google.com/spreadsheets/d/1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY/edit`
 - Proyecto Apps Script "PROA ALERTAS" (standalone): `https://script.google.com/u/1/home/projects/12mUy9SqQGzRnGjkbAsFyycG9RxJxvFePpSuHl4Nv8MokONxKY7kwbIw0/edit`
 - Repositorio GitHub: `https://github.com/jsaavedran1-glitch/alertas-whatsapp-antimicrobianos`
+
+## Pie de firma
+
+Todo mensaje de WhatsApp termina con `_Bot diseñado por el QF Juan Pablo Saavedra · Servicio Farmacéutico HDV_` (cursiva, mismo estilo que el bot de Alertas INVIMA), agregado en `enviarAlertaWhatsApp()`. Si se cambia el texto, actualizar también `test/pie-firma.js`.
