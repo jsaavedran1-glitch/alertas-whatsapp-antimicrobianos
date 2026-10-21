@@ -1,111 +1,186 @@
 # Alertas WhatsApp - PROA Antimicrobianos Restringidos HDV
 
-Bot de Google Apps Script que envía una alerta automática por **WhatsApp** (vía [Green-API](https://green-api.com/en/)) cada vez que se registra en el formulario Google "MATRIZ SOLICITUDES ANTIMICROBIANOS" la prescripción de uno de los antimicrobianos restringidos del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio E.S.E.
+Bot de Google Apps Script que avisa por **WhatsApp** (vía [Green-API](https://green-api.com/en/)) cada vez que en el **FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV** se prescribe uno de los antimicrobianos restringidos del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio E.S.E. (HDV). Si la solicitud no incluye ningún restringido, no envía nada. No envía correo.
 
-Es el tercer bot de esta familia (junto a los de Farmacovigilancia y Tecnovigilancia), reutilizando la misma instancia de Green-API pero con **Script Properties completamente independientes**, en un proyecto de Apps Script **standalone** separado del script existente de cálculo de DOT ("FORMULARIO PROA DOT") que ya está vinculado a la misma hoja de cálculo. Ambos proyectos conviven sin interferirse.
+| Recurso | Enlace |
+|---|---|
+| Formulario | [FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV](https://docs.google.com/forms/d/1u8XYmynHfAH0EoeyNFFcd8w12IA95J47oItrv34TyGI/edit) |
+| Hoja de respuestas | [MATRIZ FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV (Respuestas)](https://docs.google.com/spreadsheets/d/1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY/edit) |
+| Proyecto Apps Script | [PROA ALERTAS](https://script.google.com/u/1/home/projects/12mUy9SqQGzRnGjkbAsFyycG9RxJxvFePpSuHl4Nv8MokONxKY7kwbIw0/edit) (independiente, no vinculado a la hoja; archivo "Código") |
+| Código en este repo | `Codigo.gs` |
 
-## Arquitectura
+La misma hoja tiene vinculado otro script, **FORMULARIO PROA DOT**, que calcula los días de terapia. Son proyectos separados y este bot no lo toca.
 
-- **Tipo de proyecto:** Google Apps Script *standalone* (no vinculado directamente a la hoja). El activador se crea programáticamente vía `ScriptApp.newTrigger(...).forSpreadsheet(...)`, apuntando a la hoja de respuestas del formulario "MATRIZ SOLICITUDES ANTIMICROBIANOS".
-- **Disparador (trigger):** instalable, tipo `On form submit` ("Al enviar el formulario"), apuntando a `notificarNuevaRespuesta(e)`.
-- **Canal WhatsApp:** [Green-API](https://green-api.com/en/), instancia compartida `710722693364` con los bots de Farmacovigilancia y Tecnovigilancia (cada proyecto tiene su propio Script Properties, así que no hay colisión de configuración pese a compartir instancia).
-- **Sin canal de correo:** a diferencia de los otros dos bots, este únicamente envía alertas por WhatsApp.
-- **Filtro de negocio:** solo se envía alerta si alguno de los antimicrobianos formulados (AM1, AM2 o AM3) coincide con la lista de antimicrobianos restringidos monitoreados por PROA. Si ninguno coincide, la ejecución termina sin enviar nada.
-
-## Diagrama de flujo
+## Cómo funciona
 
 ```mermaid
 flowchart TD
-    A["Prescriptor diligencia el formulario\nGoogle 'MATRIZ SOLICITUDES ANTIMICROBIANOS'"] --> B["Se agrega una fila\na la hoja de respuestas"]
-    B --> C{"Trigger instalable\nOn form submit"}
+    A["Un médico diligencia el formulario<br/>de antimicrobianos restringidos"] --> B["Google agrega una fila en<br/>'Respuestas de formulario 1'"]
+    B --> C{"Activador instalable<br/>Al enviar el formulario"}
     C --> D["notificarNuevaRespuesta(e)"]
-    D --> E["filtrarAntimicrobianosRestringidos(e)\nRevisa AM1, AM2 y AM3"]
-    E --> F{"¿Alguno es Linezolid,\nCeftazidima/Avibactam,\nAnfotericina, Aztreonam\no Ertapenem?"}
-    F -- No --> G["No se envía nada"]
-    F -- Sí --> H["construirMensajeDesdeEvento(e)\nHistoria clínica, edad, CIE10,\nespecialidad, servicio,\ninterconsulta infectología\ny antimicrobiano(s) restringido(s)"]
-    H --> I["enviarAlertaWhatsApp(mensaje)"]
-    I --> J["PropertiesService\nlee credenciales Green-API"]
-    J --> K["UrlFetchApp.fetch\nPOST /sendMessage"]
-    K --> L["Grupo de WhatsApp configurado"]
+    D --> E["obtenerAntimicrobianosRestringidos()<br/>lee la pestaña ANTIMICROBIANOS_RESTRINGIDOS"]
+    E -. "si la pestaña no existe,<br/>está vacía o falla" .-> E2["Lista de respaldo<br/>en CONFIG del código"]
+    E --> F["filtrarAntimicrobianosRestringidos(e)<br/>revisa Antimicrobiano 1, 2 y 3"]
+    E2 --> F
+    F --> G{"¿Alguno está en la lista?"}
+    G -- No --> H["Termina sin enviar nada"]
+    G -- Sí --> I["construirMensajeDesdeEvento(e)"]
+    I --> J["formatearDiagnosticoCIE10()<br/>busca la descripción en la pestaña CIE10"]
+    J --> K["enviarAlertaWhatsApp(mensaje)<br/>firma arriba, pie 'Bot diseñado por...' abajo"]
+    K --> L["Green-API sendMessage<br/>al grupo GREENAPI_GROUP_CHATID"]
+    L --> M["Grupo de WhatsApp"]
 
     style A fill:#1b2a4a,color:#fff
-    style F fill:#1b2a4a,color:#fff
-    style L fill:#1b2a4a,color:#fff
+    style G fill:#1b2a4a,color:#fff
+    style M fill:#1b2a4a,color:#fff
 ```
 
-Resumen del recorrido: un prescriptor envía el formulario → se crea una fila nueva en la hoja de respuestas → el trigger instalable dispara `notificarNuevaRespuesta(e)` → se revisan los antimicrobianos formulados → **solo si alguno está en la lista restringida** se arma el mensaje y se envía por WhatsApp (Green-API); en caso contrario no se envía nada.
+Paso a paso:
 
-## Antimicrobianos restringidos monitoreados
+1. **Llega una solicitud.** Al enviarse el formulario, Google agrega una fila a la hoja y dispara el activador "Al enviar el formulario", que llama a `notificarNuevaRespuesta(e)`.
+2. **Se carga la lista de restringidos** desde la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` de la misma hoja (columna A, desde la fila 2). Si esa pestaña no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO`, para que las alertas nunca dejen de funcionar por eso.
+3. **Se revisan los 3 antimicrobianos de la solicitud.** El formulario guarda el nombre con un código interno (`LINEZOLID - UT-19907394-3`). `nombreLimpio()` quita todo desde ` - UT-`, se pasa a mayúsculas y se marca como restringido si el nombre **contiene** alguno de la lista. Por eso `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`, y `ANFOTERICINA` cubre la convencional y la liposomal.
+4. **Si ninguno es restringido, termina** sin enviar nada. Es lo más común: la mayoría de solicitudes son de cefepime, piperacilina/tazobactam, meropenem, etc.
+5. **Si hay al menos uno, arma el mensaje.** El diagnóstico se busca en la pestaña `CIE10` por su código (por ejemplo, `A419` pasa a `A419 - Sepsis, no especificada`); si no lo encuentra, deja lo que escribió el médico. Se agrega un bloque por cada antimicrobiano restringido con dosis, vía, frecuencia y días.
+6. **WhatsApp.** `enviarAlertaWhatsApp()` pone la firma en negrita arriba (`Bot PROA Antimicrobianos HDV` o lo que diga `GREENAPI_BOT_LABEL`) y el pie en cursiva abajo, y hace un `POST` a `sendMessage` de Green-API. Si Green-API responde con error o no hay conexión, lo deja en el registro sin detener la ejecución.
 
-1. Linezolid
-2. Ceftazidima / Avibactam
-3. Anfotericina (B o B liposomal)
-4. Aztreonam
-5. Ertapenem
+### Antimicrobianos restringidos
 
-La coincidencia se hace por prefijo del nombre (insensible a mayúsculas), ya que el formulario guarda el nombre seguido de un código interno (ej. `LINEZOLID - UT-19907394-3`); el código se descarta antes de comparar y antes de mostrarlo en el mensaje.
+La lista vigente está en la pestaña **`ANTIMICROBIANOS_RESTRINGIDOS`** de la matriz:
 
-## Archivos
+Linezolid · Ceftazidima / Avibactam · Anfotericina · Aztreonam · Ertapenem · Vancomicina · Caspofungina · Anfotericina B liposomal · Tygeciclina · Doripenem · Rifampicina · Polimixina B · Daptomicina
 
-| Archivo | Descripción |
+**Para agregar o quitar un antimicrobiano no hay que tocar el código:** basta con editar esa pestaña, una fila por antimicrobiano. Hay que escribirlo como aparece en el formulario (por ejemplo `TYGECICLINA` con Y). Ojo con nombres muy cortos o genéricos: como la comparación es por "contiene", un término como `CEF` alertaría por todas las cefalosporinas.
+
+Si se cambia la lista de la pestaña, conviene actualizar también la de respaldo en `CONFIG` (y en `test/dry-run.js`), para que coincidan si alguna vez falla la lectura.
+
+### Datos del mensaje
+
+| En el mensaje | Pregunta del formulario (título exacto) |
 |---|---|
-| `Codigo.gs` | Lógica completa del bot: filtro de antimicrobianos restringidos, construcción del mensaje, envío WhatsApp, creación del trigger, utilidades de prueba. |
-| `appsscript.json` | Manifiesto del proyecto Apps Script (zona horaria, runtime V8). |
-| `CLAUDE.md` | Reglas y contexto operativo para asistentes de IA que continúen este proyecto. |
-| `CHANGELOG.md` | Historial de cambios. |
-| `test/dry-run.js` | Script Node.js para probar el filtro y la construcción del mensaje **sin** llamar a ninguna API real (sin credenciales, sin envíos). |
+| 📄 Historia Clínica | `Número de Historia Clínica` |
+| 🎂 Edad | `Edad del paciente en años`; si está vacía, `Edad del paciente meses` |
+| 📋 Diagnóstico CIE10 | `Diagnóstico CIE10 para la cual se prescribe el antimicrobiano` (+ descripción de la pestaña `CIE10`) |
+| 🦠 Microorganismo aislado | `Microorganismo aislado` |
+| 🩺 Especialidad que prescribe | `Especialidad que prescribe` |
+| 🏥 Servicio actual | `Servicio actual` |
+| 🧪 Interconsulta Infectología | `¿Solicitó interconsulta por infectología en Dinámica Gerencial?` |
+| 💊 Antimicrobiano restringido | `Nombre Antimicrobiano 1/2/3` con su dosis, vía, frecuencia y días |
 
-## Campos que incluye la alerta
+Los títulos de las columnas del formulario son inconsistentes y hay que copiarlos tal cual. Por ejemplo, la dosis del primero dice `AB1` y las otras `AM2`/`AM3`; la frecuencia del primero dice `(En Horas)` y las otras `(En horas)`; la vía dice `adminsitración`, con la errata, y lleva dos espacios antes de `AM1`. `campo()` busca el título **exacto**: si alguien edita una pregunta, ese dato sale como `-` (o el antimicrobiano no se detecta) sin ningún error.
 
-1. Número de Historia Clínica
-2. Edad del paciente (en años, o en meses si años no está diligenciado)
-3. Diagnóstico CIE10 para la cual se prescribe el antimicrobiano
-4. Especialidad que prescribe
-5. Servicio actual
-6. ¿Solicitó interconsulta por infectología en Dinámica Gerencial?
-7. Nombre, dosis (mg/UI) y frecuencia (horas) de cada antimicrobiano restringido detectado (AM1, AM2 y/o AM3)
+### Ejemplo (datos ficticios)
 
-El mensaje de WhatsApp usa emojis (vía `String.fromCodePoint`, no caracteres literales, para evitar corrupción de codificación en editores).
+```
+*Bot PROA Antimicrobianos HDV*
 
-## Configuración necesaria (Script Properties)
+🚨 NUEVO CASO PROA - ANTIMICROBIANO RESTRINGIDO 🚨
 
-En el proyecto de Apps Script ("PROA ALERTAS"), ir a **Configuración del proyecto → Propiedades de las secuencias de comandos** y definir:
+📄 Historia Clínica: 99999999
+🎂 Edad: 54 años
+📋 Diagnóstico CIE10: A419 - Sepsis, no especificada
+🦠 Microorganismo aislado: Staphylococcus aureus resistente a meticilina
+🩺 Especialidad que prescribe: Medicina Interna
+🏥 Servicio actual: Unidad de Cuidado Crítico UCI C
+🧪 Interconsulta Infectología (Dinámica Gerencial): Sí
 
-| Propiedad | Descripción | Ejemplo |
+💊 Antimicrobiano restringido 1: LINEZOLID
+   Dosis: 600 mg/UI
+   Vía de administración: Intravenoso
+   Frecuencia: cada 12 horas
+   Días ordenados: 14
+
+_Bot diseñado por el QF Juan Pablo Saavedra · Servicio Farmacéutico HDV_
+```
+
+## Configuración
+
+### En el código (`CONFIG`)
+
+| Clave | Valor |
+|---|---|
+| `SPREADSHEET_ID` | ID de la matriz de respuestas |
+| `HOJA_ANTIMICROBIANOS_RESTRINGIDOS` | `ANTIMICROBIANOS_RESTRINGIDOS` |
+| `ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO` | Lista de respaldo |
+| `HOJA_CIE10` | `CIE10` (columna A código, columna B descripción) |
+
+### Propiedades del script
+
+En el editor de Apps Script: **Configuración del proyecto → Propiedades del script**. Ninguna credencial va en el código: este repositorio es público.
+
+| Propiedad | Obligatoria | Descripción |
 |---|---|---|
-| `GREENAPI_ID_INSTANCE` | ID de instancia de Green-API | `710722693364` |
-| `GREENAPI_API_TOKEN` | Token de la instancia | *(secreto, no versionar)* |
-| `GREENAPI_API_URL` | URL base de la API de esa instancia | `https://7107.api.greenapi.com` |
-| `GREENAPI_GROUP_CHATID` | chatId del grupo de WhatsApp destino | grupo de pruebas "PRUEBA BOT" durante desarrollo |
-| `GREENAPI_BOT_LABEL` | Firma que antecede el mensaje | `Bot PROA Antimicrobianos HDV` |
+| `GREENAPI_ID_INSTANCE` | sí | ID de la instancia de Green-API (compartida con los otros bots) |
+| `GREENAPI_API_TOKEN` | sí | Token de la instancia (secreto) |
+| `GREENAPI_API_URL` | sí | URL base de la API, ej. `https://7107.api.greenapi.com` |
+| `GREENAPI_GROUP_CHATID` | sí | chatId del grupo de destino; siempre termina en `@g.us` |
+| `GREENAPI_BOT_LABEL` | no | Firma en negrita al inicio del mensaje (por defecto `Bot PROA Antimicrobianos HDV`) |
 
-**Nunca** se deben hardcodear estas credenciales en el código: todo se lee vía `PropertiesService.getScriptProperties()`.
+Para encontrar el chatId de un grupo sin riesgo de enviar nada, ejecutar `listarChatsGreenAPI()`: solo lee (`getChats`) y registra los grupos (`@g.us`).
 
-## Disparador (trigger)
+## Activador
 
-Como el proyecto es standalone, el trigger **no** se puede crear desde la interfaz de Activadores (esa vista solo ofrece "Basado en el tiempo" o "Del calendario" para proyectos no vinculados). Se crea ejecutando una vez la función `crearTriggerFormSubmit()`, que registra un activador instalable `onFormSubmit()` contra la hoja de cálculo indicada en `CONFIG.SPREADSHEET_ID`.
+El proyecto es independiente (no está vinculado a la hoja), así que el activador "Al enviar el formulario" **no** se puede crear desde la pantalla de Activadores. Se creó una sola vez ejecutando `crearTriggerFormSubmit()`. No volver a ejecutarla: crearía un segundo activador y cada alerta llegaría duplicada.
 
-## Funciones de utilidad / prueba
+## Funciones
 
-| Función | Uso | ¿Envía mensajes reales? |
+| Función | ¿Envía algo? | Uso |
 |---|---|---|
-| `listarChatsGreenAPI()` | Lista los chats/grupos visibles para la instancia (para obtener chatIds) | No, solo lectura |
-| `testConstruccionMensaje()` | Construye el mensaje con dos casos ficticios (uno con antimicrobiano restringido, otro sin él) y lo muestra en el log | No |
-| `eventoPruebaLinezolid()` | Datos ficticios con Linezolid (debe generar alerta) | No |
-| `eventoPruebaSinRestringidos()` | Datos ficticios con Ceftriaxona (no debe generar alerta) | No |
-| `enviarEjemploAlGrupo()` | Envía el mensaje de ejemplo (caso Linezolid) al grupo configurado | **Sí** |
-| `crearTriggerFormSubmit()` | Crea el activador instalable `onFormSubmit` (una sola vez) | No |
+| `notificarNuevaRespuesta(e)` | Sí, si hay restringido | La llama el activador |
+| `obtenerAntimicrobianosRestringidos()` | **No** | Lee la pestaña de restringidos (o el respaldo) |
+| `filtrarAntimicrobianosRestringidos(e)` | **No** | Devuelve los antimicrobianos restringidos de la solicitud |
+| `construirMensajeDesdeEvento(e)` | **No** | Arma el texto del mensaje |
+| `formatearDiagnosticoCIE10()`, `obtenerMapaCIE10()`, `extraerCodigoCIE10()` | **No** | Cruce del diagnóstico con la pestaña `CIE10` |
+| `enviarAlertaWhatsApp(mensaje)` | Sí | Envío a Green-API con firma y pie |
+| `listarChatsGreenAPI()` | **No** | Lista los grupos visibles para la instancia |
+| `crearTriggerFormSubmit()` | No (crea el activador) | Ya se ejecutó; no repetir |
+| `eventoPruebaLinezolid()`, `eventoPruebaVancomicina()`, `eventoPruebaSinRestringidos()` | **No** | Datos ficticios de prueba |
+| `testConstruccionMensaje()` | **No** | Escribe en el registro los 3 casos de prueba (el de ceftriaxona no debe alertar) |
+| `testCruceCIE10()` | **No** | Verifica en el registro el cruce con la pestaña `CIE10` |
+| `enviarEjemploAlGrupo()` | Sí | Envía el caso ficticio de linezolid al grupo configurado |
 
-⚠️ **Antes de ejecutar `enviarEjemploAlGrupo()`**, confirmar en `GREENAPI_GROUP_CHATID` que el chatId apunta al grupo de pruebas ("PRUEBA BOT") y no a un grupo de producción.
+Antes de ejecutar `enviarEjemploAlGrupo()`, confirmar que `GREENAPI_GROUP_CHATID` apunta a PRUEBA BOT (`120363412506101174@g.us`).
 
-## Pruebas locales sin credenciales
+## Cómo se actualiza el bot
+
+El editor de Apps Script **no** se sincroniza con GitHub. Para cambiar el bot:
+
+1. Si solo cambia la lista de antimicrobianos, editar la pestaña `ANTIMICROBIANOS_RESTRINGIDOS`; no hace falta tocar el código.
+2. Para cambios de código, editar `Codigo.gs` en este repo y correr las pruebas locales.
+3. Copiar el cambio al editor (archivo "Código" del proyecto PROA ALERTAS) y guardar con Ctrl+S. No hace falta publicar: el activador usa siempre la última versión guardada.
+4. Probar con `GREENAPI_GROUP_CHATID` en PRUEBA BOT antes de volver a producción.
+
+Al pegar texto con tildes o emojis, el editor a veces los daña. Los textos nuevos se escriben con escapes `\u` (como el pie) o con `String.fromCodePoint()`.
+
+## Pruebas locales (sin red ni credenciales)
 
 ```bash
-node test/dry-run.js
+node test/pie-firma.js   # carga el Codigo.gs real: pie de firma y filtro de los antimicrobianos nuevos
+node test/dry-run.js     # reconstruye el filtro y el mensaje en Node
 ```
 
-Este script reconstruye la lógica de `filtrarAntimicrobianosRestringidos` y `construirMensajeDesdeEvento` en Node.js puro (sin `UrlFetchApp` ni `PropertiesService`) para verificar el filtro y el formato del mensaje antes de tocar el proyecto de Apps Script.
+## Green-API compartida: cuidado con el cupo de chats
+
+La instancia de Green-API es la misma para los 4 bots del Servicio Farmacéutico y está en el plan Developer (gratis). Ese plan **no limita mensajes, sino chats distintos por mes: 3**, contando los que escriben al número del bot; el contador se reinicia el día 1. Hoy se usan 2 (grupo de producción y PRUEBA BOT). Si se escribe a un cuarto chat, o alguien le escribe por privado al número del bot, Green-API responde 466 y **los 4 bots** dejan de enviar hasta el día 1.
+
+| Bot | Qué lo dispara | Repositorio |
+|---|---|---|
+| Farmacovigilancia | Formulario FOREAM | [alertas-whatsapp-farmacovigilancia](https://github.com/jsaavedran1-glitch/alertas-whatsapp-farmacovigilancia) |
+| Tecnovigilancia | Formulario FOREIA001 | [alertas-whatsapp-tecnovigilancia](https://github.com/jsaavedran1-glitch/alertas-whatsapp-tecnovigilancia) |
+| PROA antimicrobianos | Formulario de antimicrobianos restringidos | este repositorio |
+| Alertas INVIMA | Reloj (4 revisiones diarias) | [alertas-whatsapp-sanitarias-invima](https://github.com/jsaavedran1-glitch/alertas-whatsapp-sanitarias-invima) |
+
+## Reglas
+
+- **Solo a grupos.** El destino siempre termina en `@g.us`; nunca se envía a una persona (`@c.us`).
+- **Ninguna credencial en el código.** Todo vive en Propiedades del script.
+- **No modificar el script FORMULARIO PROA DOT** ni sus activadores.
+- **Pruebas solo en PRUEBA BOT**, nunca en el grupo de producción.
 
 ## Marco regulatorio de referencia
 
-Programa de Optimización de Antimicrobianos (PROA), Resolución 4816 de 2008 (Farmacovigilancia/Tecnovigilancia), Resolución 3100 de 2019 — aplicable al programa institucional de PROA del HDV E.S.E.
+Programa de Optimización de Antimicrobianos (PROA), Resolución 4816 de 2008, Resolución 3100 de 2019.
+
+## Ver también
+
+`CLAUDE.md` (contexto operativo para asistentes de IA) y `CHANGELOG.md` (historial de cambios).
