@@ -168,7 +168,7 @@ function enviarAlertaWhatsApp(mensaje) {
     return;
   }
   var firmaBot = props.getProperty('GREENAPI_BOT_LABEL') || 'Bot PROA Antimicrobianos HDV';
-  var pieBot = '_Bot dise\u00f1ado por el QF Juan Pablo Saavedra \u00b7 Servicio Farmac\u00e9utico HDV_';
+  var pieBot = '_Ecosistema de Vigilancia Digital del Servicio Farmac\u00e9utico HDV \u00b7 Desarrollado por el QF Juan Pablo Saavedra_';
   var mensajeFirmado = '*' + firmaBot + '*' + '\n\n' + mensaje + '\n\n' + pieBot;
   var url = props.getProperty('GREENAPI_API_URL') + '/waInstance' + idInstance + '/sendMessage/' + apiToken;
   var payload = { chatId: chatId, message: mensajeFirmado };
