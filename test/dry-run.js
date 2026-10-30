@@ -148,14 +148,22 @@ prueba('rangos de dosis: acepta si cumple alguna regla, marca si falla en todas'
   assert.strictEqual(evaluarDosis('LINEZOLID', '300', 70, reglas).revisar, true);
   assert.strictEqual(evaluarDosis('CASPOFUNGINA 50, 70', '50', 70, reglas).revisar, false);
   assert.strictEqual(evaluarDosis('CASPOFUNGINA 50, 70', '27', 7.5, reglas).revisar, false); // lactante: 3,6 mg/kg (50-70 mg/m2)
-  assert.strictEqual(evaluarDosis('CASPOFUNGINA 50, 70', '150', 70, reglas).revisar, true);
+  assert.strictEqual(evaluarDosis('CASPOFUNGINA 50, 70', '300', 70, reglas).revisar, true); // 300 mg y 4,3 mg/kg: falla en ambas
   assert.strictEqual(evaluarDosis('ANFOTERICINA B LIPOSOMAL', '200', 50, reglas).revisar, false); // 4 mg/kg (regla liposomal, no la convencional)
   assert.strictEqual(evaluarDosis('ANFOTERICINA B', '200', 50, reglas).revisar, true);           // 4 mg/kg de deoxicolato
+  assert.strictEqual(evaluarDosis('VANCOMICINA', '2100', 70, reglas).revisar, false);           // 30 mg/kg: carga dentro de 10-35
+  assert.strictEqual(evaluarDosis('CEFTAZIDIMA / AVIBACTAM', '940', 70, reglas).revisar, false); // minima dosis renal autorizada
+  assert.strictEqual(evaluarDosis('TYGECICLINA', '36', 30, reglas).revisar, false);              // nino 8-11 a: 1,2 mg/kg
+  assert.strictEqual(evaluarDosis('TYGECICLINA', '25', 70, reglas).revisar, false);              // Child-Pugh C
+  assert.strictEqual(evaluarDosis('ANFOTERICINA B', '17.5', 70, reglas).revisar, false);         // 0,25 mg/kg inicio
+  assert.strictEqual(reglaDosisPara('VANCOMICINA', reglas).ajusteRenal, 'SI');
+  assert.strictEqual(reglaDosisPara('LINEZOLID', reglas).ajusteRenal, 'NO');
+  assert.ok(reglas.every(function (r) { return r.nota.length > 20; }), 'toda fila debe traer su fuente en la nota');
   assert.strictEqual(evaluarDosis('POLIMIXINA B', '500000', 70, reglas).revisar, false);         // sin rango
   assert.strictEqual(evaluarDosis('MEROPENEM', '1000', 70, reglas).revisar, false);              // sin regla
   assert.strictEqual(evaluarDosis('VANCOMICINA', '', 70, reglas).revisar, false);
   var ev = evaluarDosis('VANCOMICINA', '500', 70, reglas);
-  assert.strictEqual(ev.referencia, '10-30 mg/kg/dosis');
+  assert.strictEqual(ev.referencia, '10-35 mg/kg/dosis');
 });
 
 prueba('mensaje: linezolid con interconsulta, meropenem como acompanante, fecha fin', function () {
@@ -186,7 +194,7 @@ prueba('mensaje: vancomicina 500 mg, cambio, ajuste renal, sin interconsulta, N3
   incluye(t, '⚠️ Sin interconsulta a Infectología');
   incluye(t, '💧 Ajuste renal: Sí (DepCr 18)');
   incluye(t, 'Dosis: 500 mg (7,1 mg/kg) · Intravenoso · cada 12 horas');
-  incluye(t, '⚠️ Dosis fuera del rango de referencia (10-30 mg/kg/dosis): revisar');
+  incluye(t, '⚠️ Dosis fuera del rango de referencia (10-35 mg/kg/dosis): revisar');
   noIncluye(t, 'Acompañante');
 });
 
@@ -200,6 +208,39 @@ prueba('mensaje: pediatrico con peso en gramos y dosis unica', function () {
   incluye(t, 'Días ordenados: Dosis Unica');
   noIncluye(t, 'cada Dosis');
   noIncluye(t, 'fuera del rango');
+});
+
+prueba('sugerencia PROA: empirico combinado, empirico solo, etiologico sin sugerencia', function () {
+  var e = eventoPruebaVancomicina(); // empirico, sin acompanante: por defecto no hay sugerencia
+  noIncluye(construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e)), 'Sugerencia PROA');
+  CONFIG.SUGERENCIA_EMPIRICO_SOLO = true;
+  incluye(construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e)), '💡 Sugerencia PROA: terapia empírica. Revaluar a las 48-72 h con el resultado de cultivos.');
+  CONFIG.SUGERENCIA_EMPIRICO_SOLO = false;
+  var nv = eventoPruebaVancomicina().namedValues;
+  nv['Nombre Antimicrobiano 2'] = ['MEROPENEM - UT-19973890-3']; nv['Dosis en miligramos o UI AM2'] = ['1000'];
+  nv['Vía de adminsitración de  AM2'] = ['Intravenoso']; nv['Frecuencia AM 2 (En horas)'] = ['8']; nv['Días ordenados AM2'] = ['7'];
+  var t2 = construirMensajeDesdeEvento({ namedValues: nv });
+  incluye(t2, '💡 Sugerencia PROA: terapia empírica combinada (VANCOMICINA + MEROPENEM). Revaluar a las 48-72 h con el resultado de cultivos para desescalar.');
+  var e3 = eventoPruebaLinezolid(); // etiologico con meropenem
+  noIncluye(construirMensajeDesdeEvento(e3, filtrarAntimicrobianosRestringidos(e3)), 'Sugerencia PROA');
+});
+
+prueba('coherencia: peso implausible, peso vs edad, dosis/kg absurda; ajuste renal informado', function () {
+  var nv = eventoPruebaVancomicina().namedValues; nv[CAMPOS.PESO_KG] = ['1']; nv['Dosis en miligramos o UI AB1'] = ['1000'];
+  var t = construirMensajeDesdeEvento({ namedValues: nv });
+  incluye(t, '⚠️ Verificar peso: 1 kg no es coherente con 63 años');
+  incluye(t, '⚠️ Verificar dosis o peso: VANCOMICINA 1000 mg equivalen a 1000 mg/kg');
+  nv = eventoPruebaVancomicina().namedValues; nv[CAMPOS.PESO_KG] = ['700'];
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '⚠️ Verificar peso: 700 kg no es un valor plausible');
+  nv = eventoPruebaPediatrico().namedValues; nv[CAMPOS.PESO_KG] = ['45']; nv[CAMPOS.PESO_G] = [''];
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '⚠️ Verificar peso: 45 kg no es coherente con 2 meses');
+  var ok = eventoPruebaLinezolid();
+  noIncluye(construirMensajeDesdeEvento(ok, filtrarAntimicrobianosRestringidos(ok)), 'Verificar');
+  // ajuste renal marcado Si con linezolid (no requiere ajuste renal)
+  nv = eventoPruebaLinezolid().namedValues; nv[CAMPOS.AJUSTE_RENAL] = ['Sí']; nv[CAMPOS.DEP_CREATININA] = ['25'];
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💧 Ajuste renal: Sí (DepCr 25) · LINEZOLID no requiere ajuste renal');
+  var v = eventoPruebaVancomicina();
+  noIncluye(construirMensajeDesdeEvento(v, filtrarAntimicrobianosRestringidos(v)), 'no requiere ajuste renal');
 });
 
 prueba('mensaje: campos ausentes salen como "-" y nunca como undefined', function () {

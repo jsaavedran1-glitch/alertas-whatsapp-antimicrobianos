@@ -8,23 +8,37 @@ var CONFIG = {
   HOJA_RANGOS_DOSIS: 'RANGOS_DOSIS',
   // Rangos de referencia POR DOSIS para marcar "revisar dosis". Una dosis se acepta si cumple
   // cualquiera de las dos reglas definidas (mg/kg o mg absolutos); se marca solo si falla en todas.
-  // Es una propuesta inicial: la lista vigente es la pestana RANGOS_DOSIS, que valida y ajusta el QF.
-  // Columnas: antimicrobiano, min mg/kg/dosis, max mg/kg/dosis, min mg/dosis, max mg/dosis, nota.
+  // La lista vigente es la pestana RANGOS_DOSIS, que valida y ajusta el QF; esta tabla es el
+  // respaldo y la propuesta inicial (fuentes en docs/antimicrobianos-restringidos.md).
+  // Columnas: antimicrobiano, min mg/kg/dosis, max mg/kg/dosis, min mg/dosis, max mg/dosis,
+  //           ajuste renal (SI/NO), nota con la fuente.
   RANGOS_DOSIS_RESPALDO: [
-    ['VANCOMICINA', 10, 30, null, null, '15-20 mg/kg c/8-12 h; carga 25-30 mg/kg'],
-    ['LINEZOLID', 8, 12, 600, 600, 'Adulto 600 mg c/12 h; pediatria 10 mg/kg c/8 h'],
-    ['DAPTOMICINA', 4, 12, null, null, '4-6 mg/kg c/24 h; 8-12 mg/kg en bacteriemia/endocarditis'],
-    ['CASPOFUNGINA', 1, 4, 35, 70, 'Adulto: carga 70 mg, luego 50 mg/dia; pediatria 50-70 mg/m2 (~1-4 mg/kg)'],
-    ['ANFOTERICINA B LIPOSOMAL', 3, 10, null, null, '3-5 mg/kg/dia; hasta 10 en mucormicosis'],
-    ['ANFOTERICINA B', 0.3, 1.5, null, null, 'Deoxicolato 0,5-1 mg/kg/dia'],
-    ['ERTAPENEM', 10, 20, 500, 1000, 'Adulto 1 g c/24 h; pediatria 15 mg/kg c/12 h'],
-    ['AZTREONAM', 20, 50, 500, 2000, 'Adulto 1-2 g c/6-8 h; pediatria 30 mg/kg c/6-8 h'],
-    ['CEFTAZIDIMA / AVIBACTAM', 30, 65, 750, 2500, 'Adulto 2,5 g c/8 h; ajuste renal 0,75-1,25 g'],
-    ['TYGECICLINA', null, null, 50, 100, 'Carga 100 mg, luego 50 mg c/12 h'],
-    ['DORIPENEM', null, null, 250, 1000, '500 mg c/8 h'],
-    ['RIFAMPICINA', 10, 20, 300, 600, '600 mg/dia; pediatria 10-20 mg/kg/dia'],
-    ['POLIMIXINA B', null, null, null, null, 'Sin rango: la dosis puede venir en UI o en mg']
-  ]
+    ['VANCOMICINA', 10, 35, null, null, 'SI', 'Consenso ASHP/IDSA/PIDS/SIDP 2020: carga 20-35 mg/kg (max 3 g), mantenimiento 15-20 mg/kg c/8-12 h, AUC 400-600'],
+    ['LINEZOLID', 8, 12, 600, 600, 'NO', 'Ficha FDA Zyvox 2024: 600 mg c/12 h (>=12 a); 10 mg/kg c/8 h (<12 a). Sin ajuste renal'],
+    ['DAPTOMICINA', 4, 12, null, null, 'SI', 'Ficha FDA/EMA Cubicin: 4 mg/kg (piel) y 6 mg/kg (bacteriemia) c/24 h; pediatria 5-12 mg/kg; guias 8-12 mg/kg; c/48 h si DepCr <30'],
+    ['CASPOFUNGINA', 1, 4, 35, 70, 'NO', 'Ficha FDA/EMA Cancidas: 70 mg carga, 50 mg/dia (70 si >80 kg o con rifampicina); pediatria 70/50 mg/m2 max 70 mg; Child-Pugh B 35 mg'],
+    ['ANFOTERICINA B LIPOSOMAL', 3, 10, null, null, 'NO', 'Ficha FDA AmBisome 2024: 3-5 mg/kg/dia (6 criptococo; hasta 10 mucormicosis); ACIN candidiasis 3-5 mg/kg/dia'],
+    ['ANFOTERICINA B', 0.25, 1.5, null, null, 'NO', 'Ficha FDA deoxicolato: inicio 0,25 mg/kg/dia, habitual 0,5-1, nunca >1,5 mg/kg/dia. Nefrotoxica (vigilar K y creatinina)'],
+    ['ERTAPENEM', 10, 20, 500, 1000, 'SI', 'Ficha FDA Invanz 2020: 1 g c/24 h (>=13 a); 15 mg/kg c/12 h (3 m-12 a, max 1 g/dia); 500 mg/dia si DepCr <=30'],
+    ['AZTREONAM', 20, 50, 500, 2000, 'SI', 'Ficha FDA Azactam 2021: 0,5-2 g c/6-12 h (max 8 g/dia); pediatria 30 mg/kg c/6-8 h; mitad de dosis si DepCr 10-30'],
+    ['CEFTAZIDIMA / AVIBACTAM', 30, 65, 940, 2500, 'SI', 'Ficha FDA Avycaz 2024: 2,5 g c/8 h; 1,25 g (DepCr 31-50); 0,94 g c/12-48 h (<=30); pediatria 62,5 mg/kg max 2,5 g. IDSA 2024: infusion 3 h'],
+    ['TYGECICLINA', 1, 2.5, 25, 100, 'NO', 'Ficha FDA Tygacil 2025: 100 mg carga, 50 mg c/12 h; 8-11 a 1,2 mg/kg (max 50); Child-Pugh C 25 mg. Dosis alta 200/100 fuera de ficha'],
+    ['DORIPENEM', null, null, 250, 1000, 'SI', 'Ficha FDA 2009 (producto original descontinuado): 500 mg c/8 h; 250 mg c/8 h (DepCr 30-50) o c/12 h (10-30). Verificar con ficha vigente'],
+    ['RIFAMPICINA', 10, 20, 300, 900, 'NO', 'Ficha FDA Rifadin 2024: 600 mg/dia (10 mg/kg); pediatria 10-20 mg/kg max 600; infeccion protesica 600-900 mg/dia (IDSA). Sin ajuste renal; inductor CYP450'],
+    ['POLIMIXINA B', null, null, null, null, 'NO', 'Sin regla: el formulario no distingue mg de UI (1 mg = 10.000 UI). Consenso polimixinas 2019: carga 2-2,5 mg/kg, 1,25-1,5 mg/kg c/12 h, sin ajuste renal']
+  ],
+  // Sugerencia PROA en el mensaje (revaluacion a las 48-72 h de la terapia empirica; guia OPS/OMS 2024).
+  SUGERENCIAS_ACTIVAS: true,
+  // false: la sugerencia solo sale cuando el restringido va con un acompanante de amplio espectro
+  // (combinacion empirica). true: tambien en toda terapia empirica (en octubre 2026 seria el 82% de alertas).
+  SUGERENCIA_EMPIRICO_SOLO: false,
+  // Acompanantes de amplio espectro que, junto a un restringido en terapia empirica, se senalan como
+  // combinacion a revaluar con cultivos.
+  AMPLIO_ESPECTRO: ['MEROPENEM', 'IMIPENEM', 'CEFEPIME', 'PIPERACILINA / TAZOBACTAM', 'CEFTAZIDIMA', 'CEFTRIAXONA'],
+  // Coherencia de datos: avisos cuando peso, edad o dosis no cuadran entre si (errores de digitacion).
+  PESO_MIN_KG: 0.4,
+  PESO_MAX_KG: 250,
+  MG_KG_IMPLAUSIBLE: 100
 };
 
 /* =====================================================================
@@ -124,7 +138,8 @@ function filaARegla(fila) {
     nombre: nombre,
     minMgKg: numeroONulo(fila[1]), maxMgKg: numeroONulo(fila[2]),
     minMg: numeroONulo(fila[3]), maxMg: numeroONulo(fila[4]),
-    nota: String(fila[5] || '').trim()
+    ajusteRenal: String(fila[5] || '').trim().toUpperCase(),
+    nota: String(fila[6] || '').trim()
   };
 }
 
@@ -136,7 +151,7 @@ function obtenerRangosDosis() {
       Logger.log('Sin hoja "' + CONFIG.HOJA_RANGOS_DOSIS + '" (o vacia); se usan los rangos de respaldo. Ejecute crearHojaRangosDosis() para crearla.');
       return respaldo;
     }
-    var reglas = hoja.getRange(2, 1, hoja.getLastRow() - 1, 6).getValues().map(filaARegla).filter(Boolean);
+    var reglas = hoja.getRange(2, 1, hoja.getLastRow() - 1, 7).getValues().map(filaARegla).filter(Boolean);
     return reglas.length ? reglas : respaldo;
   } catch (err) {
     Logger.log('Error leyendo la hoja de rangos de dosis, se usan los de respaldo: ' + err);
@@ -151,15 +166,29 @@ function crearHojaRangosDosis() {
     Logger.log('La pestana ' + CONFIG.HOJA_RANGOS_DOSIS + ' ya existe; no se modifica.');
     return;
   }
-  var hoja = ss.insertSheet(CONFIG.HOJA_RANGOS_DOSIS);
-  var enc = ['antimicrobiano', 'min_mg_kg_dosis', 'max_mg_kg_dosis', 'min_mg_dosis', 'max_mg_dosis', 'nota'];
+  escribirRangosDosis(ss.insertSheet(CONFIG.HOJA_RANGOS_DOSIS));
+  Logger.log('Pestana ' + CONFIG.HOJA_RANGOS_DOSIS + ' creada con ' + CONFIG.RANGOS_DOSIS_RESPALDO.length + ' antimicrobianos. Revisar y ajustar los rangos.');
+}
+
+// Reemplaza el contenido de la pestana RANGOS_DOSIS por la tabla del codigo (por ejemplo, tras
+// actualizar los rangos o las fuentes). Borra lo que el QF haya editado en la pestana: usar a conciencia.
+function reescribirHojaRangosDosis() {
+  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var hoja = ss.getSheetByName(CONFIG.HOJA_RANGOS_DOSIS) || ss.insertSheet(CONFIG.HOJA_RANGOS_DOSIS);
+  hoja.clearContents();
+  escribirRangosDosis(hoja);
+  Logger.log('Pestana ' + CONFIG.HOJA_RANGOS_DOSIS + ' reescrita con ' + CONFIG.RANGOS_DOSIS_RESPALDO.length + ' antimicrobianos.');
+}
+
+function escribirRangosDosis(hoja) {
+  var enc = ['antimicrobiano', 'min_mg_kg_dosis', 'max_mg_kg_dosis', 'min_mg_dosis', 'max_mg_dosis', 'ajuste_renal', 'nota'];
   hoja.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold');
   hoja.setFrozenRows(1);
   var filas = CONFIG.RANGOS_DOSIS_RESPALDO.map(function(f) {
     return f.map(function(v) { return v === null ? '' : v; });
   });
   hoja.getRange(2, 1, filas.length, enc.length).setValues(filas);
-  Logger.log('Pestana ' + CONFIG.HOJA_RANGOS_DOSIS + ' creada con ' + filas.length + ' antimicrobianos. Revisar y ajustar los rangos.');
+  hoja.autoResizeColumns(1, enc.length - 1);
 }
 
 // Regla cuyo nombre esta contenido en el del antimicrobiano; si varias aplican, la mas larga
@@ -396,6 +425,45 @@ function lineaEsquema(am) {
 }
 
 /* =====================================================================
+   Coherencia de datos y sugerencia PROA
+   ===================================================================== */
+// Avisos cuando peso, edad o dosis no cuadran (errores de digitacion del formulario).
+function advertenciasCoherencia(pesoKg, edadAnios, edadMeses, esquemas) {
+  var avisos = [];
+  var a = numeroONulo(edadAnios), m = numeroONulo(edadMeses);
+  if (pesoKg !== null) {
+    if (pesoKg < CONFIG.PESO_MIN_KG || pesoKg > CONFIG.PESO_MAX_KG) {
+      avisos.push('Verificar peso: ' + formatoNumero(pesoKg, 2) + ' kg no es un valor plausible');
+    } else if (a !== null && ((a >= 12 && pesoKg < 20) || (a >= 18 && pesoKg < 30))) {
+      avisos.push('Verificar peso: ' + formatoNumero(pesoKg, 2) + ' kg no es coherente con ' + formatoNumero(a, 0) + ' años');
+    } else if ((a === null || a === 0) && m !== null && m > 0 && m < 12 && pesoKg > 20) {
+      avisos.push('Verificar peso: ' + formatoNumero(pesoKg, 2) + ' kg no es coherente con ' + formatoNumero(m, 0) + ' meses');
+    }
+  }
+  esquemas.forEach(function(am) {
+    if (am.mgKg !== null && am.mgKg !== undefined && am.mgKg > CONFIG.MG_KG_IMPLAUSIBLE && !/POLIMIXINA/.test(String(am.nombre).toUpperCase())) {
+      avisos.push('Verificar dosis o peso: ' + am.nombre + ' ' + am.dosis + ' mg equivalen a ' + formatoNumero(am.mgKg, 0) + ' mg/kg');
+    }
+  });
+  return avisos;
+}
+
+// Sugerencia de revaluacion a las 48-72 h para la terapia empirica (time-out antibiotico; guia OPS/OMS
+// 2024 de intervenciones PROA). Si hay un acompanante de amplio espectro, se nombra la combinacion.
+function sugerenciaPROA(tipoIndicacion, coincidencias, acompanantes) {
+  if (!CONFIG.SUGERENCIAS_ACTIVAS) return '';
+  if (tipoIndicacion !== 'Empírico') return '';
+  var amplios = acompanantes.filter(function(am) { return esRestringido(am.nombre, CONFIG.AMPLIO_ESPECTRO); });
+  var restringidos = coincidencias.map(function(am) { return am.nombre; });
+  if (amplios.length) {
+    var combinacion = restringidos.concat(amplios.map(function(am) { return am.nombre; })).join(' + ');
+    return 'Sugerencia PROA: terapia empírica combinada (' + combinacion + '). Revaluar a las 48-72 h con el resultado de cultivos para desescalar.';
+  }
+  if (!CONFIG.SUGERENCIA_EMPIRICO_SOLO) return '';
+  return 'Sugerencia PROA: terapia empírica. Revaluar a las 48-72 h con el resultado de cultivos.';
+}
+
+/* =====================================================================
    Mensaje
    ===================================================================== */
 function construirMensajeDesdeEvento(e, coincidenciasOpt) {
@@ -414,13 +482,14 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
       emojiServicio = E(0x1F3E5), emojiEspecialidad = E(0x1FA7A), emojiDiagnostico = E(0x1F4CB),
       emojiMicro = E(0x1F9A0), emojiIndicacion = E(0x1F9EB), emojiInterconsulta = E(0x1F9EA),
       emojiRenal = E(0x1F4A7), emojiMedicamento = E(0x1F48A), emojiMas = E(0x2795),
-      emojiAdvertencia = E(0x26A0) + E(0xFE0F), emojiCambio = E(0x1F504);
+      emojiAdvertencia = E(0x26A0) + E(0xFE0F), emojiCambio = E(0x1F504), emojiIdea = E(0x1F4A1);
 
   var edad = edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS'));
   var pesoTexto = (pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-';
   var cama = campo('CAMA');
   var interconsulta = campo('INTERCONSULTA');
   var indicacion = String(campo('INDICACION')).toUpperCase();
+  var tipoIndicacion = tipoIndicacionTexto(campo('TIPO_INDICACION'));
 
   var lineas = [
     emojiAlerta + ' NUEVO CASO PROA - ANTIMICROBIANO RESTRINGIDO ' + emojiAlerta,
@@ -431,7 +500,7 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
     emojiEspecialidad + ' Especialidad que prescribe: ' + campo('ESPECIALIDAD'),
     emojiDiagnostico + ' Diagnóstico CIE10: ' + formatearDiagnosticoCIE10(campo('DIAGNOSTICO')),
     emojiMicro + ' Microorganismo aislado: ' + campo('MICROORGANISMO'),
-    emojiIndicacion + ' Indicación: ' + tipoIndicacionTexto(campo('TIPO_INDICACION')) +
+    emojiIndicacion + ' Indicación: ' + tipoIndicacion +
       ' · Cultivos: ' + campo('CULTIVOS') + ' · Origen: ' + campo('ORIGEN')
   ];
   if (indicacion === 'CAMBIO') {
@@ -446,7 +515,13 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
     var extras = [];
     if (esSi(campo('AJUSTE_RENAL'))) {
       var dep = numeroONulo(campo('DEP_CREATININA'));
-      extras.push('Ajuste renal: Sí' + ((dep !== null && dep > 0) ? ' (DepCr ' + formatoNumero(dep, 2) + ')' : ' (DepCr no registrada)'));
+      var texto = 'Ajuste renal: Sí' + ((dep !== null && dep > 0) ? ' (DepCr ' + formatoNumero(dep, 2) + ')' : ' (DepCr no registrada)');
+      var sinAjuste = coincidencias.filter(function(am) {
+        var regla = reglaDosisPara(am.nombre, reglas);
+        return regla && regla.ajusteRenal === 'NO';
+      }).map(function(am) { return am.nombre; });
+      if (sinAjuste.length) texto += ' · ' + sinAjuste.join(', ') + ' no requiere ajuste renal';
+      extras.push(texto);
     }
     if (esSi(campo('FALLA_HEPATICA'))) extras.push('Falla hepática: Sí');
     lineas.push(emojiRenal + ' ' + extras.join(' · '));
@@ -467,6 +542,12 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
     am.mgKg = (pesoKg !== null && numeroONulo(am.dosis) !== null) ? numeroONulo(am.dosis) / pesoKg : null;
     lineas.push('', emojiMas + ' Acompañante: ' + am.nombre + ' · ' + lineaEsquema(am) + ' · ' + diasTexto(am.dias));
   });
+
+  var avisos = advertenciasCoherencia(pesoKg, campo('EDAD_ANIOS'), campo('EDAD_MESES'), coincidencias.concat(acompanantes));
+  var sugerencia = sugerenciaPROA(tipoIndicacion, coincidencias, acompanantes);
+  if (avisos.length || sugerencia) lineas.push('');
+  avisos.forEach(function(av) { lineas.push(emojiAdvertencia + ' ' + av); });
+  if (sugerencia) lineas.push(emojiIdea + ' ' + sugerencia);
 
   return lineas.join('\n');
 }

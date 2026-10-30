@@ -23,10 +23,10 @@ Fichas de las 13 moléculas que vigila el bot PROA ALERTAS (pestaña `ANTIMICROB
 | Ceftazidima/avibactam | Cefalosporina + inhibidor · Reserve | 2,5 g c/8 h en infusión de 2–3 h | ≥ 2 años: 62,5 mg/kg (máx. 2,5 g) c/8 h | 1,25 g c/8 h (DepCr 31–50); 0,94 g c/12–48 h (≤ 30) | 940–2500 mg **o** 30–65 mg/kg | Ficha FDA, IDSA 2024, ACIN |
 | Tigeciclina | Glicilciclina · Reserve | 100 mg carga, luego 50 mg c/12 h | 8–11 a: 1,2 mg/kg c/12 h (máx. 50 mg); ≥ 12 a: 50 mg c/12 h | No (hepático: 25 mg c/12 h en Child-Pugh C) | 25–100 mg **o** 1–2,5 mg/kg | Ficha FDA/EMA |
 | Doripenem | Carbapenémico · Watch | 500 mg c/8 h | No autorizado | 250 mg c/8 h (DepCr 30–50); 250 mg c/12 h (10–30) | 250–1000 mg | Ficha FDA 2009 (no en DailyMed actual) |
-| Rifampicina | Rifamicina · Watch | 600 mg/día (10 mg/kg); en infección protésica 600–900 mg/día como adyuvante | 10–20 mg/kg/día, máx. 600 mg | No | 300–600 mg **o** 10–20 mg/kg | Ficha FDA, MSD |
+| Rifampicina | Rifamicina · Watch | 600 mg/día (10 mg/kg); en infección protésica 600–900 mg/día como adyuvante | 10–20 mg/kg/día, máx. 600 mg | No | 300–900 mg **o** 10–20 mg/kg | Ficha FDA, MSD |
 | Polimixina B | Polipéptido · Reserve | Carga 2–2,5 mg/kg (20.000–25.000 UI/kg); 1,25–1,5 mg/kg c/12 h | Ficha: 15.000–25.000 UI/kg/día | No (consenso 2019) | **Sin regla** (el formulario no distingue mg de UI) | Consenso 2019, ficha |
 
-Regla del bot: la dosis se acepta si cumple **cualquiera** de las dos reglas (mg/kg o mg absolutos); solo se marca si falla en todas. Sin peso no se evalúa mg/kg.
+Regla del bot: la dosis se acepta si cumple **cualquiera** de las dos reglas (mg/kg o mg absolutos); solo se marca si falla en todas. Sin peso no se evalúa mg/kg. La columna `ajuste_renal` (SI/NO) de la pestaña sale de la ficha técnica y del MSD profesional; el bot la usa para avisar cuando se marca ajuste renal en una molécula que no lo requiere. Esta tabla es la que carga `CONFIG.RANGOS_DOSIS_RESPALDO` (v1.3.0).
 
 ## Uso en el HDV (muestras de la matriz)
 
@@ -192,7 +192,7 @@ Vancomicina concentra el 73 % de las alertas de octubre; en esa muestra el 67 % 
 - **Ajuste:** no renal; vigilar función hepática.
 - **Monitoreo:** hepatotoxicidad (pruebas hepáticas basales y cada 2–4 semanas), coloración naranja de fluidos, y sobre todo **interacciones**: inductor potente de CYP450 (anticoagulantes, anticonvulsivantes, antirretrovirales, inmunosupresores, caspofungina).
 - **Por qué está restringida:** uso fuera de TB requiere justificación (combinación, duración) y revisión de interacciones.
-- **Regla del bot:** 300–600 mg **o** 10–20 mg/kg. Un esquema de 900 mg/día en una toma se marcaría.
+- **Regla del bot:** 300–900 mg **o** 10–20 mg/kg (900 cubre el adyuvante en infección protésica).
 - **Fuentes:** [Rifadin IV, ficha FDA 2024](https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/050420s092%2C050627s037lbl.pdf); MSD profesional [rifamicinas](https://www.msdmanuals.com/es/professional/enfermedades-infecciosas/bacterias-y-f%C3%A1rmacos-antibacterianos/rifamicinas) y [tabla antituberculosos](https://www.msdmanuals.com/es/professional/multimedia/table/dosificaci%C3%B3n-de-los-f%C3%A1rmacos-antituberculosos-orales-de-primera-elecci%C3%B3n); [revisión rifampicina en infección protésica, PMC 2025](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12681345/).
 
 ### 13. Polimixina B
