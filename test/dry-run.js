@@ -1,151 +1,226 @@
 // test/dry-run.js
 //
-// Reconstruye la logica de filtrarAntimicrobianosRestringidos() y
-// construirMensajeDesdeEvento() de Codigo.gs en Node.js puro,
-// sin PropertiesService ni UrlFetchApp, para verificar el filtro y el
-// formato del mensaje SIN tocar el proyecto de Apps Script ni enviar nada real.
+// Carga el Codigo.gs REAL en Node con los servicios de Apps Script simulados
+// (hoja con las pestanas ANTIMICROBIANOS_RESTRINGIDOS, CIE10 y RANGOS_DOSIS,
+// CacheService, Utilities) y verifica el filtro y el mensaje. No hay red,
+// credenciales ni envios.
 //
 // Uso: node test/dry-run.js
 
-const ANTIMICROBIANOS_RESTRINGIDOS = ['LINEZOLID', 'CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'VANCOMICINA', 'CASPOFUNGINA', 'ANFOTERICINA B LIPOSOMAL', 'TYGECICLINA', 'DORIPENEM', 'RIFAMPICINA', 'POLIMIXINA B', 'DAPTOMICINA'];
+var fs = require('fs');
+var path = require('path');
+var assert = require('assert');
 
-function nombreLimpio(valor) {
-  if (!valor) return '-';
-  return String(valor).split(' - UT-')[0].trim();
-}
+var src = fs.readFileSync(path.join(__dirname, '..', 'Codigo.gs'), 'utf8');
 
-function filtrarAntimicrobianosRestringidos(e) {
-  const valores = (e && e.namedValues) ? e.namedValues : {};
-  function campo(nombre) {
-    return (valores[nombre] && valores[nombre][0]) ? valores[nombre][0] : '';
-  }
-  const slots = [
-    { nombre: 'Nombre Antimicrobiano 1', dosis: 'Dosis en miligramos o UI AB1', frecuencia: 'Frecuencia AM 1 (En Horas)' },
-    { nombre: 'Nombre Antimicrobiano 2', dosis: 'Dosis en miligramos o UI AM2', frecuencia: 'Frecuencia AM 2 (En horas)' },
-    { nombre: 'Nombre Antimicrobiano 3', dosis: 'Dosis en miligramos o UI AM3', frecuencia: 'Frecuencia AM 3 (En horas)' }
-  ];
-  const coincidencias = [];
-  slots.forEach(function (slot) {
-    const nombreCrudo = campo(slot.nombre);
-    if (!nombreCrudo) return;
-    const nombre = nombreLimpio(nombreCrudo).toUpperCase();
-    const esRestringido = ANTIMICROBIANOS_RESTRINGIDOS.some(function (restringido) {
-      return nombre.indexOf(restringido) > -1;
-    });
-    if (esRestringido) {
-      coincidencias.push({
-        nombre: nombreLimpio(nombreCrudo),
-        dosis: campo(slot.dosis) || '-',
-        frecuencia: campo(slot.frecuencia) || '-'
-      });
-    }
-  });
-  return coincidencias;
-}
+// ---- Hoja simulada --------------------------------------------------------
+var CIE10 = { A419: 'SEPSIS, NO ESPECIFICADA', N390: 'INFECCION DE VIAS URINARIAS, SITIO NO ESPECIFICADO',
+  G060: 'ABSCESO Y GRANULOMA INTRACRANEAL', J40X: 'BRONQUITIS, NO ESPECIFICADA COMO AGUDA O CRONICA',
+  T857: 'INFECCION Y REACCION INFLAMATORIA DEBIDAS A OTROS DISPOSITIVOS PROTESICOS, IMPLANTES E INJERTOS INTERNOS' };
+var codigosCie = Object.keys(CIE10);
 
-function construirMensajeDesdeEvento(e, coincidenciasOpt) {
-  const valores = (e && e.namedValues) ? e.namedValues : {};
-  function campo(nombre) {
-    return (valores[nombre] && valores[nombre][0]) ? valores[nombre][0] : '-';
-  }
-  const coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
+var ENCABEZADOS_REALES = ['Marca temporal', 'Dirección de correo electrónico', 'Nombre del médico que prescribe', 'Registro médico',
+  'Especialidad que prescribe', 'Servicio actual', 'Número de Historia Clínica', 'Nombres y apellidos del paciente', 'EPS del paciente',
+  'Edad del paciente en años', 'Edad del paciente meses', 'Edad del paciente días', 'Sexo', 'Peso en Kg', 'Peso en gr', 'Numero de cama',
+  'Diagnóstico CIE10 para la cual se prescribe el antimicrobiano', 'Indicación del antibiótico', 'Infección nosocomial', 'Falla Hepática',
+  'Ajuste Renal', 'Si en Ajuste Renal, marcó Sí, indique el valor de BUN en (mg/dl), si marcó "No" coloque 0',
+  'Si en Ajuste Renal, marcó Sí, indique el valor de depuración de Creatinina en (mg/dl), si marcó "No" coloque 0',
+  'Cultivos tomados:', 'Microorganismo aislado', 'Origen de la infección?', 'Indicación', 'Si fue cambiado, cual fue la razón?',
+  '¿Solicitó interconsulta por infectología en Dinámica Gerencial?', 'Cuantos antimicrobianos formuló?',
+  'Nombre Antimicrobiano 1', 'Dosis en miligramos o UI AB1', 'Vía de adminsitración de  AM1', 'Frecuencia AM 1 (En Horas)', 'Días ordenados AM1', 'TERMINACION ',
+  'Nombre Antimicrobiano 2', 'Dosis en miligramos o UI AM2', 'Vía de adminsitración de  AM2', 'Frecuencia AM 2 (En horas)', 'Días ordenados AM2',
+  'Nombre Antimicrobiano 3', 'Dosis en miligramos o UI AM3', 'Vía de adminsitración de  AM3', 'Frecuencia AM 3 (En horas)', 'Días ordenados AM 3',
+  'Estado', 'Observacion a la solicitud'];
 
-  const edadAnios = campo('Edad del paciente en años');
-  const edadMeses = campo('Edad del paciente meses');
-  let edadTexto;
-  if (edadAnios !== '-' && edadAnios !== '') {
-    edadTexto = edadAnios + ' años';
-  } else if (edadMeses !== '-' && edadMeses !== '') {
-    edadTexto = edadMeses + ' meses';
-  } else {
-    edadTexto = '-';
-  }
+var RESTRINGIDOS = ['LINEZOLID', 'CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'VANCOMICINA', 'CASPOFUNGINA',
+  'ANFOTERICINA B LIPOSOMAL', 'TYGECICLINA', 'DORIPENEM', 'RIFAMPICINA', 'POLIMIXINA B', 'DAPTOMICINA'];
 
-  const emojiAlerta = String.fromCodePoint(0x1F6A8);
-  const emojiHistoria = String.fromCodePoint(0x1F4C4);
-  const emojiEdad = String.fromCodePoint(0x1F382);
-  const emojiDiagnostico = String.fromCodePoint(0x1F4CB);
-  const emojiEspecialidad = String.fromCodePoint(0x1FA7A);
-  const emojiServicio = String.fromCodePoint(0x1F3E5);
-  const emojiInterconsulta = String.fromCodePoint(0x1F9EA);
-  const emojiMedicamento = String.fromCodePoint(0x1F48A);
-
-  let mensaje = emojiAlerta + ' NUEVO CASO PROA - ANTIMICROBIANO RESTRINGIDO ' + emojiAlerta + '\n\n' +
-    emojiHistoria + ' Historia Clínica: ' + campo('Número de Historia Clínica') + '\n' +
-    emojiEdad + ' Edad: ' + edadTexto + '\n' +
-    emojiDiagnostico + ' Diagnóstico CIE10: ' + campo('Diagnóstico CIE10 para la cual se prescribe el antimicrobiano') + '\n' +
-    emojiEspecialidad + ' Especialidad que prescribe: ' + campo('Especialidad que prescribe') + '\n' +
-    emojiServicio + ' Servicio actual: ' + campo('Servicio actual') + '\n' +
-    emojiInterconsulta + ' Interconsulta Infectología (Dinámica Gerencial): ' + campo('¿Solicitó interconsulta por infectología en Dinámica Gerencial?');
-
-  coincidencias.forEach(function (am, idx) {
-    mensaje += '\n\n' + emojiMedicamento + ' Antimicrobiano restringido ' + (idx + 1) + ': ' + am.nombre +
-      '\n   Dosis: ' + am.dosis + ' mg/UI' +
-      '\n   Frecuencia: cada ' + am.frecuencia + ' horas';
-  });
-
-  return mensaje;
-}
-
-function eventoPruebaLinezolid() {
+var lecturasCie = 0;
+function hojaDeFilas(filas, conTextFinder) {
   return {
-    namedValues: {
-      'Número de Historia Clínica': ['99999999'],
-      'Edad del paciente en años': ['54'],
-      'Edad del paciente meses': [''],
-      'Diagnóstico CIE10 para la cual se prescribe el antimicrobiano': ['A419 - Sepsis, no especificada'],
-      'Especialidad que prescribe': ['Medicina Interna'],
-      'Servicio actual': ['Unidad de Cuidado Crítico UCI C'],
-      '¿Solicitó interconsulta por infectología en Dinámica Gerencial?': ['Sí'],
-      'Nombre Antimicrobiano 1': ['LINEZOLID - UT-19907394-3'],
-      'Dosis en miligramos o UI AB1': ['600'],
-      'Frecuencia AM 1 (En Horas)': ['12'],
-      'Nombre Antimicrobiano 2': [''],
-      'Dosis en miligramos o UI AM2': [''],
-      'Frecuencia AM 2 (En horas)': [''],
-      'Nombre Antimicrobiano 3': [''],
-      'Dosis en miligramos o UI AM3': [''],
-      'Frecuencia AM 3 (En horas)': ['']
+    getLastRow: function () { return filas.length; },
+    getLastColumn: function () { return filas[0] ? filas[0].length : 0; },
+    getRange: function (f, c, nf, nc) {
+      nf = nf || 1; nc = nc || 1;
+      var sub = filas.slice(f - 1, f - 1 + nf).map(function (r) { return r.slice(c - 1, c - 1 + nc); });
+      return {
+        getValues: function () { return sub; },
+        getValue: function () { return sub[0][0]; },
+        createTextFinder: function (texto) {
+          return { matchEntireCell: function () { return this; }, matchCase: function () { return this; },
+            findNext: function () {
+              lecturasCie++;
+              for (var i = 0; i < sub.length; i++) {
+                if (String(sub[i][0]).toUpperCase() === String(texto).toUpperCase()) {
+                  var fila = f + i;
+                  return { getRow: function () { return fila; } };
+                }
+              }
+              return null;
+            } };
+        }
+      };
     }
   };
 }
+var HOJAS = {
+  'Respuestas de formulario 1': hojaDeFilas([ENCABEZADOS_REALES]),
+  'ANTIMICROBIANOS_RESTRINGIDOS': hojaDeFilas([['Antimicrobiano']].concat(RESTRINGIDOS.map(function (a) { return [a]; }))),
+  'CIE10': hojaDeFilas([[' ', 'DESCRIPCION']].concat(codigosCie.map(function (c) { return [c, CIE10[c]]; }))),
+  'RANGOS_DOSIS': null // no existe: debe usarse el respaldo del codigo
+};
+global.SpreadsheetApp = { openById: function () { return { getSheetByName: function (n) { return HOJAS[n] || null; } }; } };
+var cache = {};
+global.CacheService = { getScriptCache: function () { return { get: function (k) { return k in cache ? cache[k] : null; }, put: function (k, v) { cache[k] = v; } }; } };
+global.Utilities = { formatDate: function (d) { return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear(); } };
+global.Logger = { log: function () {} };
+global.UrlFetchApp = { fetch: function () { throw new Error('UrlFetchApp no debe llamarse en la prueba en seco'); } };
+global.PropertiesService = { getScriptProperties: function () { return { getProperty: function () { return null; } }; } };
 
-function eventoPruebaSinRestringidos() {
-  return {
-    namedValues: {
-      'Número de Historia Clínica': ['11111111'],
-      'Edad del paciente en años': [''],
-      'Edad del paciente meses': ['8'],
-      'Diagnóstico CIE10 para la cual se prescribe el antimicrobiano': ['J189 - Neumonía'],
-      'Especialidad que prescribe': ['Pediatría'],
-      'Servicio actual': ['Hospitalización Pediatría'],
-      '¿Solicitó interconsulta por infectología en Dinámica Gerencial?': ['No'],
-      'Nombre Antimicrobiano 1': ['CEFTRIAXONA - UT-19932457-2'],
-      'Dosis en miligramos o UI AB1': ['1000'],
-      'Frecuencia AM 1 (En Horas)': ['24'],
-      'Nombre Antimicrobiano 2': [''],
-      'Dosis en miligramos o UI AM2': [''],
-      'Frecuencia AM 2 (En horas)': [''],
-      'Nombre Antimicrobiano 3': [''],
-      'Dosis en miligramos o UI AM3': [''],
-      'Frecuencia AM 3 (En horas)': ['']
-    }
-  };
+(0, eval)(src);
+
+var fallos = 0;
+function prueba(desc, fn) {
+  try { fn(); console.log('OK - ' + desc); } catch (e) { fallos++; console.log('FALLO - ' + desc + '\n   ' + e.message); }
 }
+function incluye(texto, parte) { assert.ok(texto.indexOf(parte) > -1, 'falta "' + parte + '" en:\n' + texto); }
+function noIncluye(texto, parte) { assert.ok(texto.indexOf(parte) === -1, 'no deberia aparecer "' + parte + '" en:\n' + texto); }
 
-function main() {
-  console.log('=== Dry run: caso CON antimicrobiano restringido (Linezolid) ===\n');
-  const e1 = eventoPruebaLinezolid();
-  const coincidencias1 = filtrarAntimicrobianosRestringidos(e1);
-  console.log('Coincidencias:', JSON.stringify(coincidencias1));
-  console.log(construirMensajeDesdeEvento(e1, coincidencias1));
+prueba('verificarEncabezados: los campos del mensaje existen en la fila 1 real', function () {
+  assert.deepStrictEqual(verificarEncabezados(), []);
+});
 
-  console.log('\n\n=== Dry run: caso SIN antimicrobiano restringido (Ceftriaxona) ===\n');
-  const e2 = eventoPruebaSinRestringidos();
-  const coincidencias2 = filtrarAntimicrobianosRestringidos(e2);
-  console.log('Coincidencias:', JSON.stringify(coincidencias2), '(debe ser vacio, no se enviaria alerta)');
+prueba('campoDelEvento tolera espacios sobrantes en el titulo de la pregunta', function () {
+  assert.strictEqual(campoDelEvento({ '  Servicio actual ': ['Urgencias'] }, 'Servicio actual'), 'Urgencias');
+  assert.strictEqual(campoDelEvento({ 'Servicio actual': [''] }, 'Servicio actual'), '');
+  assert.strictEqual(campoDelEvento({}, 'Servicio actual'), '');
+});
 
-  console.log('\n\nOK: filtro y construccion de mensaje verificados sin llamar ninguna API externa.');
-}
+prueba('filtro: restringidos si, no restringidos no', function () {
+  assert.strictEqual(filtrarAntimicrobianosRestringidos(eventoPruebaLinezolid()).length, 1);
+  assert.strictEqual(filtrarAntimicrobianosRestringidos(eventoPruebaSinRestringidos()).length, 0);
+  ['CASPOFUNGINA 50, 70 - UT-1', 'ANFOTERICINA B LIPOSOMAL - UT-1', 'TYGECICLINA - UT-1', 'DORIPENEM - UT-1', 'RIFAMPICINA - UT-1',
+    'POLIMIXINA B - UT-1', 'DAPTOMICINA - UT-1'].forEach(function (n) {
+    var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = [n];
+    assert.strictEqual(filtrarAntimicrobianosRestringidos({ namedValues: nv }).length, 1, n);
+  });
+});
 
-main();
+prueba('CIE10: punto, 3 caracteres (+X), minusculas, sin codigo y cache', function () {
+  assert.strictEqual(formatearDiagnosticoCIE10('G06.0'), 'G060 - ' + CIE10.G060);
+  assert.strictEqual(formatearDiagnosticoCIE10('M46.3:'), 'M46.3:'); // no esta en el catalogo simulado
+  assert.strictEqual(formatearDiagnosticoCIE10('J40'), 'J40X - ' + CIE10.J40X);
+  assert.strictEqual(formatearDiagnosticoCIE10('a419 sepsis'), 'A419 - ' + CIE10.A419);
+  assert.strictEqual(formatearDiagnosticoCIE10('SX FEBRIL EN ESTUDIO'), 'SX FEBRIL EN ESTUDIO');
+  assert.strictEqual(formatearDiagnosticoCIE10('419'), '419');
+  var antes = lecturasCie;
+  formatearDiagnosticoCIE10('G06.0'); formatearDiagnosticoCIE10('G060');
+  assert.strictEqual(lecturasCie, antes, 'la segunda consulta del mismo codigo debe salir de cache');
+});
+
+prueba('edad, peso, frecuencia y dias', function () {
+  assert.strictEqual(edadTexto('2', '3', ''), '2 años 3 meses');
+  assert.strictEqual(edadTexto('0', '2', ''), '2 meses');
+  assert.strictEqual(edadTexto('', '', '16'), '16 días');
+  assert.strictEqual(edadTexto('54', '', ''), '54 años');
+  assert.strictEqual(edadTexto('', '', ''), '-');
+  assert.strictEqual(pesoKgDesde('0', '4500'), 4.5);
+  assert.strictEqual(pesoKgDesde('70', ''), 70);
+  assert.strictEqual(pesoKgDesde('', ''), null);
+  assert.strictEqual(frecuenciaTexto('12'), 'cada 12 horas');
+  assert.strictEqual(frecuenciaTexto('48HORAS'), 'cada 48 horas');
+  assert.strictEqual(frecuenciaTexto('72 HORAS'), 'cada 72 horas');
+  assert.strictEqual(frecuenciaTexto('Cada 72 h'), 'cada 72 horas');
+  assert.strictEqual(frecuenciaTexto('Dosis única'), 'Dosis única');
+  assert.strictEqual(frecuenciaTexto(''), '-');
+  assert.ok(/^14 días · hasta \d\d\/\d\d\/\d{4}$/.test(diasTexto('14')), diasTexto('14'));
+  assert.strictEqual(diasTexto('Dosis Unica'), 'Dosis Unica');
+  assert.strictEqual(diasTexto(''), '-');
+});
+
+prueba('rangos de dosis: acepta si cumple alguna regla, marca si falla en todas', function () {
+  var reglas = obtenerRangosDosis(); // respaldo (la pestana no existe en la simulacion)
+  assert.strictEqual(evaluarDosis('VANCOMICINA', '1000', 70, reglas).revisar, false);
+  assert.strictEqual(evaluarDosis('VANCOMICINA', '500', 70, reglas).revisar, true);  // 7,1 mg/kg
+  assert.strictEqual(evaluarDosis('VANCOMICINA', '10000', 1, reglas).revisar, true);
+  assert.strictEqual(evaluarDosis('VANCOMICINA', '1000', null, reglas).revisar, false); // sin peso, sin regla absoluta: no marca
+  assert.strictEqual(evaluarDosis('LINEZOLID', '600', 100, reglas).revisar, false); // 6 mg/kg pero 600 mg absolutos OK
+  assert.strictEqual(evaluarDosis('LINEZOLID', '300', 70, reglas).revisar, true);
+  assert.strictEqual(evaluarDosis('CASPOFUNGINA 50, 70', '50', 70, reglas).revisar, false);
+  assert.strictEqual(evaluarDosis('CASPOFUNGINA 50, 70', '27', 7.5, reglas).revisar, false); // lactante: 3,6 mg/kg (50-70 mg/m2)
+  assert.strictEqual(evaluarDosis('CASPOFUNGINA 50, 70', '150', 70, reglas).revisar, true);
+  assert.strictEqual(evaluarDosis('ANFOTERICINA B LIPOSOMAL', '200', 50, reglas).revisar, false); // 4 mg/kg (regla liposomal, no la convencional)
+  assert.strictEqual(evaluarDosis('ANFOTERICINA B', '200', 50, reglas).revisar, true);           // 4 mg/kg de deoxicolato
+  assert.strictEqual(evaluarDosis('POLIMIXINA B', '500000', 70, reglas).revisar, false);         // sin rango
+  assert.strictEqual(evaluarDosis('MEROPENEM', '1000', 70, reglas).revisar, false);              // sin regla
+  assert.strictEqual(evaluarDosis('VANCOMICINA', '', 70, reglas).revisar, false);
+  var ev = evaluarDosis('VANCOMICINA', '500', 70, reglas);
+  assert.strictEqual(ev.referencia, '10-30 mg/kg/dosis');
+});
+
+prueba('mensaje: linezolid con interconsulta, meropenem como acompanante, fecha fin', function () {
+  var e = eventoPruebaLinezolid();
+  var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
+  incluye(t, 'Edad: 54 años · ⚖️ Peso: 70 kg');
+  incluye(t, 'Servicio: Unidad de Cuidado Crítico UCI C · Cama: C13');
+  incluye(t, 'A419 - SEPSIS, NO ESPECIFICADA');
+  incluye(t, 'Indicación: Etiológico · Cultivos: HEMOCULTIVO · Origen: IAAS');
+  incluye(t, 'Interconsulta Infectología (Dinámica Gerencial): Sí');
+  noIncluye(t, 'Sin interconsulta');
+  noIncluye(t, 'Cambio de antimicrobiano');
+  noIncluye(t, 'Ajuste renal');
+  incluye(t, 'Antimicrobiano restringido 1: LINEZOLID');
+  incluye(t, 'Dosis: 600 mg (8,6 mg/kg) · Intravenoso · cada 12 horas');
+  assert.ok(/Días ordenados: 14 días · hasta \d\d\/\d\d\/\d{4}/.test(t), t);
+  noIncluye(t, 'fuera del rango');
+  incluye(t, '➕ Acompañante: MEROPENEM · 1000 mg (14,3 mg/kg) · Intravenoso · cada 8 horas · 7 días · hasta');
+  noIncluye(t, 'Antimicrobiano restringido 2');
+});
+
+prueba('mensaje: vancomicina 500 mg, cambio, ajuste renal, sin interconsulta, N39.0', function () {
+  var e = eventoPruebaVancomicina();
+  var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
+  incluye(t, 'N390 - INFECCION DE VIAS URINARIAS');
+  incluye(t, 'Indicación: Empírico · Cultivos: UROCULTIVO · Origen: COMUNIDAD');
+  incluye(t, '🔄 Cambio de antimicrobiano: Por antibiograma');
+  incluye(t, '⚠️ Sin interconsulta a Infectología');
+  incluye(t, '💧 Ajuste renal: Sí (DepCr 18)');
+  incluye(t, 'Dosis: 500 mg (7,1 mg/kg) · Intravenoso · cada 12 horas');
+  incluye(t, '⚠️ Dosis fuera del rango de referencia (10-30 mg/kg/dosis): revisar');
+  noIncluye(t, 'Acompañante');
+});
+
+prueba('mensaje: pediatrico con peso en gramos y dosis unica', function () {
+  var e = eventoPruebaPediatrico();
+  var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
+  incluye(t, 'Edad: 2 meses · ⚖️ Peso: 4,5 kg');
+  incluye(t, 'Servicio: Hospitalización Pediatría · Cama: 208');
+  incluye(t, 'T857 - INFECCION Y REACCION INFLAMATORIA');
+  incluye(t, 'Dosis: 60 mg (13,3 mg/kg) · Intravenoso · Dosis única');
+  incluye(t, 'Días ordenados: Dosis Unica');
+  noIncluye(t, 'cada Dosis');
+  noIncluye(t, 'fuera del rango');
+});
+
+prueba('mensaje: campos ausentes salen como "-" y nunca como undefined', function () {
+  var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = ['VANCOMICINA - UT-1'];
+  var t = construirMensajeDesdeEvento({ namedValues: nv });
+  noIncluye(t, 'undefined'); noIncluye(t, 'NaN');
+  incluye(t, 'Historia Clínica: -');
+  incluye(t, 'Edad: - · ⚖️ Peso: -');
+  incluye(t, 'Dosis: - · - · -');
+  incluye(t, 'Días ordenados: -');
+  incluye(t, '⚠️ Sin interconsulta a Infectología');
+});
+
+prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {
+  assert.ok(src.indexOf("getProperty('GREENAPI_API_TOKEN')") > -1);
+  assert.ok(!/https:\/\/\d+\.api\.greenapi\.com/.test(src));
+  assert.ok(!/@c\.us/.test(src));
+  assert.ok(/@g\.us/.test(src));
+});
+
+console.log();
+if (fallos) { console.log(fallos + ' prueba(s) fallaron.'); process.exit(1); }
+console.log('OK: filtro y construccion de mensaje verificados sin llamar ninguna API externa.');
+console.log('\n--- Ejemplo (caso vancomicina) ---\n' + construirMensajeDesdeEvento(eventoPruebaVancomicina()));

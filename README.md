@@ -41,7 +41,7 @@ Paso a paso:
 2. **Se carga la lista de restringidos** desde la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` de la misma hoja (columna A, desde la fila 2). Si esa pestaña no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO`, para que las alertas nunca dejen de funcionar por eso.
 3. **Se revisan los 3 antimicrobianos de la solicitud.** El formulario guarda el nombre con un código interno (`LINEZOLID - UT-19907394-3`). `nombreLimpio()` quita todo desde ` - UT-`, se pasa a mayúsculas y se marca como restringido si el nombre **contiene** alguno de la lista. Por eso `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`, y `ANFOTERICINA` cubre la convencional y la liposomal.
 4. **Si ninguno es restringido, termina** sin enviar nada. Es lo más común: la mayoría de solicitudes son de cefepime, piperacilina/tazobactam, meropenem, etc.
-5. **Si hay al menos uno, arma el mensaje.** El diagnóstico se busca en la pestaña `CIE10` por su código (por ejemplo, `A419` pasa a `A419 - Sepsis, no especificada`); si no lo encuentra, deja lo que escribió el médico. Se agrega un bloque por cada antimicrobiano restringido con dosis, vía, frecuencia y días.
+5. **Si hay al menos uno, arma el mensaje.** Además de historia clínica, edad y servicio, incluye lo que PROA interviene: peso y **mg/kg por dosis**, cama, indicación (empírico/etiológico/profiláctico), cultivos, origen (IAAS/comunidad), si fue un cambio de antimicrobiano y por qué, ajuste renal con depuración de creatinina, y un aviso cuando **no se pidió interconsulta a Infectología**. El diagnóstico se busca en la pestaña `CIE10` por su código (`G06.0` → `G060 - ABSCESO…`; `J40` → `J40X`); si no lo encuentra, deja lo que escribió el médico. Cada antimicrobiano restringido va con dosis, vía, frecuencia, días y **fecha fin prevista**; si la dosis queda fuera del rango de referencia de la pestaña `RANGOS_DOSIS`, se agrega `⚠️ … revisar`. Los antimicrobianos **no** restringidos de la misma solicitud salen como "Acompañante", para ver la combinación completa.
 6. **WhatsApp.** `enviarAlertaWhatsApp()` pone la firma en negrita arriba (`Bot PROA Antimicrobianos HDV` o lo que diga `GREENAPI_BOT_LABEL`) y el pie en cursiva abajo, y hace un `POST` a `sendMessage` de Green-API. Si Green-API responde con error o no hay conexión, lo deja en el registro sin detener la ejecución.
 
 ### Antimicrobianos restringidos
@@ -59,15 +59,23 @@ Si se cambia la lista de la pestaña, conviene actualizar también la de respald
 | En el mensaje | Pregunta del formulario (título exacto) |
 |---|---|
 | 📄 Historia Clínica | `Número de Historia Clínica` |
-| 🎂 Edad | `Edad del paciente en años`; si está vacía, `Edad del paciente meses` |
+| 🎂 Edad | `Edad del paciente en años` + `Edad del paciente meses`; si ambos vacíos, `Edad del paciente días` |
+| ⚖️ Peso | `Peso en Kg`; si es 0 o vacío, `Peso en gr` ÷ 1000 |
+| 🏥 Servicio · Cama | `Servicio actual`, `Numero de cama` |
+| 🩺 Especialidad que prescribe | `Especialidad que prescribe` |
 | 📋 Diagnóstico CIE10 | `Diagnóstico CIE10 para la cual se prescribe el antimicrobiano` (+ descripción de la pestaña `CIE10`) |
 | 🦠 Microorganismo aislado | `Microorganismo aislado` |
-| 🩺 Especialidad que prescribe | `Especialidad que prescribe` |
-| 🏥 Servicio actual | `Servicio actual` |
-| 🧪 Interconsulta Infectología | `¿Solicitó interconsulta por infectología en Dinámica Gerencial?` |
-| 💊 Antimicrobiano restringido | `Nombre Antimicrobiano 1/2/3` con su dosis, vía, frecuencia y días |
+| 🧫 Indicación · Cultivos · Origen | `Indicación del antibiótico` (resumida a Empírico/Etiológico/Profiláctico), `Cultivos tomados:`, `Origen de la infección?` |
+| 🔄 Cambio de antimicrobiano (solo si aplica) | `Indicación` = CAMBIO, con `Si fue cambiado, cual fue la razón?` |
+| 🧪 Interconsulta / ⚠️ Sin interconsulta | `¿Solicitó interconsulta por infectología en Dinámica Gerencial?` |
+| 💧 Ajuste renal · Falla hepática (solo si Sí) | `Ajuste Renal`, `…depuración de Creatinina…`, `Falla Hepática` |
+| 💊 Antimicrobiano restringido | `Nombre Antimicrobiano 1/2/3` con dosis (+ mg/kg), vía, frecuencia, días y fecha fin (hoy + días) |
+| ⚠️ Dosis fuera del rango (solo si aplica) | Pestaña `RANGOS_DOSIS` |
+| ➕ Acompañante | Los antimicrobianos de la solicitud que no son restringidos |
 
-Los títulos de las columnas del formulario son inconsistentes y hay que copiarlos tal cual. Por ejemplo, la dosis del primero dice `AB1` y las otras `AM2`/`AM3`; la frecuencia del primero dice `(En Horas)` y las otras `(En horas)`; la vía dice `adminsitración`, con la errata, y lleva dos espacios antes de `AM1`. `campo()` busca el título **exacto**: si alguien edita una pregunta, ese dato sale como `-` (o el antimicrobiano no se detecta) sin ningún error.
+Los títulos exactos están en `CAMPOS` y `SLOTS` de `Codigo.gs` y se leen con `campoDelEvento()`, que tolera espacios sobrantes en el título. Aun así, los nombres deben coincidir: la dosis del primero dice `AB1` y las otras `AM2`/`AM3`; la frecuencia del primero `(En Horas)` y las otras `(En horas)`; la vía dice `adminsitración` con dos espacios antes de `AM1`. Si alguien edita una pregunta, ejecutar `verificarEncabezados()` (solo lectura) muestra cuál dejó de encontrarse.
+
+La columna `TERMINACION` de la hoja es una fórmula y no llega con el formulario; el bot calcula la fecha fin como fecha de envío + días ordenados.
 
 ### Ejemplo (datos ficticios)
 
@@ -76,22 +84,32 @@ Los títulos de las columnas del formulario son inconsistentes y hay que copiarl
 
 🚨 NUEVO CASO PROA - ANTIMICROBIANO RESTRINGIDO 🚨
 
-📄 Historia Clínica: 99999999
-🎂 Edad: 54 años
-📋 Diagnóstico CIE10: A419 - Sepsis, no especificada
-🦠 Microorganismo aislado: Staphylococcus aureus resistente a meticilina
+📄 Historia Clínica: 88888888
+🎂 Edad: 63 años · ⚖️ Peso: 70 kg
+🏥 Servicio: Unidad de Cuidado Crítico UCI B · Cama: B07
 🩺 Especialidad que prescribe: Medicina Interna
-🏥 Servicio actual: Unidad de Cuidado Crítico UCI C
-🧪 Interconsulta Infectología (Dinámica Gerencial): Sí
+📋 Diagnóstico CIE10: N390 - INFECCION DE VIAS URINARIAS, SITIO NO ESPECIFICADO
+🦠 Microorganismo aislado: Ninguno
+🧫 Indicación: Empírico · Cultivos: UROCULTIVO · Origen: COMUNIDAD
+🔄 Cambio de antimicrobiano: Por antibiograma
+⚠️ Sin interconsulta a Infectología
+💧 Ajuste renal: Sí (DepCr 18)
 
-💊 Antimicrobiano restringido 1: LINEZOLID
-   Dosis: 600 mg/UI
-   Vía de administración: Intravenoso
-   Frecuencia: cada 12 horas
-   Días ordenados: 14
+💊 Antimicrobiano restringido 1: VANCOMICINA
+   Dosis: 500 mg (7,1 mg/kg) · Intravenoso · cada 12 horas
+   Días ordenados: 14 días · hasta 13/11/2026
+   ⚠️ Dosis fuera del rango de referencia (10-30 mg/kg/dosis): revisar
+
+➕ Acompañante: MEROPENEM · 1000 mg (14,3 mg/kg) · Intravenoso · cada 8 horas · 7 días · hasta 06/11/2026
 
 _Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado por el QF Juan Pablo Saavedra_
 ```
+
+### Rangos de dosis (`⚠️ revisar`)
+
+La pestaña **`RANGOS_DOSIS`** de la matriz tiene una fila por antimicrobiano con `min_mg_kg_dosis`, `max_mg_kg_dosis`, `min_mg_dosis`, `max_mg_dosis` y `nota`. Una dosis se acepta si cumple **cualquiera** de las reglas definidas para su molécula (así, 600 mg de linezolid en un adulto de 100 kg no marca aunque sean 6 mg/kg); solo se marca si falla en todas. Sin peso no se evalúa mg/kg; si una molécula no tiene reglas (Polimixina B, cuya dosis puede venir en UI) nunca se marca.
+
+`crearHojaRangosDosis()` crea la pestaña con la propuesta inicial que trae el código; **esa propuesta es una referencia general y la debe validar y ajustar el QF**. Mientras la pestaña no exista, se usa la misma tabla desde el código. Para cambiar un rango basta editar la celda; no hay que tocar el código. Réplica sobre las 148 alertas de octubre de 2026: 16 marcadas (11%), casi todas vancomicina 500 mg en adultos de 60–70 kg y errores de digitación evidentes (1.000 mg con peso 1 kg).
 
 ## Configuración
 
@@ -102,7 +120,10 @@ _Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado
 | `SPREADSHEET_ID` | ID de la matriz de respuestas |
 | `HOJA_ANTIMICROBIANOS_RESTRINGIDOS` | `ANTIMICROBIANOS_RESTRINGIDOS` |
 | `ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO` | Lista de respaldo |
-| `HOJA_CIE10` | `CIE10` (columna A código, columna B descripción) |
+| `HOJA_CIE10` | `CIE10` (columna A código, columna B descripción); se consulta por celda y se guarda en caché 6 h (`CACHE_CIE10_SEG`) |
+| `HOJA_RANGOS_DOSIS` / `RANGOS_DOSIS_RESPALDO` | Pestaña y tabla de respaldo de rangos de dosis |
+| `HOJA_RESPUESTAS` | `Respuestas de formulario 1` (solo la usa `verificarEncabezados()`) |
+| `CAMPOS` / `SLOTS` | Títulos exactos de las preguntas del formulario |
 
 ### Propiedades del script
 
@@ -128,15 +149,18 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 |---|---|---|
 | `notificarNuevaRespuesta(e)` | Sí, si hay restringido | La llama el activador |
 | `obtenerAntimicrobianosRestringidos()` | **No** | Lee la pestaña de restringidos (o el respaldo) |
-| `filtrarAntimicrobianosRestringidos(e)` | **No** | Devuelve los antimicrobianos restringidos de la solicitud |
+| `obtenerRangosDosis()`, `evaluarDosis()` | **No** | Lee la pestaña `RANGOS_DOSIS` (o el respaldo) y evalúa cada dosis |
+| `crearHojaRangosDosis()` | No (escribe en la hoja) | Crea la pestaña `RANGOS_DOSIS` con la propuesta inicial; no la toca si ya existe |
+| `filtrarAntimicrobianosRestringidos(e)`, `acompanantesNoRestringidos(e)` | **No** | Separan los antimicrobianos de la solicitud |
 | `construirMensajeDesdeEvento(e)` | **No** | Arma el texto del mensaje |
-| `formatearDiagnosticoCIE10()`, `obtenerMapaCIE10()`, `extraerCodigoCIE10()` | **No** | Cruce del diagnóstico con la pestaña `CIE10` |
+| `formatearDiagnosticoCIE10()`, `buscarDescripcionCIE10()` | **No** | Cruce del diagnóstico con la pestaña `CIE10` (TextFinder + caché) |
+| `verificarEncabezados()` | **No** | Comprueba que todas las preguntas usadas existan en la fila 1 de la hoja |
 | `enviarAlertaWhatsApp(mensaje)` | Sí | Envío a Green-API con firma y pie |
 | `listarChatsGreenAPI()` | **No** | Lista los grupos visibles para la instancia |
 | `crearTriggerFormSubmit()` | No (crea el activador) | Ya se ejecutó; no repetir |
-| `eventoPruebaLinezolid()`, `eventoPruebaVancomicina()`, `eventoPruebaSinRestringidos()` | **No** | Datos ficticios de prueba |
-| `testConstruccionMensaje()` | **No** | Escribe en el registro los 3 casos de prueba (el de ceftriaxona no debe alertar) |
-| `testCruceCIE10()` | **No** | Verifica en el registro el cruce con la pestaña `CIE10` |
+| `eventoPruebaLinezolid()`, `eventoPruebaVancomicina()`, `eventoPruebaPediatrico()`, `eventoPruebaSinRestringidos()` | **No** | Datos ficticios de prueba |
+| `testConstruccionMensaje()` | **No** | Escribe en el registro los 3 mensajes de prueba (y confirma que ceftriaxona no alerta) |
+| `testCruceCIE10()` | **No** | Verifica en el registro el cruce con la pestaña `CIE10` (incluye `G06.0` y `J40`) |
 | `enviarEjemploAlGrupo()` | Sí | Envía el caso ficticio de linezolid al grupo configurado |
 
 Antes de ejecutar `enviarEjemploAlGrupo()`, confirmar que `GREENAPI_GROUP_CHATID` apunta a PRUEBA BOT (`120363412506101174@g.us`).
@@ -145,18 +169,18 @@ Antes de ejecutar `enviarEjemploAlGrupo()`, confirmar que `GREENAPI_GROUP_CHATID
 
 El editor de Apps Script **no** se sincroniza con GitHub. Para cambiar el bot:
 
-1. Si solo cambia la lista de antimicrobianos, editar la pestaña `ANTIMICROBIANOS_RESTRINGIDOS`; no hace falta tocar el código.
+1. Si solo cambia la lista de antimicrobianos o un rango de dosis, editar la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` o `RANGOS_DOSIS`; no hace falta tocar el código.
 2. Para cambios de código, editar `Codigo.gs` en este repo y correr las pruebas locales.
 3. Copiar el cambio al editor (archivo "Código" del proyecto PROA ALERTAS) y guardar con Ctrl+S. No hace falta publicar: el activador usa siempre la última versión guardada.
-4. Probar con `GREENAPI_GROUP_CHATID` en PRUEBA BOT antes de volver a producción.
+4. Ejecutar `verificarEncabezados()` y `testConstruccionMensaje()` (no envían nada) y luego probar con `GREENAPI_GROUP_CHATID` en PRUEBA BOT antes de volver a producción.
 
 Al pegar texto con tildes o emojis, el editor a veces los daña. Los textos nuevos se escriben con escapes `\u` (como el pie) o con `String.fromCodePoint()`.
 
 ## Pruebas locales (sin red ni credenciales)
 
 ```bash
-node test/pie-firma.js   # carga el Codigo.gs real: pie de firma y filtro de los antimicrobianos nuevos
-node test/dry-run.js     # reconstruye el filtro y el mensaje en Node
+node test/dry-run.js     # carga el Codigo.gs real con la hoja simulada: encabezados, filtro, CIE10, edad/peso/frecuencia, rangos de dosis y 4 mensajes
+node test/pie-firma.js   # pie de firma y filtro de los antimicrobianos nuevos
 ```
 
 ## Green-API compartida: cuidado con el cupo de chats

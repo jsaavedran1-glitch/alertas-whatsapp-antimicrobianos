@@ -19,23 +19,18 @@ Reglas y contexto para cualquier asistente de IA que continúe este proyecto.
 
 ## Convenciones de código
 
-- Filtro de negocio: **solo** se envía alerta si alguno de los 3 antimicrobianos formulados (AM1/AM2/AM3) contiene alguno de los nombres de la lista de restringidos. La lista se lee de la hoja `ANTIMICROBIANOS_RESTRINGIDOS` de la matriz (columna A, desde la fila 2); si la hoja no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO` (Linezolid, Ceftazidima/Avibactam, Anfotericina, Aztreonam, Ertapenem, Vancomicina, Caspofungina, Anfotericina B liposomal, Tygeciclina, Doripenem, Rifampicina, Polimixina B, Daptomicina). Los nombres deben escribirse como aparecen en el formulario (p. ej. `TYGECICLINA` con Y, `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`). El nombre del formulario viene con un sufijo tipo ` - UT-XXXXXXX` que se descarta con `nombreLimpio()` antes de comparar y antes de mostrarlo en el mensaje.
-- Los emojis del mensaje se generan con `String.fromCodePoint()`, nunca como caracteres literales (mismo criterio que los otros dos bots, para evitar corrupción de codificación en editores de código).
-- Este bot **no** envía correo electrónico (a diferencia de Farmacovigilancia y Tecnovigilancia); solo WhatsApp.
-- La edad se toma de "Edad del paciente en años"; si está vacío, se usa "Edad del paciente meses". Nunca se muestran ambos.
+- Filtro de negocio: **solo** se envía alerta si alguno de los 3 antimicrobianos formulados (AM1/AM2/AM3) contiene alguno de los nombres de la lista de restringidos. La lista se lee de la hoja `ANTIMICROBIANOS_RESTRINGIDOS` de la matriz (columna A, desde la fila 2); si la hoja no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO`. Los nombres deben escribirse como aparecen en el formulario (p. ej. `TYGECICLINA` con Y, `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`). El sufijo ` - UT-XXXXXXX` se descarta con `nombreLimpio()`.
+- **Lectura de respuestas:** siempre con `campoDelEvento(valores, nombre)`, que compara los títulos con los espacios colapsados (misma defensa que en Tecnovigilancia). Los nombres de las preguntas viven en `CAMPOS` y `SLOTS`; `verificarEncabezados()` comprueba contra la fila 1 de la hoja que todos existan (solo lectura).
+- **Rangos de dosis:** pestaña `RANGOS_DOSIS` (columnas: antimicrobiano, min/max mg/kg/dosis, min/max mg/dosis, nota) con respaldo en `CONFIG.RANGOS_DOSIS_RESPALDO`. Una dosis se acepta si cumple **cualquiera** de las reglas definidas para su molécula; solo se marca "⚠️ revisar" si falla en todas. Sin peso no se evalúa mg/kg; sin regla (p. ej. Polimixina B, que puede venir en UI) no se marca nunca. La tabla es una propuesta de referencia: la valida y ajusta el QF en la pestaña, no en el código. En la réplica sobre octubre de 2026 marcó 16 de 148 alertas (11%).
+- **CIE10:** `extraerCodigoCIE10()` deja solo letras y números del primer token (`G06.0` → `G060`) y, si quedan 3 caracteres, se busca también con `X` (`J40` → `J40X`, como está el catálogo). La descripción se busca con `TextFinder` sobre la columna A (no se cargan las 12.600 filas) y se guarda en `CacheService` 6 h por código.
+- **Fecha fin:** la columna `TERMINACION` de la hoja es una fórmula (`Días ordenados AM1 + Marca temporal`) y **no llega en `e.namedValues`**; el bot la calcula con `fechaFin()` (hoy + días ordenados).
+- Los emojis se generan con `String.fromCodePoint()`, y los textos con tildes que van al mensaje se escriben con escapes `\u`, para que no se dañen al pegar en el editor.
+- Este bot **no** envía correo electrónico; solo WhatsApp.
+- Edad: años + meses si ambos existen ("2 años 3 meses"); si no hay ninguno, días. Peso: `Peso en Kg` o, si es 0/vacío, `Peso en gr`/1000.
 
-## Campos del formulario relevantes (nombres exactos, deben coincidir con `e.namedValues`)
+## Campos del formulario relevantes
 
-- `Número de Historia Clínica`
-- `Edad del paciente en años`
-- `Edad del paciente meses`
-- `Diagnóstico CIE10 para la cual se prescribe el antimicrobiano`
-- `Especialidad que prescribe`
-- `Servicio actual`
-- `¿Solicitó interconsulta por infectología en Dinámica Gerencial?`
-- `Nombre Antimicrobiano 1` / `2` / `3`
-- `Dosis en miligramos o UI AB1` (nótese: "AB1", no "AM1", solo para el primer antimicrobiano), `Dosis en miligramos o UI AM2`, `Dosis en miligramos o UI AM3`
-- `Frecuencia AM 1 (En Horas)` (con "H" mayúscula, distinto de AM2/AM3), `Frecuencia AM 2 (En horas)`, `Frecuencia AM 3 (En horas)`
+Los títulos exactos están en `CAMPOS` y `SLOTS` dentro de `Codigo.gs` (única fuente). Particularidades que no hay que "corregir": la dosis del primer antimicrobiano dice `AB1` y las otras `AM2`/`AM3`; la frecuencia del primero dice `(En Horas)` y las otras `(En horas)`; la vía dice `adminsitración` con dos espacios antes de `AM1`; los días del tercero dicen `AM 3` con espacio. Si alguien edita una pregunta del formulario, correr `verificarEncabezados()`.
 
 ## Marco regulatorio de referencia
 
