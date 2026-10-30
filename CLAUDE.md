@@ -50,4 +50,4 @@ Programa de Optimización de Antimicrobianos (PROA), Resolución 4816 de 2008, R
 
 ## Pie de firma
 
-Todo mensaje de WhatsApp termina con `_Bot diseñado por el QF Juan Pablo Saavedra · Servicio Farmacéutico HDV_` (cursiva, mismo estilo que el bot de Alertas INVIMA), agregado en `enviarAlertaWhatsApp()`. Si se cambia el texto, actualizar también `test/pie-firma.js`.
+Todo mensaje de WhatsApp termina con `_Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado por el QF Juan Pablo Saavedra_` (cursiva; este bot usa un texto de pie distinto al de los otros tres, decidido en el editor el 2026-10-21), agregado en `enviarAlertaWhatsApp()`. Si se cambia el texto, actualizar también `test/pie-firma.js`.

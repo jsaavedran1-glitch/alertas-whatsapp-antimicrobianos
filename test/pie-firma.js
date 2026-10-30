@@ -40,7 +40,7 @@ global.SpreadsheetApp = { openById: function () { throw new Error('sin hoja en l
 
 (0, eval)(src);
 
-var PIE = '_Bot diseñado por el QF Juan Pablo Saavedra · Servicio Farmacéutico HDV_';
+var PIE = '_Ecosistema de Vigilancia Digital del Servicio Farmac\u00e9utico HDV \u00b7 Desarrollado por el QF Juan Pablo Saavedra_';
 
 enviarAlertaWhatsApp('Cuerpo de prueba');
 assert.strictEqual(enviados.length, 1, 'debe intentar exactamente un envio');

@@ -90,7 +90,7 @@ Los títulos de las columnas del formulario son inconsistentes y hay que copiarl
    Frecuencia: cada 12 horas
    Días ordenados: 14
 
-_Bot diseñado por el QF Juan Pablo Saavedra · Servicio Farmacéutico HDV_
+_Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado por el QF Juan Pablo Saavedra_
 ```
 
 ## Configuración
