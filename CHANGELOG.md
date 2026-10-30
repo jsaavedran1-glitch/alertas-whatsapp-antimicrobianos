@@ -2,6 +2,10 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [Documentación] - 2026-10-30
+
+- `docs/antimicrobianos-restringidos.md`: fichas de referencia de las 13 moléculas restringidas con fuentes primarias (fichas FDA/EMA, consensos de vancomicina 2020 y polimixinas 2019, IDSA 2024, ACIN, MSD profesional), el uso observado en el HDV y los pendientes de verificación. Sustenta la pestaña `RANGOS_DOSIS`.
+
 ## [1.2.0] - 2026-10-30
 
 ### Agregado
