@@ -63,7 +63,7 @@ function evento(nombreAm1) {
 ].forEach(function (n) {
   assert.strictEqual(filtrarAntimicrobianosRestringidos(evento(n)).length, 1, n + ' debe generar alerta');
 });
-['CEFTRIAXONA - UT-1', 'MEROPENEM - UT-1', 'PIPERACILINA / TAZOBACTAM - UT-1'].forEach(function (n) {
+['CEFTRIAXONA - UT-1', 'MEROPENEM - UT-1', 'PIPERACILINA / TAZOBACTAM - UT-1', 'VANCOMICINA - UT-1', 'LINEZOLID - UT-1'].forEach(function (n) {
   assert.strictEqual(filtrarAntimicrobianosRestringidos(evento(n)).length, 0, n + ' no debe generar alerta');
 });
 console.log('OK - filtro: los 7 antimicrobianos nuevos alertan, los no restringidos no');

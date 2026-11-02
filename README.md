@@ -39,7 +39,7 @@ Paso a paso:
 
 1. **Llega una solicitud.** Al enviarse el formulario, Google agrega una fila a la hoja y dispara el activador "Al enviar el formulario", que llama a `notificarNuevaRespuesta(e)`.
 2. **Se carga la lista de restringidos** desde la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` de la misma hoja (columna A, desde la fila 2). Si esa pestaña no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO`, para que las alertas nunca dejen de funcionar por eso.
-3. **Se revisan los 3 antimicrobianos de la solicitud.** El formulario guarda el nombre con un código interno (`LINEZOLID - UT-19907394-3`). `nombreLimpio()` quita todo desde ` - UT-`, se pasa a mayúsculas y se marca como restringido si el nombre **contiene** alguno de la lista. Por eso `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`, y `ANFOTERICINA` cubre la convencional y la liposomal.
+3. **Se revisan los 3 antimicrobianos de la solicitud.** El formulario guarda el nombre con un código interno (`ERTAPENEM - UT-19973898-1`). `nombreLimpio()` quita todo desde ` - UT-`, se pasa a mayúsculas y se marca como restringido si el nombre **contiene** alguno de la lista. Por eso `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`, y `ANFOTERICINA` cubre la convencional y la liposomal.
 4. **Si ninguno es restringido, termina** sin enviar nada. Es lo más común: la mayoría de solicitudes son de cefepime, piperacilina/tazobactam, meropenem, etc.
 5. **Si hay al menos uno, arma el mensaje.** Además de historia clínica, edad y servicio, incluye lo que PROA interviene: peso y **mg/kg por dosis**, cama, indicación (empírico/etiológico/profiláctico), cultivos, origen (IAAS/comunidad), si fue un cambio de antimicrobiano y por qué, ajuste renal con depuración de creatinina, y un aviso cuando **no se pidió interconsulta a Infectología**. El diagnóstico se busca en la pestaña `CIE10` por su código (`G06.0` → `G060 - ABSCESO…`; `J40` → `J40X`); si no lo encuentra, deja lo que escribió el médico. Cada antimicrobiano restringido va con dosis, vía, frecuencia, días y **fecha fin prevista**; si la dosis queda fuera del rango de referencia de la pestaña `RANGOS_DOSIS`, se agrega `⚠️ … revisar`. Los antimicrobianos **no** restringidos de la misma solicitud salen como "Acompañante", para ver la combinación completa.
 6. **WhatsApp.** `enviarAlertaWhatsApp()` pone la firma en negrita arriba (`Bot PROA Antimicrobianos HDV` o lo que diga `GREENAPI_BOT_LABEL`) y el pie en cursiva abajo, y hace un `POST` a `sendMessage` de Green-API. Si Green-API responde con error o no hay conexión, lo deja en el registro sin detener la ejecución.
@@ -48,7 +48,9 @@ Paso a paso:
 
 La lista vigente está en la pestaña **`ANTIMICROBIANOS_RESTRINGIDOS`** de la matriz:
 
-Linezolid · Ceftazidima / Avibactam · Anfotericina · Aztreonam · Ertapenem · Vancomicina · Caspofungina · Anfotericina B liposomal · Tygeciclina · Doripenem · Rifampicina · Polimixina B · Daptomicina
+Ceftazidima / Avibactam · Anfotericina · Aztreonam · Ertapenem · Caspofungina · Anfotericina B liposomal · Tygeciclina · Doripenem · Rifampicina · Polimixina B · Daptomicina
+
+> Vancomicina y linezolid se retiraron de la lista el 2026-11-02 por decisión del Servicio Farmacéutico (eran el 73 % y el 9 % de las alertas de octubre). Sus filas siguen en `RANGOS_DOSIS` por si se reincorporan: basta con volver a escribirlas en la pestaña.
 
 **Para agregar o quitar un antimicrobiano no hay que tocar el código:** basta con editar esa pestaña, una fila por antimicrobiano. Hay que escribirlo como aparece en el formulario (por ejemplo `TYGECICLINA` con Y). Ojo con nombres muy cortos o genéricos: como la comparación es por "contiene", un término como `CEF` alertaría por todas las cefalosporinas.
 
@@ -91,20 +93,20 @@ La columna `TERMINACION` de la hoja es una fórmula y no llega con el formulario
 🏥 Servicio: Unidad de Cuidado Crítico UCI B · Cama: B07
 🩺 Especialidad que prescribe: Medicina Interna
 📋 Diagnóstico CIE10: N390 - INFECCION DE VIAS URINARIAS, SITIO NO ESPECIFICADO
-🦠 Microorganismo aislado: Ninguno
-🧫 Indicación: Empírico · Cultivos: UROCULTIVO · Origen: COMUNIDAD
+🦠 Microorganismo aislado: Klebsiella pneumoniae KPC
+🧫 Indicación: Empírico · Cultivos: UROCULTIVO · Origen: IAAS
 🔄 Cambio de antimicrobiano: Por antibiograma
 ⚠️ Sin interconsulta a Infectología
 💧 Ajuste renal: Sí (DepCr 18)
 
-💊 Antimicrobiano restringido 1: VANCOMICINA
-   Dosis: 500 mg (7,1 mg/kg) · Intravenoso · cada 12 horas
-   Días ordenados: 14 días · hasta 13/11/2026
-   ⚠️ Dosis fuera del rango de referencia (10-30 mg/kg/dosis): revisar
+💊 Antimicrobiano restringido 1: CEFTAZIDIMA / AVIBACTAM
+   Dosis: 750 mg (10,7 mg/kg) · Intravenoso · cada 12 horas
+   Días ordenados: 14 días · hasta 16/11/2026
+   ⚠️ Dosis fuera del rango de referencia (940-2500 mg/dosis o 30-65 mg/kg/dosis): revisar
 
-➕ Acompañante: MEROPENEM · 1000 mg (14,3 mg/kg) · Intravenoso · cada 8 horas · 7 días · hasta 06/11/2026
+➕ Acompañante: MEROPENEM · 1000 mg (14,3 mg/kg) · Intravenoso · cada 8 horas · 7 días · hasta 09/11/2026
 
-💡 Sugerencia PROA: terapia empírica combinada (VANCOMICINA + MEROPENEM). Revaluar a las 48-72 h con el resultado de cultivos para desescalar.
+💡 Sugerencia PROA: terapia empírica combinada (CEFTAZIDIMA / AVIBACTAM + MEROPENEM). Revaluar a las 48-72 h con el resultado de cultivos para desescalar.
 
 _Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado por el QF Juan Pablo Saavedra_
 ```
@@ -164,10 +166,10 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 | `enviarAlertaWhatsApp(mensaje)` | Sí | Envío a Green-API con firma y pie |
 | `listarChatsGreenAPI()` | **No** | Lista los grupos visibles para la instancia |
 | `crearTriggerFormSubmit()` | No (crea el activador) | Ya se ejecutó; no repetir |
-| `eventoPruebaLinezolid()`, `eventoPruebaVancomicina()`, `eventoPruebaPediatrico()`, `eventoPruebaSinRestringidos()` | **No** | Datos ficticios de prueba |
+| `eventoPruebaDaptomicina()`, `eventoPruebaCeftazidimaAvibactam()`, `eventoPruebaPediatrico()`, `eventoPruebaSinRestringidos()` | **No** | Datos ficticios de prueba |
 | `testConstruccionMensaje()` | **No** | Escribe en el registro los 3 mensajes de prueba (y confirma que ceftriaxona no alerta) |
 | `testCruceCIE10()` | **No** | Verifica en el registro el cruce con la pestaña `CIE10` (incluye `G06.0` y `J40`) |
-| `enviarEjemploAlGrupo()` | Sí | Envía el caso ficticio de linezolid al grupo configurado |
+| `enviarEjemploAlGrupo()` | Sí | Envía el caso ficticio de daptomicina al grupo configurado |
 
 Antes de ejecutar `enviarEjemploAlGrupo()`, confirmar que `GREENAPI_GROUP_CHATID` apunta a PRUEBA BOT (`120363412506101174@g.us`).
 

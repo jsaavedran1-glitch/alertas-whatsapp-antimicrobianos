@@ -14,7 +14,7 @@ var assert = require('assert');
 var src = fs.readFileSync(path.join(__dirname, '..', 'Codigo.gs'), 'utf8');
 
 // ---- Hoja simulada --------------------------------------------------------
-var CIE10 = { A419: 'SEPSIS, NO ESPECIFICADA', N390: 'INFECCION DE VIAS URINARIAS, SITIO NO ESPECIFICADO',
+var CIE10 = { B377: 'CANDIDIASIS, NO ESPECIFICADA', A419: 'SEPSIS, NO ESPECIFICADA', N390: 'INFECCION DE VIAS URINARIAS, SITIO NO ESPECIFICADO',
   G060: 'ABSCESO Y GRANULOMA INTRACRANEAL', J40X: 'BRONQUITIS, NO ESPECIFICADA COMO AGUDA O CRONICA',
   T857: 'INFECCION Y REACCION INFLAMATORIA DEBIDAS A OTROS DISPOSITIVOS PROTESICOS, IMPLANTES E INJERTOS INTERNOS' };
 var codigosCie = Object.keys(CIE10);
@@ -32,7 +32,7 @@ var ENCABEZADOS_REALES = ['Marca temporal', 'Dirección de correo electrónico',
   'Nombre Antimicrobiano 3', 'Dosis en miligramos o UI AM3', 'Vía de adminsitración de  AM3', 'Frecuencia AM 3 (En horas)', 'Días ordenados AM 3',
   'Estado', 'Observacion a la solicitud'];
 
-var RESTRINGIDOS = ['LINEZOLID', 'CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'VANCOMICINA', 'CASPOFUNGINA',
+var RESTRINGIDOS = ['CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'CASPOFUNGINA',
   'ANFOTERICINA B LIPOSOMAL', 'TYGECICLINA', 'DORIPENEM', 'RIFAMPICINA', 'POLIMIXINA B', 'DAPTOMICINA'];
 
 var lecturasCie = 0;
@@ -97,8 +97,12 @@ prueba('campoDelEvento tolera espacios sobrantes en el titulo de la pregunta', f
 });
 
 prueba('filtro: restringidos si, no restringidos no', function () {
-  assert.strictEqual(filtrarAntimicrobianosRestringidos(eventoPruebaLinezolid()).length, 1);
+  assert.strictEqual(filtrarAntimicrobianosRestringidos(eventoPruebaDaptomicina()).length, 1);
   assert.strictEqual(filtrarAntimicrobianosRestringidos(eventoPruebaSinRestringidos()).length, 0);
+  ['VANCOMICINA - UT-19993853-1', 'LINEZOLID - UT-19907394-3'].forEach(function (n) { // retirados el 2026-11-02
+    var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = [n];
+    assert.strictEqual(filtrarAntimicrobianosRestringidos({ namedValues: nv }).length, 0, n + ' ya no debe alertar');
+  });
   ['CASPOFUNGINA 50, 70 - UT-1', 'ANFOTERICINA B LIPOSOMAL - UT-1', 'TYGECICLINA - UT-1', 'DORIPENEM - UT-1', 'RIFAMPICINA - UT-1',
     'POLIMIXINA B - UT-1', 'DAPTOMICINA - UT-1'].forEach(function (n) {
     var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = [n];
@@ -166,8 +170,8 @@ prueba('rangos de dosis: acepta si cumple alguna regla, marca si falla en todas'
   assert.strictEqual(ev.referencia, '10-35 mg/kg/dosis');
 });
 
-prueba('mensaje: linezolid con interconsulta, meropenem como acompanante, fecha fin', function () {
-  var e = eventoPruebaLinezolid();
+prueba('mensaje: daptomicina con interconsulta, meropenem como acompanante, fecha fin', function () {
+  var e = eventoPruebaDaptomicina();
   var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(t, 'Edad: 54 años · ⚖️ Peso: 70 kg');
   incluye(t, 'Servicio: Unidad de Cuidado Crítico UCI C · Cama: C13');
@@ -177,74 +181,79 @@ prueba('mensaje: linezolid con interconsulta, meropenem como acompanante, fecha 
   noIncluye(t, 'Sin interconsulta');
   noIncluye(t, 'Cambio de antimicrobiano');
   noIncluye(t, 'Ajuste renal');
-  incluye(t, 'Antimicrobiano restringido 1: LINEZOLID');
-  incluye(t, 'Dosis: 600 mg (8,6 mg/kg) · Intravenoso · cada 12 horas');
+  incluye(t, 'Antimicrobiano restringido 1: DAPTOMICINA');
+  incluye(t, 'Dosis: 420 mg (6 mg/kg) · Intravenoso · cada 24 horas');
   assert.ok(/Días ordenados: 14 días · hasta \d\d\/\d\d\/\d{4}/.test(t), t);
   noIncluye(t, 'fuera del rango');
   incluye(t, '➕ Acompañante: MEROPENEM · 1000 mg (14,3 mg/kg) · Intravenoso · cada 8 horas · 7 días · hasta');
   noIncluye(t, 'Antimicrobiano restringido 2');
 });
 
-prueba('mensaje: vancomicina 500 mg, cambio, ajuste renal, sin interconsulta, N39.0', function () {
-  var e = eventoPruebaVancomicina();
+prueba('mensaje: ceftazidima/avibactam 750 mg, cambio, ajuste renal, sin interconsulta, N39.0', function () {
+  var e = eventoPruebaCeftazidimaAvibactam();
   var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(t, 'N390 - INFECCION DE VIAS URINARIAS');
-  incluye(t, 'Indicación: Empírico · Cultivos: UROCULTIVO · Origen: COMUNIDAD');
+  incluye(t, 'Indicación: Empírico · Cultivos: UROCULTIVO · Origen: IAAS');
   incluye(t, '🔄 Cambio de antimicrobiano: Por antibiograma');
   incluye(t, '⚠️ Sin interconsulta a Infectología');
   incluye(t, '💧 Ajuste renal: Sí (DepCr 18)');
-  incluye(t, 'Dosis: 500 mg (7,1 mg/kg) · Intravenoso · cada 12 horas');
-  incluye(t, '⚠️ Dosis fuera del rango de referencia (10-35 mg/kg/dosis): revisar');
+  noIncluye(t, 'no requiere ajuste renal');
+  incluye(t, 'Dosis: 750 mg (10,7 mg/kg) · Intravenoso · cada 12 horas');
+  incluye(t, '⚠️ Dosis fuera del rango de referencia (940-2500 mg/dosis o 30-65 mg/kg/dosis): revisar');
   noIncluye(t, 'Acompañante');
 });
 
-prueba('mensaje: pediatrico con peso en gramos y dosis unica', function () {
+prueba('mensaje: pediatrico con peso en gramos, caspofungina en dosis unica', function () {
   var e = eventoPruebaPediatrico();
   var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(t, 'Edad: 2 meses · ⚖️ Peso: 4,5 kg');
+  incluye(t, 'Edad: 4 meses · ⚖️ Peso: 7,5 kg');
   incluye(t, 'Servicio: Hospitalización Pediatría · Cama: 208');
-  incluye(t, 'T857 - INFECCION Y REACCION INFLAMATORIA');
-  incluye(t, 'Dosis: 60 mg (13,3 mg/kg) · Intravenoso · Dosis única');
+  incluye(t, 'B377 - CANDIDIASIS, NO ESPECIFICADA');
+  incluye(t, 'Dosis: 27 mg (3,6 mg/kg) · Intravenoso · Dosis única');
   incluye(t, 'Días ordenados: Dosis Unica');
   noIncluye(t, 'cada Dosis');
   noIncluye(t, 'fuera del rango');
+  noIncluye(t, 'Verificar');
 });
 
 prueba('sugerencia PROA: empirico combinado, empirico solo, etiologico sin sugerencia', function () {
-  var e = eventoPruebaVancomicina(); // empirico, sin acompanante: por defecto no hay sugerencia
+  var e = eventoPruebaCeftazidimaAvibactam(); // empirico, sin acompanante: por defecto no hay sugerencia
   noIncluye(construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e)), 'Sugerencia PROA');
   CONFIG.SUGERENCIA_EMPIRICO_SOLO = true;
   incluye(construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e)), '💡 Sugerencia PROA: terapia empírica. Revaluar a las 48-72 h con el resultado de cultivos.');
   CONFIG.SUGERENCIA_EMPIRICO_SOLO = false;
-  var nv = eventoPruebaVancomicina().namedValues;
+  // caspofungina empirica + meropenem (sepsis): combinacion a revaluar
+  var nv = eventoBase();
+  nv[CAMPOS.HC] = ['55555555']; nv[CAMPOS.EDAD_ANIOS] = ['48']; nv[CAMPOS.PESO_KG] = ['80'];
+  nv[CAMPOS.TIPO_INDICACION] = ['Tratamiento Empírico (En presencia o sospecha de infección sin germen documentado - sin antibiograma))'];
+  nv['Nombre Antimicrobiano 1'] = ['CASPOFUNGINA 50, 70 - UT-19974012-1']; nv['Dosis en miligramos o UI AB1'] = ['70'];
   nv['Nombre Antimicrobiano 2'] = ['MEROPENEM - UT-19973890-3']; nv['Dosis en miligramos o UI AM2'] = ['1000'];
   nv['Vía de adminsitración de  AM2'] = ['Intravenoso']; nv['Frecuencia AM 2 (En horas)'] = ['8']; nv['Días ordenados AM2'] = ['7'];
-  var t2 = construirMensajeDesdeEvento({ namedValues: nv });
-  incluye(t2, '💡 Sugerencia PROA: terapia empírica combinada (VANCOMICINA + MEROPENEM). Revaluar a las 48-72 h con el resultado de cultivos para desescalar.');
-  var e3 = eventoPruebaLinezolid(); // etiologico con meropenem
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💡 Sugerencia PROA: terapia empírica combinada (CASPOFUNGINA 50, 70 + MEROPENEM). Revaluar a las 48-72 h con el resultado de cultivos para desescalar.');
+  var e3 = eventoPruebaDaptomicina(); // etiologico con meropenem
   noIncluye(construirMensajeDesdeEvento(e3, filtrarAntimicrobianosRestringidos(e3)), 'Sugerencia PROA');
 });
 
 prueba('coherencia: peso implausible, peso vs edad, dosis/kg absurda; ajuste renal informado', function () {
-  var nv = eventoPruebaVancomicina().namedValues; nv[CAMPOS.PESO_KG] = ['1']; nv['Dosis en miligramos o UI AB1'] = ['1000'];
+  var nv = eventoPruebaCeftazidimaAvibactam().namedValues; nv[CAMPOS.PESO_KG] = ['1']; nv['Dosis en miligramos o UI AB1'] = ['2500'];
   var t = construirMensajeDesdeEvento({ namedValues: nv });
   incluye(t, '⚠️ Verificar peso: 1 kg no es coherente con 63 años');
-  incluye(t, '⚠️ Verificar dosis o peso: VANCOMICINA 1000 mg equivalen a 1000 mg/kg');
-  nv = eventoPruebaVancomicina().namedValues; nv[CAMPOS.PESO_KG] = ['700'];
+  incluye(t, '⚠️ Verificar dosis o peso: CEFTAZIDIMA / AVIBACTAM 2500 mg equivalen a 2500 mg/kg');
+  nv = eventoPruebaCeftazidimaAvibactam().namedValues; nv[CAMPOS.PESO_KG] = ['700'];
   incluye(construirMensajeDesdeEvento({ namedValues: nv }), '⚠️ Verificar peso: 700 kg no es un valor plausible');
   nv = eventoPruebaPediatrico().namedValues; nv[CAMPOS.PESO_KG] = ['45']; nv[CAMPOS.PESO_G] = [''];
-  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '⚠️ Verificar peso: 45 kg no es coherente con 2 meses');
-  var ok = eventoPruebaLinezolid();
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '⚠️ Verificar peso: 45 kg no es coherente con 4 meses');
+  var ok = eventoPruebaDaptomicina();
   noIncluye(construirMensajeDesdeEvento(ok, filtrarAntimicrobianosRestringidos(ok)), 'Verificar');
-  // ajuste renal marcado Si con linezolid (no requiere ajuste renal)
-  nv = eventoPruebaLinezolid().namedValues; nv[CAMPOS.AJUSTE_RENAL] = ['Sí']; nv[CAMPOS.DEP_CREATININA] = ['25'];
-  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💧 Ajuste renal: Sí (DepCr 25) · LINEZOLID no requiere ajuste renal');
-  var v = eventoPruebaVancomicina();
+  // ajuste renal marcado Si con caspofungina (no requiere ajuste renal)
+  nv = eventoPruebaPediatrico().namedValues; nv[CAMPOS.AJUSTE_RENAL] = ['Sí']; nv[CAMPOS.DEP_CREATININA] = ['25'];
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💧 Ajuste renal: Sí (DepCr 25) · CASPOFUNGINA 50, 70 no requiere ajuste renal');
+  var v = eventoPruebaCeftazidimaAvibactam(); // requiere ajuste renal: sin coletilla
   noIncluye(construirMensajeDesdeEvento(v, filtrarAntimicrobianosRestringidos(v)), 'no requiere ajuste renal');
 });
 
 prueba('mensaje: campos ausentes salen como "-" y nunca como undefined', function () {
-  var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = ['VANCOMICINA - UT-1'];
+  var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = ['ERTAPENEM - UT-1'];
   var t = construirMensajeDesdeEvento({ namedValues: nv });
   noIncluye(t, 'undefined'); noIncluye(t, 'NaN');
   incluye(t, 'Historia Clínica: -');
@@ -264,4 +273,4 @@ prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {
 console.log();
 if (fallos) { console.log(fallos + ' prueba(s) fallaron.'); process.exit(1); }
 console.log('OK: filtro y construccion de mensaje verificados sin llamar ninguna API externa.');
-console.log('\n--- Ejemplo (caso vancomicina) ---\n' + construirMensajeDesdeEvento(eventoPruebaVancomicina()));
+console.log('\n--- Ejemplo (caso ceftazidima/avibactam) ---\n' + construirMensajeDesdeEvento(eventoPruebaCeftazidimaAvibactam()));
