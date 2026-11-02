@@ -65,7 +65,7 @@ function hojaDeFilas(filas, conTextFinder) {
 }
 var HOJAS = {
   'Respuestas de formulario 1': hojaDeFilas([ENCABEZADOS_REALES]),
-  'ANTIMICROBIANOS_RESTRINGIDOS': hojaDeFilas([['Antimicrobiano']].concat(RESTRINGIDOS.map(function (a) { return [a]; }))),
+  'ANTIMICROBIANOS_RESTRINGIDOS': hojaDeFilas([['Antimicrobiano', 'dispara_alerta']].concat(RESTRINGIDOS.map(function (a) { return [a, 'SI']; })).concat([['VANCOMICINA', 'NO'], ['LINEZOLID', 'NO']])),
   'CIE10': hojaDeFilas([[' ', 'DESCRIPCION']].concat(codigosCie.map(function (c) { return [c, CIE10[c]]; }))),
   'RANGOS_DOSIS': null // no existe: debe usarse el respaldo del codigo
 };
@@ -99,10 +99,21 @@ prueba('campoDelEvento tolera espacios sobrantes en el titulo de la pregunta', f
 prueba('filtro: restringidos si, no restringidos no', function () {
   assert.strictEqual(filtrarAntimicrobianosRestringidos(eventoPruebaDaptomicina()).length, 1);
   assert.strictEqual(filtrarAntimicrobianosRestringidos(eventoPruebaSinRestringidos()).length, 0);
-  ['VANCOMICINA - UT-19993853-1', 'LINEZOLID - UT-19907394-3'].forEach(function (n) { // retirados el 2026-11-02
+  ['VANCOMICINA - UT-19993853-1', 'LINEZOLID - UT-19907394-3'].forEach(function (n) { // sin alerta propia desde 2026-11-02
     var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = [n];
-    assert.strictEqual(filtrarAntimicrobianosRestringidos({ namedValues: nv }).length, 0, n + ' ya no debe alertar');
+    var c = filtrarAntimicrobianosRestringidos({ namedValues: nv });
+    assert.strictEqual(c.length, 1, n + ' sigue siendo restringido');
+    assert.strictEqual(c[0].dispara, false, n + ' no dispara');
+    assert.strictEqual(debeAlertar(c), false, n + ' solo no debe alertar');
   });
+  assert.strictEqual(debeAlertar(filtrarAntimicrobianosRestringidos(eventoPruebaDaptomicina())), true);
+  assert.strictEqual(debeAlertar(filtrarAntimicrobianosRestringidos(eventoPruebaVancomicinaSola())), false);
+  // hoja sin columna B y sin vancomicina: el CONFIG la agrega como "sin alerta propia"
+  var original = HOJAS['ANTIMICROBIANOS_RESTRINGIDOS'];
+  HOJAS['ANTIMICROBIANOS_RESTRINGIDOS'] = hojaDeFilas([['Antimicrobiano']].concat(RESTRINGIDOS.map(function (a) { return [a]; })));
+  var cv = filtrarAntimicrobianosRestringidos(eventoPruebaVancomicinaSola());
+  assert.strictEqual(cv.length, 1); assert.strictEqual(cv[0].dispara, false);
+  HOJAS['ANTIMICROBIANOS_RESTRINGIDOS'] = original;
   ['CASPOFUNGINA 50, 70 - UT-1', 'ANFOTERICINA B LIPOSOMAL - UT-1', 'TYGECICLINA - UT-1', 'DORIPENEM - UT-1', 'RIFAMPICINA - UT-1',
     'POLIMIXINA B - UT-1', 'DAPTOMICINA - UT-1'].forEach(function (n) {
     var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = [n];
@@ -201,6 +212,23 @@ prueba('mensaje: ceftazidima/avibactam 750 mg, cambio, ajuste renal, sin interco
   incluye(t, 'Dosis: 750 mg (10,7 mg/kg) · Intravenoso · cada 12 horas');
   incluye(t, '⚠️ Dosis fuera del rango de referencia (940-2500 mg/dosis o 30-65 mg/kg/dosis): revisar');
   noIncluye(t, 'Acompañante');
+});
+
+prueba('vancomicina en 2.o lugar con ceftazidima/avibactam: se muestra como restringida, no como acompanante', function () {
+  var nv = eventoPruebaCeftazidimaAvibactam().namedValues;
+  nv['Nombre Antimicrobiano 2'] = ['VANCOMICINA - UT-19993853-1']; nv['Dosis en miligramos o UI AM2'] = ['500'];
+  nv['Vía de adminsitración de  AM2'] = ['Intravenoso']; nv['Frecuencia AM 2 (En horas)'] = ['12']; nv['Días ordenados AM2'] = ['14'];
+  var c = filtrarAntimicrobianosRestringidos({ namedValues: nv });
+  assert.strictEqual(c.length, 2); assert.strictEqual(debeAlertar(c), true);
+  var t = construirMensajeDesdeEvento({ namedValues: nv }, c);
+  incluye(t, 'Antimicrobiano restringido 1: CEFTAZIDIMA / AVIBACTAM');
+  incluye(t, 'Antimicrobiano restringido 2: VANCOMICINA');
+  incluye(t, 'Dosis: 500 mg (7,1 mg/kg) · Intravenoso · cada 12 horas');
+  incluye(t, '(10-35 mg/kg/dosis): revisar');
+  noIncluye(t, 'Acompañante: VANCOMICINA');
+  // vancomicina sola: ni mensaje ni envio
+  var sola = eventoPruebaVancomicinaSola();
+  assert.strictEqual(debeAlertar(filtrarAntimicrobianosRestringidos(sola)), false);
 });
 
 prueba('mensaje: pediatrico con peso en gramos, caspofungina en dosis unica', function () {

@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.5.0] - 2026-11-02
+
+### Cambiado
+- Precisión del retiro: **vancomicina y linezolid no disparan alerta por sí solas, pero siguen siendo restringidas**. Si otro antimicrobiano de la solicitud dispara la alerta, salen como "Antimicrobiano restringido N" con su dosis evaluada (no como acompañante). Nueva columna opcional `dispara_alerta` (SI/NO) en `ANTIMICROBIANOS_RESTRINGIDOS`; `CONFIG.RESTRINGIDOS_SIN_ALERTA_PROPIA` cubre el caso en que la pestaña no la tenga. `filtrarAntimicrobianosRestringidos()` devuelve `dispara` por molécula y `debeAlertar()` decide el envío.
+- `eventoPruebaVancomicinaSola()` y pruebas de que vancomicina sola no envía y que, en segundo lugar con ceftazidima/avibactam, se muestra como restringida.
+
 ## [1.4.0] - 2026-11-02
 
 ### Cambiado

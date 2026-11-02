@@ -2,9 +2,12 @@ var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
   HOJA_RESPUESTAS: 'Respuestas de formulario 1',
   HOJA_ANTIMICROBIANOS_RESTRINGIDOS: 'ANTIMICROBIANOS_RESTRINGIDOS',
-  // 2026-11-02: vancomicina y linezolid salieron de la lista por decision del Servicio Farmaceutico.
-  // Sus filas de RANGOS_DOSIS se conservan por si se reincorporan.
   ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO: ['CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'CASPOFUNGINA', 'ANFOTERICINA B LIPOSOMAL', 'TYGECICLINA', 'DORIPENEM', 'RIFAMPICINA', 'POLIMIXINA B', 'DAPTOMICINA'],
+  // Restringidos que NO disparan alerta por si solos (decision del Servicio Farmaceutico, 2026-11-02),
+  // pero que se muestran como restringidos (con su dosis evaluada) cuando otro antimicrobiano de la
+  // misma solicitud si dispara la alerta. Equivale a la columna "dispara_alerta = NO" de la pestana;
+  // si la pestana trae esa columna, la pestana manda.
+  RESTRINGIDOS_SIN_ALERTA_PROPIA: ['VANCOMICINA', 'LINEZOLID'],
   HOJA_CIE10: 'CIE10',
   CACHE_CIE10_SEG: 21600,
   HOJA_RANGOS_DOSIS: 'RANGOS_DOSIS',
@@ -97,30 +100,53 @@ var SLOTS = [
 
 /* =====================================================================
    Lista de antimicrobianos restringidos: se lee de la hoja
-   'ANTIMICROBIANOS_RESTRINGIDOS' en la matriz (columna A, desde fila 2).
-   Si la hoja no existe o falla la lectura, se usa CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO
-   para que las alertas nunca dejen de funcionar por este motivo.
+   'ANTIMICROBIANOS_RESTRINGIDOS' en la matriz (columna A nombre, desde fila 2;
+   columna B opcional "dispara_alerta" SI/NO, vacio = SI).
+   Devuelve [{ nombre, dispara }]. Si la hoja no existe o falla la lectura,
+   se usa CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO. En ambos casos se
+   agregan los de CONFIG.RESTRINGIDOS_SIN_ALERTA_PROPIA que no esten en la
+   lista, con dispara = false.
    ===================================================================== */
+function entradaRestringido(nombre, dispara) {
+  return { nombre: String(nombre || '').trim().toUpperCase(), dispara: dispara !== false };
+}
+
+function completarSinAlertaPropia(lista) {
+  CONFIG.RESTRINGIDOS_SIN_ALERTA_PROPIA.forEach(function(n) {
+    var nombre = String(n).trim().toUpperCase();
+    if (!lista.some(function(x) { return x.nombre === nombre; })) lista.push(entradaRestringido(nombre, false));
+  });
+  return lista;
+}
+
+function listaRespaldoRestringidos() {
+  return completarSinAlertaPropia(CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO.map(function(n) { return entradaRestringido(n, true); }));
+}
+
 function obtenerAntimicrobianosRestringidos() {
   try {
     var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_ANTIMICROBIANOS_RESTRINGIDOS);
     if (!hoja) {
       Logger.log('No se encontro la hoja "' + CONFIG.HOJA_ANTIMICROBIANOS_RESTRINGIDOS + '", se usa la lista de respaldo.');
-      return CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO;
+      return listaRespaldoRestringidos();
     }
     var ultimaFila = hoja.getLastRow();
     if (ultimaFila < 2) {
       Logger.log('La hoja de antimicrobianos restringidos esta vacia, se usa la lista de respaldo.');
-      return CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO;
+      return listaRespaldoRestringidos();
     }
-    var valores = hoja.getRange(2, 1, ultimaFila - 1, 1).getValues();
-    var lista = valores
-      .map(function(fila) { return String(fila[0] || '').trim().toUpperCase(); })
-      .filter(function(v) { return v; });
-    return lista.length ? lista : CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO;
+    var valores = hoja.getRange(2, 1, ultimaFila - 1, 2).getValues();
+    var lista = [];
+    valores.forEach(function(fila) {
+      var nombre = String(fila[0] || '').trim().toUpperCase();
+      if (!nombre) return;
+      var dispara = String(fila[1] || '').trim().toUpperCase() !== 'NO';
+      lista.push(entradaRestringido(nombre, dispara));
+    });
+    return lista.length ? completarSinAlertaPropia(lista) : listaRespaldoRestringidos();
   } catch (err) {
     Logger.log('Error leyendo la hoja de antimicrobianos restringidos, se usa la lista de respaldo: ' + err);
-    return CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO;
+    return listaRespaldoRestringidos();
   }
 }
 
@@ -254,7 +280,7 @@ function rangoTexto(min, max) {
    ===================================================================== */
 function notificarNuevaRespuesta(e) {
   var coincidencias = filtrarAntimicrobianosRestringidos(e);
-  if (coincidencias.length === 0) {
+  if (!debeAlertar(coincidencias)) {
     return;
   }
   var mensaje = construirMensajeDesdeEvento(e, coincidencias);
@@ -343,14 +369,38 @@ function leerSlots(e) {
   return lista;
 }
 
-function esRestringido(nombreLimpioAm, listaRestringidos) {
+// Entrada de la lista (string o { nombre, dispara }) contenida en el nombre del antimicrobiano;
+// si varias aplican, la mas larga (ANFOTERICINA B LIPOSOMAL antes que ANFOTERICINA).
+function entradaRestringida(nombreLimpioAm, lista) {
   var nombre = String(nombreLimpioAm || '').toUpperCase();
-  return listaRestringidos.some(function(restringido) { return nombre.indexOf(restringido) > -1; });
+  var mejor = null;
+  lista.forEach(function(item) {
+    var entrada = (typeof item === 'string') ? entradaRestringido(item, true) : item;
+    if (nombre.indexOf(entrada.nombre) > -1 && (!mejor || entrada.nombre.length > mejor.nombre.length)) mejor = entrada;
+  });
+  return mejor;
 }
 
+function esRestringido(nombreLimpioAm, lista) {
+  return entradaRestringida(nombreLimpioAm, lista) !== null;
+}
+
+// Restringidos de la solicitud, cada uno con dispara (true: la alerta sale por el; false: solo se muestra).
 function filtrarAntimicrobianosRestringidos(e) {
   var lista = obtenerAntimicrobianosRestringidos();
-  return leerSlots(e).filter(function(am) { return esRestringido(am.nombre, lista); });
+  var coincidencias = [];
+  leerSlots(e).forEach(function(am) {
+    var entrada = entradaRestringida(am.nombre, lista);
+    if (!entrada) return;
+    am.dispara = entrada.dispara;
+    coincidencias.push(am);
+  });
+  return coincidencias;
+}
+
+// Hay alerta solo si al menos un restringido de la solicitud dispara por si mismo.
+function debeAlertar(coincidencias) {
+  return coincidencias.some(function(am) { return am.dispara !== false; });
 }
 
 function acompanantesNoRestringidos(e) {
@@ -684,6 +734,16 @@ function eventoPruebaPediatrico() {
   return { namedValues: nv };
 }
 
+// Vancomicina como unico antimicrobiano: se reconoce como restringida pero no dispara alerta.
+function eventoPruebaVancomicinaSola() {
+  var nv = eventoBase();
+  nv[CAMPOS.HC] = ['66666666']; nv[CAMPOS.EDAD_ANIOS] = ['40']; nv[CAMPOS.PESO_KG] = ['70'];
+  nv[CAMPOS.TIPO_INDICACION] = ['Tratamiento Empírico (En presencia o sospecha de infección sin germen documentado - sin antibiograma))'];
+  nv['Nombre Antimicrobiano 1'] = ['VANCOMICINA - UT-19993853-1']; nv['Dosis en miligramos o UI AB1'] = ['1000'];
+  nv['Vía de adminsitración de  AM1'] = ['Intravenoso']; nv['Frecuencia AM 1 (En Horas)'] = ['12']; nv['Días ordenados AM1'] = ['10'];
+  return { namedValues: nv };
+}
+
 function eventoPruebaSinRestringidos() {
   var nv = eventoBase();
   nv[CAMPOS.HC] = ['11111111']; nv[CAMPOS.EDAD_MESES] = ['8']; nv[CAMPOS.PESO_KG] = ['8'];
@@ -711,6 +771,9 @@ function testConstruccionMensaje() {
   });
   Logger.log('--- Caso SIN antimicrobiano restringido (Ceftriaxona) ---');
   Logger.log('Coincidencias: ' + JSON.stringify(filtrarAntimicrobianosRestringidos(eventoPruebaSinRestringidos())) + ' (debe ser vacio, no se enviaria alerta)');
+  Logger.log('--- Caso vancomicina sola (no dispara alerta propia) ---');
+  var cv = filtrarAntimicrobianosRestringidos(eventoPruebaVancomicinaSola());
+  Logger.log('Coincidencias: ' + JSON.stringify(cv) + ' -> debeAlertar: ' + debeAlertar(cv) + ' (debe ser false)');
 }
 
 // SI envia un mensaje real al grupo configurado. Confirmar antes GREENAPI_GROUP_CHATID (PRUEBA BOT).

@@ -50,7 +50,9 @@ La lista vigente está en la pestaña **`ANTIMICROBIANOS_RESTRINGIDOS`** de la m
 
 Ceftazidima / Avibactam · Anfotericina · Aztreonam · Ertapenem · Caspofungina · Anfotericina B liposomal · Tygeciclina · Doripenem · Rifampicina · Polimixina B · Daptomicina
 
-> Vancomicina y linezolid se retiraron de la lista el 2026-11-02 por decisión del Servicio Farmacéutico (eran el 73 % y el 9 % de las alertas de octubre). Sus filas siguen en `RANGOS_DOSIS` por si se reincorporan: basta con volver a escribirlas en la pestaña.
+> **Vancomicina y linezolid no disparan alerta por sí solas** desde el 2026-11-02 (eran el 73 % y el 9 % de las alertas de octubre). Siguen siendo restringidas: si otro antimicrobiano de la misma solicitud dispara la alerta (p. ej. ceftazidima/avibactam en el primero y vancomicina en el segundo), vancomicina sale como "Antimicrobiano restringido 2" con su dosis evaluada, no como acompañante.
+>
+> Esto se controla con la columna **`dispara_alerta`** (SI/NO, vacío = SI) de la pestaña `ANTIMICROBIANOS_RESTRINGIDOS`. Si la pestaña no tiene esa columna, el código agrega las moléculas de `CONFIG.RESTRINGIDOS_SIN_ALERTA_PROPIA` (vancomicina, linezolid) con NO. Para que vuelvan a disparar alerta: escribirlas en la pestaña con `SI` en la columna B.
 
 **Para agregar o quitar un antimicrobiano no hay que tocar el código:** basta con editar esa pestaña, una fila por antimicrobiano. Hay que escribirlo como aparece en el formulario (por ejemplo `TYGECICLINA` con Y). Ojo con nombres muy cortos o genéricos: como la comparación es por "contiene", un término como `CEF` alertaría por todas las cefalosporinas.
 
@@ -159,14 +161,14 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 | `crearHojaRangosDosis()` | No (escribe en la hoja) | Crea la pestaña `RANGOS_DOSIS` con la propuesta inicial; no la toca si ya existe |
 | `reescribirHojaRangosDosis()` | No (escribe en la hoja) | Reemplaza la pestaña `RANGOS_DOSIS` por la tabla del código (pierde lo editado a mano) |
 | `advertenciasCoherencia()`, `sugerenciaPROA()` | **No** | Avisos de digitación y sugerencia de revaluación a las 48-72 h |
-| `filtrarAntimicrobianosRestringidos(e)`, `acompanantesNoRestringidos(e)` | **No** | Separan los antimicrobianos de la solicitud |
+| `filtrarAntimicrobianosRestringidos(e)`, `debeAlertar()`, `acompanantesNoRestringidos(e)` | **No** | Separan los antimicrobianos de la solicitud y deciden si la alerta se envía (algún restringido con `dispara_alerta` ≠ NO) |
 | `construirMensajeDesdeEvento(e)` | **No** | Arma el texto del mensaje |
 | `formatearDiagnosticoCIE10()`, `buscarDescripcionCIE10()` | **No** | Cruce del diagnóstico con la pestaña `CIE10` (TextFinder + caché) |
 | `verificarEncabezados()` | **No** | Comprueba que todas las preguntas usadas existan en la fila 1 de la hoja |
 | `enviarAlertaWhatsApp(mensaje)` | Sí | Envío a Green-API con firma y pie |
 | `listarChatsGreenAPI()` | **No** | Lista los grupos visibles para la instancia |
 | `crearTriggerFormSubmit()` | No (crea el activador) | Ya se ejecutó; no repetir |
-| `eventoPruebaDaptomicina()`, `eventoPruebaCeftazidimaAvibactam()`, `eventoPruebaPediatrico()`, `eventoPruebaSinRestringidos()` | **No** | Datos ficticios de prueba |
+| `eventoPruebaDaptomicina()`, `eventoPruebaCeftazidimaAvibactam()`, `eventoPruebaPediatrico()`, `eventoPruebaVancomicinaSola()`, `eventoPruebaSinRestringidos()` | **No** | Datos ficticios de prueba |
 | `testConstruccionMensaje()` | **No** | Escribe en el registro los 3 mensajes de prueba (y confirma que ceftriaxona no alerta) |
 | `testCruceCIE10()` | **No** | Verifica en el registro el cruce con la pestaña `CIE10` (incluye `G06.0` y `J40`) |
 | `enviarEjemploAlGrupo()` | Sí | Envía el caso ficticio de daptomicina al grupo configurado |
