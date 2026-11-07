@@ -7,7 +7,7 @@ Bot de Google Apps Script que avisa por **WhatsApp** (vía [Green-API](https://g
 | Formulario | [FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV](https://docs.google.com/forms/d/1u8XYmynHfAH0EoeyNFFcd8w12IA95J47oItrv34TyGI/edit) |
 | Hoja de respuestas | [MATRIZ FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV (Respuestas)](https://docs.google.com/spreadsheets/d/1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY/edit) |
 | Proyecto Apps Script | [PROA ALERTAS](https://script.google.com/u/1/home/projects/12mUy9SqQGzRnGjkbAsFyycG9RxJxvFePpSuHl4Nv8MokONxKY7kwbIw0/edit) (independiente, no vinculado a la hoja; archivo "Código") |
-| Código en este repo | `Codigo.gs` |
+| Código en este repo | `Codigo.gs` (archivo "Código") e `IA_PROA.gs` (revisión asistida por IA, mismo nombre en el editor) |
 
 La misma hoja tiene vinculado otro script, **FORMULARIO PROA DOT**, que calcula los días de terapia. Son proyectos separados y este bot no lo toca.
 
@@ -26,9 +26,12 @@ flowchart TD
     G -- No --> H["Termina sin enviar nada"]
     G -- Sí --> I["construirMensajeDesdeEvento(e)"]
     I --> J["formatearDiagnosticoCIE10()<br/>busca la descripción en la pestaña CIE10"]
-    J --> K["enviarAlertaWhatsApp(mensaje)<br/>firma arriba, pie 'Bot diseñado por...' abajo"]
+    J --> K["enviarAlertaWhatsApp(mensaje)<br/>firma arriba, pie abajo"]
     K --> L["Green-API sendMessage<br/>al grupo GREENAPI_GROUP_CHATID"]
     L --> M["Grupo de WhatsApp"]
+    K -. "IA_PROA_MODO = PRODUCCION" .-> N["IA_PROA.gs: revisarCasoConIa_()<br/>API de Claude + fichas de docs/"]
+    N --> O["Revisión PROA como respuesta<br/>citada al mensaje base"]
+    O --> M
 
     style A fill:#1b2a4a,color:#fff
     style G fill:#1b2a4a,color:#fff
@@ -41,8 +44,9 @@ Paso a paso:
 2. **Se carga la lista de restringidos** desde la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` de la misma hoja (columna A, desde la fila 2). Si esa pestaña no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO`, para que las alertas nunca dejen de funcionar por eso.
 3. **Se revisan los 3 antimicrobianos de la solicitud.** El formulario guarda el nombre con un código interno (`ERTAPENEM - UT-19973898-1`). `nombreLimpio()` quita todo desde ` - UT-`, se pasa a mayúsculas y se marca como restringido si el nombre **contiene** alguno de la lista. Por eso `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`, y `ANFOTERICINA` cubre la convencional y la liposomal.
 4. **Si ninguno es restringido, termina** sin enviar nada. Es lo más común: la mayoría de solicitudes son de cefepime, piperacilina/tazobactam, meropenem, etc.
-5. **Si hay al menos uno, arma el mensaje.** Además de historia clínica, edad y servicio, incluye lo que PROA interviene: peso y **mg/kg por dosis**, cama, indicación (empírico/etiológico/profiláctico), cultivos, origen (IAAS/comunidad), si fue un cambio de antimicrobiano y por qué, ajuste renal con depuración de creatinina, y un aviso cuando **no se pidió interconsulta a Infectología**. El diagnóstico se busca en la pestaña `CIE10` por su código (`G06.0` → `G060 - ABSCESO…`; `J40` → `J40X`); si no lo encuentra, deja lo que escribió el médico. Cada antimicrobiano restringido va con dosis, vía, frecuencia, días y **fecha fin prevista**; si la dosis queda fuera del rango de referencia de la pestaña `RANGOS_DOSIS`, se agrega `⚠️ … revisar`. Los antimicrobianos **no** restringidos de la misma solicitud salen como "Acompañante", para ver la combinación completa.
-6. **WhatsApp.** `enviarAlertaWhatsApp()` pone la firma en negrita arriba (`Bot PROA Antimicrobianos HDV` o lo que diga `GREENAPI_BOT_LABEL`) y el pie en cursiva abajo, y hace un `POST` a `sendMessage` de Green-API. Si Green-API responde con error o no hay conexión, lo deja en el registro sin detener la ejecución.
+5. **Si hay al menos uno, arma el mensaje.** Además de historia clínica, edad y servicio, incluye lo que PROA interviene: peso y **mg/kg por dosis**, cama, indicación (empírico/etiológico/profiláctico), cultivos, origen (IAAS/comunidad), si fue un cambio de antimicrobiano y por qué, ajuste renal (Sí/No; el valor de depuración no se muestra desde el 2026-11-07), y un aviso cuando **no se pidió interconsulta a Infectología**. El diagnóstico se busca en la pestaña `CIE10` por su código (`G06.0` → `G060 - ABSCESO…`; `J40` → `J40X`); si no lo encuentra, deja lo que escribió el médico. Cada antimicrobiano restringido va con dosis, vía, frecuencia, días y **fecha fin prevista**; si la dosis queda fuera del rango de referencia de la pestaña `RANGOS_DOSIS`, se agrega `⚠️ … revisar`. Los antimicrobianos **no** restringidos de la misma solicitud salen como "Acompañante", para ver la combinación completa.
+6. **WhatsApp.** `enviarAlertaWhatsApp()` pone la firma en negrita arriba (`Bot PROA Antimicrobianos HDV` o lo que diga `GREENAPI_BOT_LABEL`) y el pie en cursiva abajo, y hace un `POST` a `sendMessage` de Green-API. Si Green-API responde con error o no hay conexión, lo deja en el registro sin detener la ejecución. Si la solicitud trae ceftazidima/avibactam, la primera línea después de la firma es `*🚨CEFTAZIDIMA/AVIBACTAM🚨*` (`CONFIG.ENCABEZADOS_DESTACADOS`); Green-API no permite mencionar a todo el grupo (@todos), así que el aviso es visual.
+7. **Revisión asistida por IA.** Con `ANTHROPIC_API_KEY` configurada, `IA_PROA.gs` pide a la API de Claude una revisión del caso y la envía segundos después como **respuesta citada** al mensaje base (ver [Revisión asistida por IA](#revisión-asistida-por-ia-ia_proags)).
 
 ### Antimicrobianos restringidos
 
@@ -72,12 +76,13 @@ Si se cambia la lista de la pestaña, conviene actualizar también la de respald
 | 🧫 Indicación · Cultivos · Origen | `Indicación del antibiótico` (resumida a Empírico/Etiológico/Profiláctico), `Cultivos tomados:`, `Origen de la infección?` |
 | 🔄 Cambio de antimicrobiano (solo si aplica) | `Indicación` = CAMBIO, con `Si fue cambiado, cual fue la razón?` |
 | 🧪 Interconsulta / ⚠️ Sin interconsulta | `¿Solicitó interconsulta por infectología en Dinámica Gerencial?` |
-| 💧 Ajuste renal · Falla hepática (solo si Sí) | `Ajuste Renal`, `…depuración de Creatinina…`, `Falla Hepática` |
+| 🚨CEFTAZIDIMA/AVIBACTAM🚨 (solo si aplica) | Algún antimicrobiano de la solicitud contiene `AVIBACTAM` (`CONFIG.ENCABEZADOS_DESTACADOS`) |
+| 💧 Ajuste renal · Falla hepática (solo si Sí) | `Ajuste Renal`, `Falla Hepática`. La pregunta de depuración de creatinina sigue en el formulario, pero su valor no se muestra (2026-11-07) |
 | 💊 Antimicrobiano restringido | `Nombre Antimicrobiano 1/2/3` con dosis (+ mg/kg), vía, frecuencia, días y fecha fin (hoy + días) |
 | ⚠️ Dosis fuera del rango (solo si aplica) | Pestaña `RANGOS_DOSIS` |
 | ➕ Acompañante | Los antimicrobianos de la solicitud que no son restringidos |
 | ⚠️ Verificar peso / dosis (solo si aplica) | Incoherencias de digitación: peso fuera de 0,4–250 kg, peso < 20 kg con ≥ 12 años o < 30 kg con ≥ 18 años, > 20 kg con menos de 12 meses, o más de 100 mg/kg por dosis |
-| 💡 Sugerencia PROA (solo si aplica) | Terapia empírica con un restringido más un acompañante de amplio espectro (`AMPLIO_ESPECTRO`: meropenem, imipenem, cefepime, piperacilina/tazobactam, ceftazidima, ceftriaxona): "Revaluar a las 48-72 h con el resultado de cultivos para desescalar" (intervención *time-out*, guía OPS/OMS 2024). `SUGERENCIA_EMPIRICO_SOLO = true` la extiende a toda terapia empírica |
+| 💡 Sugerencia PROA (solo si aplica) | Terapia empírica con un restringido más un acompañante de amplio espectro (`AMPLIO_ESPECTRO`: meropenem, imipenem, cefepime, piperacilina/tazobactam, ceftazidima, ceftriaxona): "Revaluar a las 48-72 h con el resultado de cultivos para desescalar" (intervención *time-out*, guía OPS/OMS 2024). `SUGERENCIA_EMPIRICO_SOLO = true` la extiende a toda terapia empírica. Con la revisión por IA activa, esta línea va en la respuesta citada y no en el mensaje base |
 
 Los títulos exactos están en `CAMPOS` y `SLOTS` de `Codigo.gs` y se leen con `campoDelEvento()`, que tolera espacios sobrantes en el título. Aun así, los nombres deben coincidir: la dosis del primero dice `AB1` y las otras `AM2`/`AM3`; la frecuencia del primero `(En Horas)` y las otras `(En horas)`; la vía dice `adminsitración` con dos espacios antes de `AM1`. Si alguien edita una pregunta, ejecutar `verificarEncabezados()` (solo lectura) muestra cuál dejó de encontrarse.
 
@@ -85,8 +90,12 @@ La columna `TERMINACION` de la hoja es una fórmula y no llega con el formulario
 
 ### Ejemplo (datos ficticios)
 
+Mensaje base (sin IA, o con `IA_PROA_MODO = NO`):
+
 ```
 *Bot PROA Antimicrobianos HDV*
+
+*🚨CEFTAZIDIMA/AVIBACTAM🚨*
 
 🚨 NUEVO CASO PROA - ANTIMICROBIANO RESTRINGIDO 🚨
 
@@ -99,7 +108,7 @@ La columna `TERMINACION` de la hoja es una fórmula y no llega con el formulario
 🧫 Indicación: Empírico · Cultivos: UROCULTIVO · Origen: IAAS
 🔄 Cambio de antimicrobiano: Por antibiograma
 ⚠️ Sin interconsulta a Infectología
-💧 Ajuste renal: Sí (DepCr 18)
+💧 Ajuste renal: Sí
 
 💊 Antimicrobiano restringido 1: CEFTAZIDIMA / AVIBACTAM
    Dosis: 750 mg (10,7 mg/kg) · Intravenoso · cada 12 horas
@@ -112,6 +121,41 @@ La columna `TERMINACION` de la hoja es una fórmula y no llega con el formulario
 
 _Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado por el QF Juan Pablo Saavedra_
 ```
+
+Con `IA_PROA_MODO = PRODUCCION`, el mismo mensaje sale sin la línea 💡 y, segundos después, llega esta respuesta citándolo (sin firma ni pie):
+
+```
+🔎 *Revisión PROA · Ceftazidima / avibactam*
+💡 Terapia empírica combinada (CEFTAZIDIMA / AVIBACTAM + MEROPENEM). Revaluar a las 48-72 h con el resultado de cultivos para desescalar.
+🔴 DUP · Meropenem con ceftazidima/avibactam frente a KPC duplica espectro; valorar suspender el carbapenémico.
+🟠 DUR · Reserve a 14 días en infección urinaria; valorar 7 días si hay buena respuesta clínica.
+_Revisión asistida por IA_
+```
+
+## Revisión asistida por IA (`IA_PROA.gs`)
+
+Segundo archivo del proyecto. Por cada solicitud con restringido, envía a la API de Claude el caso **seudonimizado** (sin historia clínica, nombre, cama, EPS ni médico) junto con las fichas de `docs/antimicrobianos-restringidos.md` (se leen de la rama `main` de este repositorio, con caché de 6 h), y recibe hallazgos en JSON con esquema fijo. La IA no decide: propone, y el QF valida.
+
+| Código | Qué revisa |
+|---|---|
+| `ESP` | Espectro frente al microorganismo y el foco (p. ej. ertapenem con *Pseudomonas*, daptomicina en neumonía) |
+| `DUP` | Duplicidad de espectro con los acompañantes |
+| `DUR` | Duración frente al foco y la indicación |
+| `IND` | Indicación frente a la ficha: si diagnóstico, microorganismo, origen y tipo de indicación justifican ese restringido (p. ej. ceftazidima/avibactam sin carbapenemasa ni *Pseudomonas* multirresistente) |
+| `CAM` | Coherencia del cambio de antimicrobiano |
+| `DES` | Oportunidad de desescalar o pasar a vía oral |
+
+- La dosis y el ajuste renal **no** se revisan con IA: el formulario no trae creatinina y los rangos de dosis los marca `Codigo.gs`.
+- En el mensaje salen como máximo 3 hallazgos (`IA_MAX_HALLAZGOS_MENSAJE`), primero 🔴 alta y luego 🟠 media; los de severidad baja y los datos faltantes solo quedan en el registro. Si no hay sugerencia ni hallazgos, no se envía respuesta.
+- Vancomicina o linezolid solos no disparan alerta, salvo que la IA encuentre un hallazgo 🔴 alta (`IA_ALERTA_SI_ALTA_SIN_DISPARO`).
+- Si la API falla, el mensaje base ya salió y la respuesta lleva solo la sugerencia PROA, si la hay. Sin `ANTHROPIC_API_KEY`, o con `IA_PROA_MODO = NO`, el bot funciona exactamente como antes.
+- Modelo por defecto `claude-sonnet-5-5` (cambiable con `CLAUDE_MODEL`); unos USD 0,04 por caso.
+
+| `IA_PROA_MODO` | Grupo de producción | PRUEBA BOT |
+|---|---|---|
+| `PRODUCCION` (vigente desde 2026-11-07) | Mensaje base sin 💡 + revisión citada | Nada |
+| `PRUEBA` (por defecto si la propiedad no existe) | Mensaje de siempre, con 💡 | Copia del base + revisión citada |
+| `NO` | Mensaje de siempre | Nada |
 
 ### Rangos de dosis (`⚠️ revisar`)
 
@@ -132,6 +176,7 @@ La pestaña **`RANGOS_DOSIS`** de la matriz tiene una fila por antimicrobiano co
 | `HOJA_RANGOS_DOSIS` / `RANGOS_DOSIS_RESPALDO` | Pestaña y tabla de respaldo de rangos de dosis |
 | `HOJA_RESPUESTAS` | `Respuestas de formulario 1` (solo la usa `verificarEncabezados()`) |
 | `CAMPOS` / `SLOTS` | Títulos exactos de las preguntas del formulario |
+| `ENCABEZADOS_DESTACADOS` | Pares `[texto que contiene el nombre, encabezado]`; hoy `[['AVIBACTAM', 'CEFTAZIDIMA/AVIBACTAM']]` |
 
 ### Propiedades del script
 
@@ -144,6 +189,10 @@ En el editor de Apps Script: **Configuración del proyecto → Propiedades del s
 | `GREENAPI_API_URL` | sí | URL base de la API, ej. `https://7107.api.greenapi.com` |
 | `GREENAPI_GROUP_CHATID` | sí | chatId del grupo de destino; siempre termina en `@g.us` |
 | `GREENAPI_BOT_LABEL` | no | Firma en negrita al inicio del mensaje (por defecto `Bot PROA Antimicrobianos HDV`) |
+| `ANTHROPIC_API_KEY` | no | Clave de la API de Claude (secreto). Sin ella no hay revisión por IA |
+| `IA_PROA_MODO` | no | `PRODUCCION`, `PRUEBA` (por defecto) o `NO` |
+| `CLAUDE_MODEL` | no | Modelo de la revisión (por defecto `claude-sonnet-5-5`) |
+| `GREENAPI_PRUEBA_CHATID` | no | Grupo de pruebas del modo `PRUEBA` (por defecto PRUEBA BOT) |
 
 Para encontrar el chatId de un grupo sin riesgo de enviar nada, ejecutar `listarChatsGreenAPI()`: solo lee (`getChats`) y registra los grupos (`@g.us`).
 
@@ -172,16 +221,19 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 | `testConstruccionMensaje()` | **No** | Escribe en el registro los 3 mensajes de prueba (y confirma que ceftriaxona no alerta) |
 | `testCruceCIE10()` | **No** | Verifica en el registro el cruce con la pestaña `CIE10` (incluye `G06.0` y `J40`) |
 | `enviarEjemploAlGrupo()` | Sí | Envía el caso ficticio de daptomicina al grupo configurado |
+| `enviarPruebaCeftazidimaAPruebaBot()` | Sí, **solo a PRUEBA BOT** | Mensaje base del caso de ceftazidima/avibactam (destino fijo) |
+| `probarRevisionIa()` (`IA_PROA.gs`) | **No** (usa la API) | Escribe en el registro los mensajes y la revisión de 5 casos ficticios |
+| `enviarPruebaIaAPruebaBot()` (`IA_PROA.gs`) | Sí, **solo a PRUEBA BOT** | Flujo completo (base + revisión citada) de 2 casos de ceftazidima/avibactam (destino fijo) |
 
-Antes de ejecutar `enviarEjemploAlGrupo()`, confirmar que `GREENAPI_GROUP_CHATID` apunta a PRUEBA BOT (`120363412506101174@g.us`).
+Antes de ejecutar `enviarEjemploAlGrupo()`, confirmar que `GREENAPI_GROUP_CHATID` apunta a PRUEBA BOT (`120363412506101174@g.us`); hoy apunta al grupo de producción, así que para probar se usan las dos funciones de destino fijo.
 
 ## Cómo se actualiza el bot
 
 El editor de Apps Script **no** se sincroniza con GitHub. Para cambiar el bot:
 
 1. Si solo cambia la lista de antimicrobianos o un rango de dosis, editar la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` o `RANGOS_DOSIS`; no hace falta tocar el código.
-2. Para cambios de código, editar `Codigo.gs` en este repo y correr las pruebas locales.
-3. Copiar el cambio al editor (archivo "Código" del proyecto PROA ALERTAS) y guardar con Ctrl+S. No hace falta publicar: el activador usa siempre la última versión guardada.
+2. Para cambios de código, editar `Codigo.gs` o `IA_PROA.gs` en este repo y correr las pruebas locales.
+3. Copiar el cambio al editor (archivos "Código" e "IA_PROA" del proyecto PROA ALERTAS) y guardar con Ctrl+S. No hace falta publicar: el activador usa siempre la última versión guardada.
 4. Ejecutar `verificarEncabezados()` y `testConstruccionMensaje()` (no envían nada) y luego probar con `GREENAPI_GROUP_CHATID` en PRUEBA BOT antes de volver a producción.
 
 Al pegar texto con tildes o emojis, el editor a veces los daña. Los textos nuevos se escriben con escapes `\u` (como el pie) o con `String.fromCodePoint()`.
@@ -191,7 +243,10 @@ Al pegar texto con tildes o emojis, el editor a veces los daña. Los textos nuev
 ```bash
 node test/dry-run.js     # carga el Codigo.gs real con la hoja simulada: encabezados, filtro, CIE10, edad/peso/frecuencia, rangos de dosis y 4 mensajes
 node test/pie-firma.js   # pie de firma y filtro de los antimicrobianos nuevos
+node test/ia-proa.js     # revisión por IA con Green-API, Claude y GitHub simulados: modos, orden de envío, cita, datos seudonimizados, encabezado
 ```
+
+`node test/ia-proa.js <ruta de un Codigo.gs anterior>` compara además los envíos sin IA contra esa versión.
 
 ## Green-API compartida: cuidado con el cupo de chats
 
@@ -207,7 +262,7 @@ La instancia de Green-API es la misma para los 4 bots del Servicio Farmacéutico
 ## Reglas
 
 - **Solo a grupos.** El destino siempre termina en `@g.us`; nunca se envía a una persona (`@c.us`).
-- **Ninguna credencial en el código.** Todo vive en Propiedades del script.
+- **Ninguna credencial en el código.** Todo vive en Propiedades del script, incluida `ANTHROPIC_API_KEY`.
 - **No modificar el script FORMULARIO PROA DOT** ni sus activadores.
 - **Pruebas solo en PRUEBA BOT**, nunca en el grupo de producción.
 

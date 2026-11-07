@@ -29,6 +29,19 @@ Reglas y contexto para cualquier asistente de IA que continúe este proyecto.
 - Los emojis se generan con `String.fromCodePoint()`, y los textos con tildes que van al mensaje se escriben con escapes `\u`, para que no se dañen al pegar en el editor.
 - Este bot **no** envía correo electrónico; solo WhatsApp.
 - Edad: años + meses si ambos existen ("2 años 3 meses"); si no hay ninguno, días. Peso: `Peso en Kg` o, si es 0/vacío, `Peso en gr`/1000.
+- **Ajuste renal sin DepCr (2026-11-07):** la línea dice solo `💧 Ajuste renal: Sí`. La pregunta "depuración de Creatinina en (mg/dl)" sigue en el formulario (`CAMPOS.DEP_CREATININA`), pero el referente indicó que el formulario no trae datos de creatinina confiables: no mostrar ese valor ni enviarlo a la IA.
+- **Encabezado destacado (2026-11-07):** `CONFIG.ENCABEZADOS_DESTACADOS` agrega `*🚨CEFTAZIDIMA/AVIBACTAM🚨*` como primera línea después de la firma cuando algún antimicrobiano de la solicitud contiene `AVIBACTAM`. Se pidió "etiquetar a todos" (@todos), pero `sendMessage` de Green-API no tiene parámetro de menciones (solicitud abierta en su foro); por eso es un aviso visual.
+
+## Revisión asistida por IA (`IA_PROA.gs`, desde 2026-11-07)
+
+- Segundo archivo del proyecto. `notificarNuevaRespuesta()` lo llama con un `typeof notificarConRevisionIa_ === 'function'`: sin el archivo, sin `ANTHROPIC_API_KEY` o con `IA_PROA_MODO = NO`, el flujo es exactamente el de antes.
+- **`IA_PROA_MODO = PRODUCCION` desde el 2026-11-07** (lo pidió el usuario): al grupo de producción va el mensaje base sin la línea 💡 y, segundos después, la revisión como respuesta citada (`quotedMessageId`). `PRUEBA` (valor por defecto si la propiedad no existe) manda la copia + revisión solo a PRUEBA BOT.
+- Códigos permitidos (`IA_CODIGOS`): ESP, DUP, DUR, IND, CAM, DES. **No** hay revisión de dosis ni de ajuste renal (se quitó REN); cualquier otro código que devuelva el modelo se descarta.
+- Formato de la respuesta: `🔎 *Revisión PROA · <restringidos>*`, la sugerencia 💡, hasta 3 líneas `🔴/🟠 CÓDIGO · detalle` y el pie `_Revisión asistida por IA_` (solo eso; sin firma ni pie del bot).
+- Las fichas que usa el modelo se leen de `docs/antimicrobianos-restringidos.md` en la rama `main` (`IA_FICHAS_URL`): no mover ni renombrar ese archivo.
+- La clave `ANTHROPIC_API_KEY` la pega el usuario en Propiedades del script; nunca escribirla, repetirla ni subirla al repo.
+- Pruebas reales solo con `enviarPruebaIaAPruebaBot()` y `enviarPruebaCeftazidimaAPruebaBot()` (destino fijo PRUEBA BOT) o `probarRevisionIa()` (solo registro). No usar `enviarEjemploAlGrupo()`: `GREENAPI_GROUP_CHATID` apunta a producción.
+- Edición en el editor: `IA_PROA.gs` está escrito solo en ASCII (tildes como escapes `\u`); para cambios se comparó el hash SHA-256 del texto del editor con el archivo del repo antes y después de aplicar.
 
 ## Campos del formulario relevantes
 
