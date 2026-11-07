@@ -207,7 +207,8 @@ prueba('mensaje: ceftazidima/avibactam 750 mg, cambio, ajuste renal, sin interco
   incluye(t, 'Indicación: Empírico · Cultivos: UROCULTIVO · Origen: IAAS');
   incluye(t, '🔄 Cambio de antimicrobiano: Por antibiograma');
   incluye(t, '⚠️ Sin interconsulta a Infectología');
-  incluye(t, '💧 Ajuste renal: Sí (DepCr 18)');
+  incluye(t, '💧 Ajuste renal: Sí');
+  noIncluye(t, 'DepCr'); // sin el valor de depuracion (2026-11-07)
   noIncluye(t, 'no requiere ajuste renal');
   incluye(t, 'Dosis: 750 mg (10,7 mg/kg) · Intravenoso · cada 12 horas');
   incluye(t, '⚠️ Dosis fuera del rango de referencia (940-2500 mg/dosis o 30-65 mg/kg/dosis): revisar');
@@ -275,7 +276,7 @@ prueba('coherencia: peso implausible, peso vs edad, dosis/kg absurda; ajuste ren
   noIncluye(construirMensajeDesdeEvento(ok, filtrarAntimicrobianosRestringidos(ok)), 'Verificar');
   // ajuste renal marcado Si con caspofungina (no requiere ajuste renal)
   nv = eventoPruebaPediatrico().namedValues; nv[CAMPOS.AJUSTE_RENAL] = ['Sí']; nv[CAMPOS.DEP_CREATININA] = ['25'];
-  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💧 Ajuste renal: Sí (DepCr 25) · CASPOFUNGINA 50, 70 no requiere ajuste renal');
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💧 Ajuste renal: Sí · CASPOFUNGINA 50, 70 no requiere ajuste renal');
   var v = eventoPruebaCeftazidimaAvibactam(); // requiere ajuste renal: sin coletilla
   noIncluye(construirMensajeDesdeEvento(v, filtrarAntimicrobianosRestringidos(v)), 'no requiere ajuste renal');
 });

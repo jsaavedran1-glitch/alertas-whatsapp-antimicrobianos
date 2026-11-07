@@ -2,6 +2,20 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [2.0.0] - 2026-11-07
+
+### Agregado
+- **`IA_PROA.gs`: revisión clínica asistida por IA (API de Claude).** Por cada solicitud con restringido, el caso seudonimizado y las fichas de `docs/antimicrobianos-restringidos.md` van al modelo (`claude-sonnet-5-5`, salida JSON con esquema fijo) y la revisión llega como **respuesta citada** al mensaje base: sugerencia PROA 48-72 h y hasta 3 hallazgos alta/media con los códigos ESP (espectro), DUP (duplicidad), DUR (duración), IND (indicación frente a la ficha), CAM (coherencia del cambio) y DES (desescalar o vía oral), con el pie `_Revisión asistida por IA_`. Propiedades `ANTHROPIC_API_KEY`, `IA_PROA_MODO` (PRODUCCION / PRUEBA / NO), `CLAUDE_MODEL`, `GREENAPI_PRUEBA_CHATID`. Unos USD 0,04 por caso.
+- Vancomicina o linezolid solos generan alerta si la IA encuentra un hallazgo de severidad alta (`IA_ALERTA_SI_ALTA_SIN_DISPARO`).
+- Encabezado `*🚨CEFTAZIDIMA/AVIBACTAM🚨*` arriba del mensaje cuando la solicitud trae ceftazidima/avibactam (`CONFIG.ENCABEZADOS_DESTACADOS`). Green-API no permite mencionar a todo el grupo.
+- Funciones de prueba con destino fijo PRUEBA BOT: `enviarPruebaCeftazidimaAPruebaBot()` y `enviarPruebaIaAPruebaBot()`; `probarRevisionIa()` solo escribe en el registro.
+- `test/ia-proa.js`: 13 pruebas sin red (15 al comparar contra un `Codigo.gs` anterior) (modos, orden de envío, cita, seudonimización, esquema, descarte de códigos, encabezado).
+
+### Cambiado
+- La línea de ajuste renal ya no muestra la depuración de creatinina (`DepCr`): el formulario no trae datos de creatinina confiables. Tampoco se envía a la IA, que no revisa dosis ni ajuste renal.
+- `enviarAlertaWhatsApp(mensaje, opciones)` acepta `chatId`, `quotedMessageId` y `sinFirma`, y devuelve `{ ok, idMessage }`. `construirMensajeDesdeEvento(e, coincidencias, sinSugerencia)` puede omitir la línea 💡 (va en la revisión).
+- `IA_PROA_MODO = PRODUCCION` en el proyecto PROA ALERTAS desde el 2026-11-07.
+
 ## [1.5.0] - 2026-11-02
 
 ### Cambiado
