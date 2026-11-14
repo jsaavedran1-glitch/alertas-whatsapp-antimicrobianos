@@ -404,7 +404,7 @@ prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y la
   var co = filtrarAntimicrobianosRestringidos(e);
   var cfg = { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO };
   assert.strictEqual(IA_MODELO_DEFECTO, 'claude-sonnet-5-5');
-  var salida = { veredicto: 'verificar', tratamiento: 'Pertinente: *KPC* documentada sustenta ceftazidima/avibactam.',
+  var salida = { analisis: 'repaso de factores', veredicto: 'verificar', tratamiento: 'Pertinente: *KPC* documentada sustenta ceftazidima/avibactam.',
     dias: '14 d superan los 5-7 d de la ITU complicada (IDSA 2025; ACIN 2023).', accion: 'Proponer suspender el día 7 si hay respuesta clínica.', datos_faltantes: ['antibiograma'] };
   conApiSimulada(respuestaIa(salida), function (llamadas) {
     var rev = revisarCasoConIa_(e, co, cfg);
@@ -426,7 +426,9 @@ prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y la
     incluye(r, '💊 Tratamiento: Pertinente: KPC documentada sustenta ceftazidima/avibactam.');   // sin marcas de formato
     incluye(r, '📏 Días: 14 d superan los 5-7 d de la ITU complicada (IDSA 2025; ACIN 2023).');
     incluye(r, '➡️ Acción sugerida: Proponer suspender el día 7 si hay respuesta clínica.');
-    incluye(r, '_Análisis asistido por IA · valida el QF_');
+    incluye(r, '_Análisis asistido por IA_'); noIncluye(r, 'valida el QF'); noIncluye(r, 'repaso de factores');
+    incluye(c.system, 'médico infectólogo'); incluye(c.system, 'químico farmacéutico clínico'); assert.strictEqual(c.output_config.effort, 'high');
+    assert.strictEqual(c.output_config.format.schema.required[0], 'analisis');
     assert.ok(r.split('\n').length <= 7, 'respuesta concisa');
   });
   // frases largas se recortan

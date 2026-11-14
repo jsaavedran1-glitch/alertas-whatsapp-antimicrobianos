@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.9.1] - 2026-11-14
+
+### Cambiado
+- La revisión por IA analiza con el rol de infectólogo y químico farmacéutico clínico y repasa todos los datos del caso antes de fijar el veredicto (campo `analisis`, que queda en el registro y no va al grupo). Esfuerzo del modelo `high`. Pie del mensaje: `_Análisis asistido por IA_`.
+
 ## [1.9.0] - 2026-11-14
 
 ### Agregado

@@ -29,7 +29,7 @@
 
 var IA_HALLAZGOS_ACTIVOS = true;
 var IA_MODELO_DEFECTO = "claude-sonnet-5-5";
-var IA_ESFUERZO = "medium";                      // output_config.effort: low | medium | high
+var IA_ESFUERZO = "high";                        // output_config.effort: low | medium | high
 var IA_URL = "https://api.anthropic.com/v1/messages";
 var IA_VERSION_API = "2023-06-01";
 var IA_BETA_RESPALDO = "server-side-fallback-2026-07-01";   // si el modelo declina, la API reintenta en otro
@@ -48,8 +48,10 @@ var IA_NIVELES = ["pertinente", "verificar", "intervenir"];
 var IA_PRECIOS_MTOK = { "claude-haiku-5-5": [0.10, 0.50], "claude-sonnet-5-5": [2, 10], "claude-opus-5-5": [4, 20] };
 
 var IA_REGLAS = [
-  "Eres el químico farmacéutico del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia.",
-  "Revisas una solicitud de antimicrobiano restringido y decides si el tratamiento y los días ordenados son pertinentes. Tu respuesta la lee el grupo de WhatsApp del PROA para decidir si interviene, así que debe ser corta y accionable.",
+  "Analizas cada solicitud de antimicrobiano restringido del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia, con dos miradas a la vez: la de un médico infectólogo (¿es la infección que se dice, el germen es patógeno o colonizante, el esquema cubre el foco y el aislado, hay una opción de menor espectro, cuánto debe durar?) y la de un químico farmacéutico clínico (¿el fármaco llega al sitio de infección, la vía y la combinación tienen sentido, hay duplicidad o interacción de riesgo, el paciente tiene condiciones que cambian la elección, se justifica un medicamento de reserva y de alto costo?).",
+  "Decides si el tratamiento y los días ordenados son pertinentes. Tu respuesta la lee el grupo de WhatsApp del PROA para decidir si interviene, así que debe ser corta y accionable; el análisis completo va antes, no en el mensaje.",
+  "",
+  "Antes de decidir, repasa TODOS los datos del caso, uno por uno, y qué implica cada uno: edad, sexo y peso; servicio (UCI, urgencias, hospitalización) y especialidad; diagnóstico y foco; microorganismo y mecanismo de resistencia escrito; si se tomaron cultivos y cuáles; tipo de indicación (empírica, etiológica, profiláctica); inicio o cambio y la razón del cambio; origen (IAAS o comunidad) e infección nosocomial; interconsulta a Infectología; ajuste renal y falla hepática marcados; cada antimicrobiano del esquema, restringido o acompañante, con su vía, frecuencia y días; y el análisis de las tablas del bot. Busca incoherencias entre ellos (p. ej. indicación etiológica sin germen, cambio por antibiograma sin cultivo, reserva en infección de la comunidad sin factores de riesgo). Escribe ese repaso en el campo analisis (queda en el registro, no va al grupo) y solo después fija el veredicto: un factor aislado no basta si otro lo explica.",
   "",
   "Referencias, en este orden: las fichas de antimicrobianos y de microorganismos del PROA, la tabla de duración por síndrome y el análisis de las tablas del bot para este caso, que van abajo. Lo que no esté en ellas puedes sustentarlo en guías reconocidas (IDSA, ESCMID, ACIN, OMS/OPS, CDC) solo si estás seguro; si no, dílo como algo por verificar. No inventes cifras ni citas.",
   "",
@@ -68,13 +70,14 @@ var IA_ESQUEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
+    analisis: { type: "string", description: "Repaso de todos los factores del caso y que implica cada uno, antes del veredicto. Maximo 1200 caracteres. No va al mensaje." },
     veredicto: { type: "string", enum: IA_NIVELES },
     tratamiento: { type: "string", description: "Una frase: si el tratamiento es pertinente y por que." },
     dias: { type: "string", description: "Una frase: si los dias son pertinentes, con la referencia y su fuente." },
     accion: { type: "string", description: "Una frase: que proponer hoy. Vacia si el veredicto es pertinente." },
     datos_faltantes: { type: "array", items: { type: "string" } }
   },
-  required: ["veredicto", "tratamiento", "dias", "accion", "datos_faltantes"]
+  required: ["analisis", "veredicto", "tratamiento", "dias", "accion", "datos_faltantes"]
 };
 
 // =====================================================================
@@ -162,7 +165,7 @@ function mensajeRevision_(e, coincidencias, revision) {
     if (revision.tratamiento) cuerpo.push(E(0x1F48A) + " Tratamiento: " + revision.tratamiento);
     if (revision.dias) cuerpo.push(E(0x1F4CF) + " Días: " + revision.dias);
     if (revision.accion) cuerpo.push(E(0x27A1) + E(0xFE0F) + " Acción sugerida: " + revision.accion);
-    cuerpo.push("_Análisis asistido por IA · valida el QF_");
+    cuerpo.push("_Análisis asistido por IA_");
   } else {
     cuerpo = pertinenciaDesdeEvento(e, coincidencias);
   }
@@ -230,6 +233,7 @@ function revisarCasoConIa_(e, coincidencias, cfg) {
     Logger.log("Revision IA (%s): %s; tablas: %s; faltan: %s; tokens %s/%s%s.", revision.modelo, revision.veredicto,
       tablas.nivel < 0 ? "sin criterio" : IA_NIVELES[tablas.nivel], revision.datosFaltantes.join(", ") || "nada", revision.entrada, revision.salida,
       p ? ", aprox. USD " + ((revision.entrada * p[0] + revision.salida * p[1]) / 1e6).toFixed(4) : "");
+    Logger.log("Revision IA, analisis: %s", String(salida.analisis || "").substring(0, 1500));
     return revision;
   } catch (err) {
     Logger.log("Revision IA sin resultado: %s", ocultarClaveIa_(String(err), cfg.clave));
