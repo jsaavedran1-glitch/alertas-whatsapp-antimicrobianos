@@ -64,7 +64,7 @@ var IA_REGLAS = [
   "",
   "Límites del formulario: no trae antibiograma (solo el nombre del microorganismo y lo que el médico escriba, como BLEE o KPC), ni creatinina, ni evolución clínica. No evalúes dosis ni ajuste renal. \"Ninguno\", \"0\", \"pendiente\" o una tinción de Gram no son un aislamiento. No supongas datos que no están: nómbralos en datos_faltantes.",
   "",
-  "Formato de la respuesta (misma estructura del análisis de las tablas): en tratamiento, una entrada por cada antimicrobiano restringido de la solicitud, y por cada acompañante solo si tiene un hallazgo; en dias, una entrada por cada antimicrobiano con días ordenados, si hay duración de referencia para el foco. antimicrobiano es el nombre tal como viene en la solicitud. motivo es una sola frase de máximo 120 caracteres, en español con tildes, sin preámbulos, sin repetir los datos del caso, sin el nombre del antimicrobiano y sin markdown, con el estilo de las tablas (\"el aislamiento registrado está dentro de su indicación\", \"sin aislamiento ni foco que lo sustente; reservado para ...\", \"dentro de la referencia\", \"supera la referencia · hasta 10-14 d si hay absceso\"). Tono de sugerencia, nunca una orden. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
+  "Formato de la respuesta (misma estructura del análisis de las tablas): en tratamiento, una entrada por cada antimicrobiano restringido de la solicitud, y por cada acompañante solo si tiene un hallazgo; en dias, una entrada por cada antimicrobiano con días ordenados, si hay duración de referencia para el foco. antimicrobiano es el nombre tal como viene en la solicitud. motivo es una sola frase de máximo 120 caracteres, en español con tildes, sin preámbulos, sin repetir los datos del caso, sin el nombre del antimicrobiano y sin markdown, con el estilo de las tablas (\"el aislamiento registrado está dentro de su indicación\", \"sin aislamiento ni foco que lo sustente; reservado para ...\", \"dentro de la referencia\", \"supera la referencia; se sugiere revaluar la duración · hasta 10-14 d si hay absceso\"). El mensaje es un apoyo para quien prescribe y para el QF, no un dictamen: redacta cada motivo como observación o sugerencia (se sugiere, convendría, valdría la pena confirmar), nunca como orden ni como juicio sobre el médico. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
 ].join("\n");
 
 var IA_ITEM = {
@@ -171,10 +171,10 @@ function mensajeRevision_(e, coincidencias, revision) {
   var cuerpo = [];
   if (revision) {
     var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
-    cuerpo.push(color[IA_NIVELES.indexOf(revision.veredicto)] + " *Pertinencia PROA: " + revision.veredicto + "*");
+    cuerpo.push(color[IA_NIVELES.indexOf(revision.veredicto)] + " *Pertinencia PROA: " + ETIQUETA_NIVEL[IA_NIVELES.indexOf(revision.veredicto)] + "*");
     if (revision.tratamiento.length) cuerpo.push(E(0x1F48A) + " Tratamiento (fichas PROA)");
     revision.tratamiento.forEach(function(t) {
-      cuerpo.push(color[t.nivel] + " " + t.nombre + ": " + ["pertinente", "verificar", "no pertinente"][t.nivel] + " \u00b7 " + t.motivo);
+      cuerpo.push(color[t.nivel] + " " + t.nombre + ": " + ETIQUETA_NIVEL[t.nivel] + " \u00b7 " + t.motivo);
     });
     if (revision.dias.length) cuerpo.push(E(0x1F4CF) + " " + (revision.encabezadoDias || "D\u00edas"));
     revision.dias.forEach(function(d) {

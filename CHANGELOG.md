@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.10.1] - 2026-11-14
+
+### Cambiado
+- Redacción de la pertinencia como apoyo o sugerencia, no como veredicto: "acorde con la referencia", "se sugiere verificar", "se sugiere revaluar" (`ETIQUETA_NIVEL` en `Codigo.gs`), tanto en el análisis de las tablas como en el del modelo.
+
 ## [1.10.0] - 2026-11-14
 
 ### Cambiado

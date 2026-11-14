@@ -304,24 +304,24 @@ prueba('pertinencia: sindrome por CIE10 y por texto libre', function () {
 prueba('pertinencia: veredicto de dias (referencia, exceso, doble, profilaxis)', function () {
   var am = function (n, d) { return { nombre: n, dias: d }; };
   var l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '14')]).join('\n');
-  incluye(l, '🔴 *Pertinencia PROA: intervenir*');
+  incluye(l, '🔴 *Pertinencia PROA: se sugiere revaluar*');
   incluye(l, '📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)');
-  incluye(l, '🔴 ERTAPENEM 14 d: supera la referencia · hasta 10-14 d si hay absceso');   // el doble: rojo
+  incluye(l, '🔴 ERTAPENEM 14 d: supera la referencia; se sugiere revaluar la duración · hasta 10-14 d si hay absceso');   // el doble: rojo
   l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '10')]).join('\n');
-  incluye(l, '🟡 *Pertinencia PROA: verificar*'); incluye(l, '🟡 ERTAPENEM 10 d: supera la referencia');
+  incluye(l, '🟡 *Pertinencia PROA: se sugiere verificar*'); incluye(l, '🟡 ERTAPENEM 10 d: supera la referencia; se sugiere revaluar la duración');
   l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '7')]).join('\n');
-  incluye(l, '🟢 *Pertinencia PROA: pertinente*');
-  incluye(l, '🟢 ERTAPENEM: pertinente · el aislamiento registrado está dentro de su indicación');
+  incluye(l, '🟢 *Pertinencia PROA: acorde con la referencia*');
+  incluye(l, '🟢 ERTAPENEM: acorde con la referencia · el aislamiento registrado está dentro de su indicación');
   incluye(l, '🟢 ERTAPENEM 7 d: dentro de la referencia'); noIncluye(l, 'supera');
   l = evaluarPertinencia('M869', 'Etiológico', 'S. aureus', [am('DAPTOMICINA', '14')]).join('\n');
   incluye(l, 'Osteomielitis / espondilodiscitis: referencia 28-42 d'); noIncluye(l, 'supera');   // por debajo del minimo no se marca
   l = evaluarPertinencia('D70X', 'Empírico', 'Ninguno', [am('CASPOFUNGINA 50, 70', '14')]).join('\n');
   incluye(l, '📏 Días · Neutropenia febril: sin foco'); noIncluye(l, 'supera'); noIncluye(l, 'dentro de la referencia');
-  incluye(l, '🟢 CASPOFUNGINA 50, 70: pertinente para el foco · sin aislamiento: revaluar con cultivos');
+  incluye(l, '🟢 CASPOFUNGINA 50, 70: acorde con la referencia para el foco · sin aislamiento, se sugiere revaluar con cultivos');
   l = evaluarPertinencia('C169', 'Empírico', 'Ninguno', [am('MEROPENEM', '14')]);
   assert.strictEqual(l.length, 0, 'sin sindrome ni antimicrobiano con ficha: sin lineas');
   l = evaluarPertinencia('S720', 'Profiláctico', 'Ninguno', [am('ERTAPENEM', '5')]).join('\n');
-  incluye(l, '🔴 ERTAPENEM 5 d: supera las 24 h de la profilaxis');
+  incluye(l, '🔴 ERTAPENEM 5 d: supera las 24 h de la profilaxis; se sugiere revaluar');
   incluye(l, 'Días · profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)');
   l = evaluarPertinencia('N390', 'Empírico', 'Ninguno', [am('ERTAPENEM', 'Dosis Unica')]).join('\n');
   noIncluye(l, 'dentro de la referencia'); noIncluye(l, 'supera');
@@ -330,20 +330,20 @@ prueba('pertinencia: veredicto de dias (referencia, exceso, doble, profilaxis)',
 prueba('pertinencia: veredicto de tratamiento (fichas y reglas de espectro)', function () {
   var am = function (n) { return { nombre: n, dias: '7' }; };
   function ev(dx, tipo, micro, ams) { return evaluarPertinencia(dx, tipo, micro, ams.map(am)).join('\n'); }
-  incluye(ev('J189', 'Etiológico', 'SAMR', ['DAPTOMICINA']), '🔴 DAPTOMICINA: no pertinente · DAPTOMICINA no está indicada en neumonía');
-  incluye(ev('A419', 'Etiológico', 'SAMR', ['DAPTOMICINA']), '🟢 DAPTOMICINA: pertinente');
-  incluye(ev('A419', 'Etiológico', 'Klebsiella KPC', ['TYGECICLINA']), '🔴 TYGECICLINA: no pertinente · TIGECICLINA');
+  incluye(ev('J189', 'Etiológico', 'SAMR', ['DAPTOMICINA']), '🔴 DAPTOMICINA: se sugiere revaluar · DAPTOMICINA no está indicada en neumonía');
+  incluye(ev('A419', 'Etiológico', 'SAMR', ['DAPTOMICINA']), '🟢 DAPTOMICINA: acorde con la referencia');
+  incluye(ev('A419', 'Etiológico', 'Klebsiella KPC', ['TYGECICLINA']), '🔴 TYGECICLINA: se sugiere revaluar · TIGECICLINA');
   incluye(ev('N390', 'Etiológico', 'Pseudomonas aeruginosa', ['ERTAPENEM']), 'ERTAPENEM no tiene actividad frente a Pseudomonas');
-  noIncluye(ev('N390', 'Etiológico', 'E. coli BLEE', ['ERTAPENEM']), 'no pertinente');
+  noIncluye(ev('N390', 'Etiológico', 'E. coli BLEE', ['ERTAPENEM']), 'se sugiere revaluar ·');
   incluye(ev('G060', 'Etiológico', 'Cryptococcus neoformans', ['CASPOFUNGINA 50, 70']), 'CASPOFUNGINA no tiene actividad frente a Cryptococcus');
-  incluye(ev('B377', 'Etiológico', 'Candida auris', ['CASPOFUNGINA 50, 70']), '🟢 CASPOFUNGINA 50, 70: pertinente');
+  incluye(ev('B377', 'Etiológico', 'Candida auris', ['CASPOFUNGINA 50, 70']), '🟢 CASPOFUNGINA 50, 70: acorde con la referencia');
   incluye(ev('A419', 'Etiológico', 'Klebsiella NDM', ['CEFTAZIDIMA / AVIBACTAM']), 'asociar aztreonam');
   var combo = ev('A419', 'Etiológico', 'Klebsiella NDM', ['CEFTAZIDIMA / AVIBACTAM', 'AZTREONAM']);
-  noIncluye(combo, 'asociar aztreonam'); incluye(combo, '🟢 AZTREONAM: pertinente · combinación dentro de su indicación');
-  incluye(ev('A419', 'Etiológico', 'Klebsiella KPC', ['CEFTAZIDIMA / AVIBACTAM']), '🟢 CEFTAZIDIMA / AVIBACTAM: pertinente');
+  noIncluye(combo, 'asociar aztreonam'); incluye(combo, '🟢 AZTREONAM: acorde con la referencia · combinación dentro de su indicación');
+  incluye(ev('A419', 'Etiológico', 'Klebsiella KPC', ['CEFTAZIDIMA / AVIBACTAM']), '🟢 CEFTAZIDIMA / AVIBACTAM: acorde con la referencia');
   // empirica de la comunidad, sin aislamiento: reservada para carbapenemasa documentada
-  incluye(ev('J189', 'Empírico', 'Ninguno', ['CEFTAZIDIMA / AVIBACTAM']), '🟡 CEFTAZIDIMA / AVIBACTAM: verificar · sin aislamiento ni foco que lo sustente; reservado para enterobacterias con carbapenemasa');
-  incluye(ev('N390', 'Etiológico', 'E. coli sensible', ['CEFTAZIDIMA / AVIBACTAM']), '🟡 CEFTAZIDIMA / AVIBACTAM: verificar · el aislamiento registrado no está entre los que justifican su uso');
+  incluye(ev('J189', 'Empírico', 'Ninguno', ['CEFTAZIDIMA / AVIBACTAM']), '🟡 CEFTAZIDIMA / AVIBACTAM: se sugiere verificar · sin aislamiento ni foco que lo sustente; reservado para enterobacterias con carbapenemasa');
+  incluye(ev('N390', 'Etiológico', 'E. coli sensible', ['CEFTAZIDIMA / AVIBACTAM']), '🟡 CEFTAZIDIMA / AVIBACTAM: se sugiere verificar · el aislamiento registrado no está entre los que justifican su uso');
   incluye(ev('A419', 'Etiológico', 'Serratia marcescens', ['POLIMIXINA B']), 'intrínsecamente resistentes');
   incluye(ev('N390', 'Etiológico', 'Echerichia coli', ['VANCOMICINA']), 'VANCOMICINA no tiene actividad frente a gramnegativos');
   noIncluye(ev('N390', 'Etiológico', 'Echerichia coli', ['VANCOMICINA', 'MEROPENEM']), 'gramnegativos'); // hay otro que cubre
@@ -353,7 +353,7 @@ prueba('pertinencia: veredicto de tratamiento (fichas y reglas de espectro)', fu
   incluye(ev('A419', 'Etiológico', 'NINUGNO', ['ERTAPENEM']), '🟡 Indicación etiológica sin microorganismo registrado');
   incluye(ev('A419', 'Etiológico', '0', ['ERTAPENEM']), 'sin microorganismo registrado');
   noIncluye(ev('A419', 'Empírico', 'Ninguno', ['ERTAPENEM']), 'sin microorganismo');
-  incluye(ev('S720', 'Profiláctico', 'Ninguno', ['ERTAPENEM']), '🟡 ERTAPENEM: verificar · antimicrobiano restringido usado en profilaxis');
+  incluye(ev('S720', 'Profiláctico', 'Ninguno', ['ERTAPENEM']), '🟡 ERTAPENEM: se sugiere verificar · antimicrobiano restringido usado en profilaxis');
   CONFIG.PERTINENCIA_ACTIVA = false;
   assert.strictEqual(evaluarPertinencia('N390', 'Empírico', '', [{ nombre: 'ERTAPENEM', dias: '14' }]).length, 0);
   CONFIG.PERTINENCIA_ACTIVA = true;
@@ -362,9 +362,9 @@ prueba('pertinencia: veredicto de tratamiento (fichas y reglas de espectro)', fu
 prueba('pertinencia en el mensaje completo (ceftazidima/avibactam 14 d en ITU por KPC)', function () {
   var e = eventoPruebaCeftazidimaAvibactam();
   var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(t, '🔴 *Pertinencia PROA: intervenir*');
-  incluye(t, '🟢 CEFTAZIDIMA / AVIBACTAM: pertinente · el aislamiento registrado está dentro de su indicación');
-  incluye(t, '🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia');
+  incluye(t, '🔴 *Pertinencia PROA: se sugiere revaluar*');
+  incluye(t, '🟢 CEFTAZIDIMA / AVIBACTAM: acorde con la referencia · el aislamiento registrado está dentro de su indicación');
+  incluye(t, '🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia; se sugiere revaluar la duración');
   noIncluye(t, 'undefined');
 });
 
@@ -420,14 +420,14 @@ prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y la
     incluye(c.system, 'antimicrobianos-restringidos.md'); incluye(c.system, 'Candida auris'); incluye(c.system, 'TABLA DE DURACIÓN POR SÍNDROME');
     incluye(c.system, 'Infección urinaria complicada / pielonefritis (CIE10 N39, N10, N12, N30): 5-7 días');
     var caso = c.messages[0].content;
-    incluye(caso, 'Análisis de las tablas del bot'); incluye(caso, 'CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia');
+    incluye(caso, 'Análisis de las tablas del bot'); incluye(caso, 'CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia; se sugiere revaluar la duración');
     noIncluye(caso, '88888888'); noIncluye(caso, 'Historia');   // seudonimizado
     assert.strictEqual(rev.veredicto, 'intervenir');
     var r = mensajeRevision_(e, co, rev);
     assert.strictEqual(r, ['🔎 *Revisión PROA · Ceftazidima / avibactam*',
-      '🔴 *Pertinencia PROA: intervenir*',
+      '🔴 *Pertinencia PROA: se sugiere revaluar*',
       '💊 Tratamiento (fichas PROA)',
-      '🟢 CEFTAZIDIMA / AVIBACTAM: pertinente · el aislamiento registrado (KPC) está dentro de su indicación',
+      '🟢 CEFTAZIDIMA / AVIBACTAM: acorde con la referencia · el aislamiento registrado (KPC) está dentro de su indicación',
       '📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)',
       '🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia · hasta 10-14 d si hay absceso u obstrucción',
       '_Análisis asistido por IA_'].join('\n'));   // misma estructura que el analisis de las tablas; lo ajeno a la solicitud se descarta
@@ -467,7 +467,7 @@ prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caid
   } finally { Logger.log = logReal; }
   noIncluye(registro.join('\n'), 'CLAVE-DE-PRUEBA');
   var r = mensajeRevision_(e, co, null);
-  incluye(r, '🔴 *Pertinencia PROA: intervenir*'); incluye(r, 'ERTAPENEM no tiene actividad frente a Pseudomonas'); noIncluye(r, 'asistido por IA');
+  incluye(r, '🔴 *Pertinencia PROA: se sugiere revaluar*'); incluye(r, 'ERTAPENEM no tiene actividad frente a Pseudomonas'); noIncluye(r, 'asistido por IA');
 });
 
 prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {
