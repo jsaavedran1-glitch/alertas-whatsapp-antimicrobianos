@@ -94,6 +94,22 @@ var CONFIG = {
     { am: 'DAPTOMICINA', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|PSEUDOMONA|ACINETOBACTER|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|GRAM ?NEGATIV|KPC|BLEE', soloSiUnico: true, mensaje: 'DAPTOMICINA no tiene actividad frente a gramnegativos: verificar cobertura' },
     { am: 'RIFAMPICINA', soloSiUnico: true, exceptoSindromes: ['TUBERCULOSIS'], mensaje: 'RIFAMPICINA no debe usarse en monoterapia: genera resistencia rápidamente' }
   ],
+  // Para que esta reservado cada antimicrobiano (docs/antimicrobianos-restringidos.md): aislamientos (micro)
+  // y focos (claves de PERTINENCIA) que sustentan su uso; con: acompanante que lo justifica.
+  INDICACIONES: [
+    { am: 'VANCOMICINA', micro: 'STAPH|ESTAF|SAMR|SARM|MRSA|ENTEROCOC|GRAM ?POSITIV|STREPTO|ESTREPTO|DIFFICILE', sindromes: ['PIEL', 'BACTERIEMIA', 'ENDOCARDITIS', 'MENINGITIS', 'OSTEOMIELITIS', 'CATETER', 'ARTRITIS', 'PROTESIS', 'PIE_DIABETICO', 'ISO'], reserva: 'grampositivos resistentes (SARM, Enterococcus)' },
+    { am: 'LINEZOLID', micro: 'STAPH|ESTAF|SAMR|SARM|MRSA|ENTEROCOC|GRAM ?POSITIV|VRE|ERV', sindromes: ['NEUMONIA', 'PIEL'], reserva: 'SARM (incluida neumonía) y enterococo resistente a vancomicina' },
+    { am: 'DAPTOMICINA', micro: 'STAPH|ESTAF|SAMR|SARM|MRSA|ENTEROCOC|GRAM ?POSITIV|VRE|ERV', sindromes: ['BACTERIEMIA', 'ENDOCARDITIS', 'PIEL', 'CATETER'], reserva: 'bacteriemia, endocarditis o piel por SARM o enterococo resistente' },
+    { am: 'CASPOFUNGINA', micro: 'CANDIDA|ASPERG', sindromes: ['CANDIDEMIA', 'NEUTROPENIA', 'ASPERGILOSIS'], reserva: 'candidiasis invasiva, neutropenia febril o aspergilosis refractaria' },
+    { am: 'ANFOTERICINA', micro: 'CANDIDA|CRYPTOCOC|CRIPTOCOC|HISTOPLASM|MUCOR|RHIZOPUS|LEISHMAN|ASPERG', sindromes: ['CRIPTOCOCOSIS', 'HISTOPLASMOSIS', 'CANDIDEMIA', 'NEUTROPENIA', 'ASPERGILOSIS'], reserva: 'micosis invasiva grave (criptococosis, histoplasmosis, mucormicosis, candidiasis) o leishmaniasis visceral' },
+    { am: 'ERTAPENEM', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|BLEE|ESBL', sindromes: ['INTRAABDOMINAL', 'ITU', 'PIE_DIABETICO'], reserva: 'infección intraabdominal, urinaria o de pie diabético por enterobacterias BLEE' },
+    { am: 'AZTREONAM', micro: 'NDM|METALO|MBL|PSEUDOMONA|E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|BLEE|ESBL', sindromes: [], con: 'AVIBACTAM', reserva: 'gramnegativos en alergia grave a betalactámicos o, con ceftazidima/avibactam, metalo-betalactamasas' },
+    { am: 'CEFTAZIDIMA / AVIBACTAM', micro: 'KPC|OXA|CARBAPENEM|SERINO|PSEUDOMONA', sindromes: [], reserva: 'enterobacterias con carbapenemasa (KPC, OXA-48) o Pseudomonas multirresistente documentadas' },
+    { am: 'TYGECICLINA', micro: 'ACINETOBACTER|KPC|CARBAPENEM|SAMR|SARM|MRSA|VRE|ERV|BLEE', sindromes: ['INTRAABDOMINAL', 'PIEL'], reserva: 'infección intraabdominal o de piel por multirresistentes' },
+    { am: 'DORIPENEM', micro: 'PSEUDOMONA|ACINETOBACTER|E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|BLEE|ESBL', sindromes: ['INTRAABDOMINAL', 'ITU'], reserva: 'infección intraabdominal o urinaria complicada por gramnegativos' },
+    { am: 'RIFAMPICINA', micro: 'TUBERC|MYCOBACT|MICOBACT|STAPH|ESTAF|SAMR|SARM|MRSA', sindromes: ['TUBERCULOSIS', 'PROTESIS', 'ENDOCARDITIS', 'OSTEOMIELITIS'], reserva: 'tuberculosis o, en combinación, estafilococo sobre material protésico' },
+    { am: 'POLIMIXINA B', micro: 'ACINETOBACTER|PSEUDOMONA|KPC|NDM|METALO|CARBAPENEM|PANRESIST|XDR|MDR', sindromes: [], reserva: 'gramnegativos resistentes a carbapenémicos, como último recurso' }
+  ],
   // Encabezado destacado arriba del mensaje cuando la solicitud trae alguno de estos antimicrobianos
   // (decision del referente PROA, 2026-11-07). Green-API no permite mencionar a todo el grupo (@todos),
   // asi que el aviso es visual. Cada par: [texto que debe contener el nombre, texto del encabezado].
@@ -660,54 +676,89 @@ function sinAislamiento(microorganismo) {
   return m === '' || m === '0' || m === 'NO' || m === 'NA' || m === 'N A' || /^NIN/.test(m) || /^NEGATIV/.test(m) || /^SIN /.test(m);
 }
 
-// Lineas de pertinencia del mensaje. esquemas: todos los antimicrobianos de la solicitud.
-function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas) {
-  var lineas = [];
-  if (!CONFIG.PERTINENCIA_ACTIVA) return lineas;
-  var E = function(cp) { return String.fromCodePoint(cp); };
-  var regla = E(0x1F4CF), ok = E(0x2705), adv = E(0x26A0) + E(0xFE0F);
-  var conDias = esquemas.filter(function(am) { var n = numeroONulo(am.dias); return n !== null && n > 0; });
-
-  if (tipoIndicacion === 'Profiláctico') {
-    conDias.forEach(function(am) {
-      if (numeroONulo(am.dias) > 1) lineas.push(adv + ' Profilaxis: ' + am.nombre + ' con ' + formatoNumero(numeroONulo(am.dias), 0) + ' días ordenados; la profilaxis quirúrgica no debe pasar de 24 h (OMS 2018; CDC 2017)');
-    });
-  }
-
-  var sindrome = sindromePara(diagnosticoCrudo, obtenerPertinencia());
-  if (sindrome && tipoIndicacion !== 'Profiláctico') {
-    if (sindrome.max !== null) {
-      var rango = (sindrome.min !== null && sindrome.min !== sindrome.max) ? formatoNumero(sindrome.min, 0) + '-' + formatoNumero(sindrome.max, 0) : formatoNumero(sindrome.max, 0);
-      lineas.push(regla + ' Duración de referencia · ' + sindrome.sindrome + ': ' + rango + ' días (' + sindrome.fuente + ')');
-      var excedidos = conDias.filter(function(am) { return numeroONulo(am.dias) > sindrome.max; });
-      if (excedidos.length) {
-        lineas.push(adv + ' Superan la referencia: ' + excedidos.map(function(am) { return am.nombre + ' ' + formatoNumero(numeroONulo(am.dias), 0) + ' d'; }).join(', ') + (sindrome.nota ? ' · ' + sindrome.nota : ''));
-      } else if (conDias.length) {
-        lineas.push(ok + ' Días ordenados dentro de la referencia');
-      }
-    } else if (sindrome.nota) {
-      lineas.push(regla + ' Duración · ' + sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')');
-    }
-  }
-
+// Veredicto de un antimicrobiano frente al aislamiento y el foco (CONFIG.INDICACIONES y REGLAS_ESPECTRO).
+// Devuelve { nivel: 0 pertinente | 1 verificar | 2 no pertinente, texto } o null si no hay criterio.
+function veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorganismo) {
+  var nombre = String(am.nombre).toUpperCase();
   var micro = normalizarTexto(microorganismo);
-  var nombres = esquemas.map(function(am) { return String(am.nombre).toUpperCase(); });
-  var vistos = {};
+  var nombres = esquemas.map(function(x) { return String(x.nombre).toUpperCase(); });
+  var fallo = null;
   CONFIG.REGLAS_ESPECTRO.forEach(function(r) {
-    if (!nombres.some(function(n) { return n.indexOf(r.am) > -1; })) return;
+    if (fallo || nombre.indexOf(r.am) === -1) return;
     if (r.soloSiUnico && esquemas.length !== 1) return;
     if (r.salvoCon && nombres.some(function(n) { return n.indexOf(r.salvoCon) > -1; })) return;
     if (r.sindromes && !(sindrome && r.sindromes.indexOf(sindrome.clave) > -1)) return;
     if (r.exceptoSindromes && sindrome && r.exceptoSindromes.indexOf(sindrome.clave) > -1) return;
     if (r.micro && !(new RegExp(r.micro)).test(micro)) return;
-    if (vistos[r.am + r.mensaje.slice(0, 30)]) return;
-    vistos[r.am + r.mensaje.slice(0, 30)] = true;
-    lineas.push(adv + ' Espectro: ' + r.mensaje);
+    fallo = r.mensaje;
   });
+  if (fallo) return { nivel: 2, texto: 'no pertinente · ' + fallo };
 
-  if (tipoIndicacion === 'Etiológico' && sinAislamiento(microorganismo)) {
-    lineas.push(adv + ' Indicación etiológica sin microorganismo registrado: verificar');
+  var ind = null;
+  CONFIG.INDICACIONES.forEach(function(i) { if (!ind && nombre.indexOf(i.am) > -1) ind = i; });
+  if (!ind) return null;
+  if (tipoIndicacion === 'Profiláctico') return { nivel: 1, texto: 'verificar · antimicrobiano restringido usado en profilaxis; reservado para ' + ind.reserva };
+  if (ind.con && nombres.some(function(n) { return n.indexOf(ind.con) > -1; })) return { nivel: 0, texto: 'pertinente · combinación dentro de su indicación (' + ind.reserva + ')' };
+  if (!sinAislamiento(microorganismo)) {
+    if ((new RegExp(ind.micro)).test(micro)) return { nivel: 0, texto: 'pertinente · el aislamiento registrado está dentro de su indicación' };
+    return { nivel: 1, texto: 'verificar · el aislamiento registrado no está entre los que justifican su uso; reservado para ' + ind.reserva };
   }
+  if (sindrome && ind.sindromes.indexOf(sindrome.clave) > -1) {
+    return { nivel: 0, texto: 'pertinente para el foco · sin aislamiento: revaluar con cultivos' };
+  }
+  return { nivel: 1, texto: 'verificar · sin aislamiento ni foco que lo sustente; reservado para ' + ind.reserva };
+}
+
+// Lineas de pertinencia del mensaje: veredicto global, tratamiento y dias. esquemas: todos los
+// antimicrobianos de la solicitud. Semaforo: verde pertinente, amarillo verificar, rojo intervenir.
+function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas) {
+  if (!CONFIG.PERTINENCIA_ACTIVA) return [];
+  var E = function(cp) { return String.fromCodePoint(cp); };
+  var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
+  var sindrome = sindromePara(diagnosticoCrudo, obtenerPertinencia());
+  var peor = -1, tratamiento = [], dias = [];
+  var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
+
+  esquemas.forEach(function(am) {
+    var v = veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorganismo);
+    if (v) marcar(tratamiento, v.nivel, am.nombre + ': ' + v.texto);
+  });
+  if (tipoIndicacion === 'Etiológico' && sinAislamiento(microorganismo)) {
+    marcar(tratamiento, 1, 'Indicación etiológica sin microorganismo registrado: verificar');
+  }
+
+  var conDias = esquemas.filter(function(am) { var n = numeroONulo(am.dias); return n !== null && n > 0; });
+  var encabezadoDias = '';
+  if (tipoIndicacion === 'Profiláctico') {
+    encabezadoDias = 'Días · profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)';
+    conDias.forEach(function(am) {
+      var n = numeroONulo(am.dias);
+      if (n > 1) marcar(dias, 2, am.nombre + ' ' + formatoNumero(n, 0) + ' d: supera las 24 h de la profilaxis');
+      else marcar(dias, 0, am.nombre + ' ' + formatoNumero(n, 0) + ' d: dentro de la referencia');
+    });
+  } else if (sindrome && sindrome.max !== null) {
+    var rango = (sindrome.min !== null && sindrome.min !== sindrome.max) ? formatoNumero(sindrome.min, 0) + '-' + formatoNumero(sindrome.max, 0) : formatoNumero(sindrome.max, 0);
+    encabezadoDias = 'Días · ' + sindrome.sindrome + ': referencia ' + rango + ' d (' + sindrome.fuente + ')';
+    conDias.forEach(function(am) {
+      var n = numeroONulo(am.dias);
+      if (n > sindrome.max) {
+        // el doble de la referencia o mas: rojo
+        marcar(dias, n >= 2 * sindrome.max ? 2 : 1, am.nombre + ' ' + formatoNumero(n, 0) + ' d: supera la referencia' + (sindrome.nota ? ' · ' + sindrome.nota : ''));
+      } else {
+        marcar(dias, 0, am.nombre + ' ' + formatoNumero(n, 0) + ' d: dentro de la referencia');
+      }
+    });
+  } else if (sindrome && sindrome.nota) {
+    encabezadoDias = 'Días · ' + sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')';
+  }
+
+  if (peor < 0 && !encabezadoDias) return [];
+  var titulo = ['pertinente', 'verificar', 'intervenir'][Math.max(peor, 0)];
+  var lineas = [color[Math.max(peor, 0)] + ' *Pertinencia PROA: ' + titulo + '*'];
+  if (tratamiento.length) lineas.push(E(0x1F48A) + ' Tratamiento (fichas PROA)');
+  tratamiento.forEach(function(l) { lineas.push(l); });
+  if (encabezadoDias) lineas.push(E(0x1F4CF) + ' ' + encabezadoDias);
+  dias.forEach(function(l) { lineas.push(l); });
   return lineas;
 }
 

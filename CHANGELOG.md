@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.8.0] - 2026-11-14
+
+### Cambiado
+- **La pertinencia sale como veredicto con semáforo**, no como dato suelto: una línea global (`pertinente` / `verificar` / `intervenir`), un veredicto por antimicrobiano restringido sobre el **tratamiento** (aislamiento y foco frente a su ficha, `CONFIG.INDICACIONES`, más las reglas de espectro) y otro sobre los **días** (dentro de la referencia, la supera, o la duplica). Rojo: espectro que no sirve, días al doble o más de la referencia, o profilaxis de más de 24 h.
+
 ## [1.7.0] - 2026-11-14
 
 ### Cambiado
