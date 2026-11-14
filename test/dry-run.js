@@ -531,11 +531,13 @@ prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y la
     assert.strictEqual(rev.veredicto, 'intervenir');
     var r = mensajeRevision_(e, co, rev);
     assert.strictEqual(r, ['🔎 *Revisión PROA · Ceftazidima / avibactam*',
-      '🔴 *Pertinencia PROA: se sugiere revaluar*',
-      '🟢 CEFTAZIDIMA / AVIBACTAM: acorde con la referencia · el aislamiento registrado (KPC) está dentro de su indicación',
-      '📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)',
-      '🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia · hasta 10-14 d si hay absceso u obstrucción',
-      '_Análisis asistido por IA_'].join('\n'));   // misma estructura que el analisis de las tablas; lo ajeno a la solicitud se descarta
+      '🔴 *Se sugiere revaluar*',
+      '🔴 Ceftazidima / avibactam 14 d: supera la referencia · hasta 10-14 d si hay absceso u obstrucción',
+      '🟢 Lo demás, sin observaciones',
+      '📏 Infección urinaria complicada / pielonefritis: 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)',
+      '_Análisis asistido por IA_'].join('\n'));   // directo: solo observaciones; lo verde resumido; lo ajeno a la solicitud se descarta
+    var verde = mensajeRevision_(e, co, { veredicto: 'pertinente', tratamiento: [{ nombre: 'CEFTAZIDIMA / AVIBACTAM', nivel: 0, motivo: '' }], dias: [], encabezadoDias: '' });
+    assert.strictEqual(verde.split('\n').slice(1).join('|'), '🟢 *Acorde con la referencia*|🟢 Tratamiento y días sin observaciones|_Análisis asistido por IA_');
     incluye(c.system, 'médico infectólogo'); incluye(c.system, 'químico farmacéutico clínico'); assert.strictEqual(c.output_config.effort, 'high');
     assert.deepStrictEqual(c.output_config.format.schema.required, ['analisis', 'tratamiento', 'dias', 'datos_faltantes']);
     assert.ok(r.split('\n').length <= 7, 'respuesta concisa');
@@ -560,7 +562,8 @@ prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caid
       : respuestaIa({ analisis: 'a', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'x' }], dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: 'dentro de la referencia' }], datos_faltantes: [] });
   }, function (llamadas) {
     assert.strictEqual(revisarCasoConIa_(e, co, cfg).veredicto, 'intervenir');
-    incluye(mensajeRevision_(e, co, revisarCasoConIa_(e, co, cfg)), '⚪ ERTAPENEM 7 d: la duración no se valora mientras se revalúa el tratamiento');
+    var corto = mensajeRevision_(e, co, revisarCasoConIa_(e, co, cfg));
+    incluye(corto, '🔴 Ertapenem: X'); noIncluye(corto, '7 d'); noIncluye(corto, '📏');   // dias de un tratamiento en rojo: no se mencionan
     assert.ok(!('fallbacks' in llamadas[1].cuerpo)); assert.ok(!llamadas[1].encabezados['anthropic-beta']);
   });
   // API caida o declinacion: sale el analisis de las tablas, y la clave no queda en el registro

@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.12.0] - 2026-11-14
+
+### Cambiado
+- Mensaje de la revisión por IA más directo: título con el semáforo, una línea corta (máx. 90 caracteres pedidos al modelo) solo por cada observación, lo verde resumido en una línea y la duración de referencia solo cuando la observación es sobre los días. Los días de un tratamiento en rojo no se mencionan.
+
 ## [1.11.0] - 2026-11-14
 
 ### Agregado

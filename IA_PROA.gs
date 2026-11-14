@@ -5,8 +5,8 @@
 // Cada caso sale en dos mensajes al mismo grupo:
 //   1. el mensaje base de siempre, sin la linea de sugerencia PROA ni el bloque de pertinencia;
 //   2. segundos despues, la revision como RESPUESTA CITADA al mensaje 1 (quotedMessageId de Green-API):
-//      la misma estructura del analisis de las tablas: veredicto global, una linea por antimicrobiano
-//      sobre el tratamiento y una sobre los dias, con la duracion de referencia y su fuente.
+//      un mensaje directo: titulo con el semaforo, una linea corta por cada observacion y, si la
+//      observacion es sobre los dias, la duracion de referencia con su fuente.
 // El modelo recibe como referencia: las fichas de docs/ que aplican al caso (antimicrobianos de la
 // solicitud y microorganismo aislado), la tabla de duracion por sindrome (PERTINENCIA_DURACION) y el analisis de las tablas de
 // Codigo.gs para ese caso. Si una regla de espectro de las tablas descarta un antimicrobiano, el veredicto
@@ -35,7 +35,7 @@ var IA_VERSION_API = "2023-06-01";
 var IA_BETA_RESPALDO = "server-side-fallback-2026-07-01";   // si el modelo declina, la API reintenta en otro
 var IA_MAX_TOKENS = 8000;   // incluye el razonamiento del modelo: con 1500 un caso se corto (max_tokens)
 var IA_CHAT_PRUEBA = "120363412506101174@g.us";   // PRUEBA BOT
-var IA_MAX_CARACTERES = 200;                     // por frase del mensaje
+var IA_MAX_CARACTERES = 150;                     // por frase del mensaje
 // Vancomicina y linezolid solos no disparan alerta; con veredicto "intervenir" si se envian.
 var IA_ALERTA_SI_ALTA_SIN_DISPARO = true;
 var IA_DOCS_URL = "https://raw.githubusercontent.com/jsaavedran1-glitch/alertas-whatsapp-antimicrobianos/main/docs/";
@@ -66,7 +66,8 @@ var IA_REGLAS = [
   "",
   "Si el tratamiento de un antimicrobiano queda en no_pertinente, no valores sus días: el bot los muestra como no valorados.",
   "",
-  "Formato de la respuesta (misma estructura del análisis de las tablas): en tratamiento, una entrada por cada antimicrobiano restringido de la solicitud, y por cada acompañante solo si tiene un hallazgo; en dias, una entrada por cada antimicrobiano con días ordenados, si hay duración de referencia para el foco. antimicrobiano es el nombre tal como viene en la solicitud. motivo es una sola frase de máximo 120 caracteres, en español con tildes, sin preámbulos, sin repetir los datos del caso, sin el nombre del antimicrobiano y sin markdown, con el estilo de las tablas (\"el aislamiento registrado está dentro de su indicación\", \"sin aislamiento ni foco que lo sustente; reservado para ...\", \"dentro de la referencia\", \"supera la referencia; se sugiere revaluar la duración · hasta 10-14 d si hay absceso\"). El mensaje es un apoyo para quien prescribe y para el QF, no un dictamen: redacta cada motivo como observación o sugerencia (se sugiere, convendría, valdría la pena confirmar), nunca como orden ni como juicio sobre el médico. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
+  "Formato de la respuesta: en tratamiento, una entrada por cada antimicrobiano restringido de la solicitud, y por cada acompañante solo si tiene un hallazgo; en dias, una entrada por cada antimicrobiano con días ordenados, si hay duración de referencia para el foco. antimicrobiano es el nombre tal como viene en la solicitud.",
+  "motivo es lo que leerá el grupo en WhatsApp: una sola frase directa de máximo 90 caracteres, en español corriente con tildes, que diga qué se observa y qué convendría hacer (\"no cubre Pseudomonas; valorar un antipseudomónico según antibiograma\", \"sin germen ni foco que lo sustente; confirmar la indicación\", \"14 d duplican la referencia; valorar suspender al día 7\"). Sin el nombre del antimicrobiano, sin citas ni fuentes (la referencia la pone el bot), sin siglas poco comunes, sin preámbulos, sin repetir los datos del caso y sin markdown. En las entradas de nivel pertinente el motivo puede ir vacío: el bot las resume. El mensaje es un apoyo para quien prescribe y para el QF, no un dictamen: tono de sugerencia, nunca una orden ni un juicio sobre el médico. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
 ].join("\n");
 
 var IA_ITEM = {
@@ -75,7 +76,7 @@ var IA_ITEM = {
   properties: {
     antimicrobiano: { type: "string", description: "Nombre tal como viene en la solicitud." },
     nivel: { type: "string", enum: ["pertinente", "verificar", "no_pertinente"] },
-    motivo: { type: "string", description: "Una frase de maximo 120 caracteres." }
+    motivo: { type: "string", description: "Una frase directa de maximo 90 caracteres." }
   },
   required: ["antimicrobiano", "nivel", "motivo"]
 };
@@ -179,15 +180,28 @@ function mensajeRevision_(e, coincidencias, revision) {
   var E = function(cp) { return String.fromCodePoint(cp); };
   var cuerpo = [];
   if (revision) {
+    // Mensaje directo: titulo, una linea por cada observacion (amarillo o rojo), lo verde resumido en una
+    // sola linea y la duracion de referencia solo si hay una observacion sobre los dias.
     var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
-    cuerpo.push(color[IA_NIVELES.indexOf(revision.veredicto)] + " *Pertinencia PROA: " + ETIQUETA_NIVEL[IA_NIVELES.indexOf(revision.veredicto)] + "*");
+    var titulos = ["Acorde con la referencia", "Se sugiere verificar", "Se sugiere revaluar"];
+    cuerpo.push(color[IA_NIVELES.indexOf(revision.veredicto)] + " *" + titulos[IA_NIVELES.indexOf(revision.veredicto)] + "*");
+    var observaciones = 0, verdes = 0, diasObservados = false;
     revision.tratamiento.forEach(function(t) {
-      cuerpo.push(color[t.nivel] + " " + t.nombre + ": " + ETIQUETA_NIVEL[t.nivel] + " \u00b7 " + t.motivo);
+      if (t.nivel === 0) { verdes++; return; }
+      observaciones++;
+      cuerpo.push(color[t.nivel] + " " + capitalizar(t.nombre) + ": " + t.motivo);
     });
-    if (revision.dias.length) cuerpo.push(E(0x1F4CF) + " " + (revision.encabezadoDias || "D\u00edas"));
     revision.dias.forEach(function(d) {
-      cuerpo.push((d.nivel < 0 ? E(0x26AA) : color[d.nivel]) + " " + d.nombre + (d.dias ? " " + d.dias + " d" : "") + ": " + d.motivo);
+      if (d.nivel === 0) { verdes++; return; }
+      if (d.nivel < 0) return;   // tratamiento en rojo: sus dias no se valoran ni se mencionan
+      observaciones++; diasObservados = true;
+      cuerpo.push(color[d.nivel] + " " + capitalizar(d.nombre) + " " + d.dias + " d: " + d.motivo);
     });
+    if (observaciones === 0) cuerpo.push(color[0] + " Tratamiento y d\u00edas sin observaciones");
+    else if (verdes > 0) cuerpo.push(color[0] + " Lo dem\u00e1s, sin observaciones");
+    if (diasObservados && revision.encabezadoDias) {
+      cuerpo.push(E(0x1F4CF) + " " + revision.encabezadoDias.replace(/^D\u00edas \u00b7 /, "").replace(": referencia ", ": "));
+    }
     cuerpo.push("_An\u00e1lisis asistido por IA_");
   } else {
     cuerpo = pertinenciaDesdeEvento(e, coincidencias);
