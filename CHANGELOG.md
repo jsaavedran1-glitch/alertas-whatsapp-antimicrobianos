@@ -2,6 +2,16 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.9.0] - 2026-11-14
+
+### Agregado
+- `docs/microorganismos.md`: fichas de los 16 grupos de microorganismos que aparecen en "Microorganismo aislado" (qué son, resistencia intrínseca y adquirida, tratamiento según mecanismo, qué restringidos se justifican), con fuente y estado de verificación.
+
+### Cambiado
+- **El análisis de la revisión lo hace el modelo Sonnet 5.5** (`IA_HALLAZGOS_ACTIVOS = true`, `claude-sonnet-5-5`, esfuerzo `medium`), con las fichas de antimicrobianos y de microorganismos, la tabla de duración y el análisis de las tablas como referencia. Respuesta concisa: veredicto y tres frases (tratamiento, días, acción sugerida) de máximo 170 caracteres.
+- Una regla de espectro de las tablas fija el veredicto en "intervenir" aunque el modelo diga otra cosa. Si la API falla o declina, sale el análisis de las tablas.
+- La petición pide respaldo automático ante declinaciones (`fallbacks: "default"`); si la API no lo acepta, se repite sin él.
+
 ## [1.8.0] - 2026-11-14
 
 ### Cambiado

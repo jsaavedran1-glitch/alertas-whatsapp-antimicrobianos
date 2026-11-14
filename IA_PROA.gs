@@ -1,21 +1,19 @@
 // =====================================================================
-// IA_PROA.gs - Revision clinica asistida por IA (API de Claude) de cada solicitud con antimicrobiano
-// restringido. Servicio Farmaceutico - Hospital Departamental de Villavicencio E.S.E.
+// IA_PROA.gs - Analisis de pertinencia asistido por IA (API de Claude, modelo Sonnet 5.5) de cada solicitud
+// con antimicrobiano restringido. Servicio Farmaceutico - Hospital Departamental de Villavicencio E.S.E.
 //
 // Cada caso sale en dos mensajes al mismo grupo:
 //   1. el mensaje base de siempre, sin la linea de sugerencia PROA ni el bloque de pertinencia;
 //   2. segundos despues, la revision como RESPUESTA CITADA al mensaje 1 (quotedMessageId de Green-API):
-//      la sugerencia PROA (48-72 h) y el analisis de pertinencia de Codigo.gs (duracion de referencia por
-//      sindrome con su fuente, dias que la superan, profilaxis de mas de 24 h y reglas de espectro).
-// Desde 2026-11-14 el analisis es el de las tablas (PERTINENCIA_DURACION y CONFIG.REGLAS_ESPECTRO), no el
-// del modelo: IA_HALLAZGOS_ACTIVOS = false y no se llama a la API. Con true, ademas de las tablas se piden
-// al modelo hasta IA_MAX_HALLAZGOS_MENSAJE hallazgos de severidad alta o media (sin los de duracion).
-// Seis revisiones: ESP espectro frente a microorganismo y foco, DUP duplicidad de espectro, DUR duracion
-// frente a foco e indicacion, IND indicacion frente a la ficha, CAM coherencia del cambio, DES desescalar o VO.
+//      veredicto (pertinente / verificar / intervenir), una frase sobre el tratamiento, una sobre los dias
+//      y la accion sugerida.
+// El modelo recibe como referencia: las fichas de antimicrobianos y de microorganismos del repositorio
+// (docs/), la tabla de duracion por sindrome (PERTINENCIA_DURACION) y el analisis de las tablas de
+// Codigo.gs para ese caso. Si una regla de espectro de las tablas descarta un antimicrobiano, el veredicto
+// no puede quedar por debajo de "intervenir". Si la API falla, sale el analisis de las tablas.
+// IA_HALLAZGOS_ACTIVOS = false: no se llama a la API y siempre sale el analisis de las tablas.
 // La dosis y el ajuste renal no se revisan aqui: el formulario no trae creatinina (decision del referente,
-// 2026-11-07); los rangos de dosis los sigue marcando Codigo.gs.
-// La referencia del modelo son las fichas de docs/antimicrobianos-restringidos.md del repositorio. La IA
-// no decide: propone, y el QF valida.
+// 2026-11-07); los rangos de dosis los sigue marcando Codigo.gs. La IA no decide: propone, y el QF valida.
 //
 // Propiedades del script:
 //   ANTHROPIC_API_KEY        obligatoria. Sin ella el bot funciona exactamente como antes.
@@ -26,71 +24,57 @@
 //   CLAUDE_MODEL             opcional; por defecto IA_MODELO_DEFECTO.
 //
 // A la API salen datos seudonimizados: sin historia clinica, nombre, cama, EPS ni medico.
-// Si la API falla, el mensaje base ya salio; la revision lleva solo la sugerencia PROA, si la hay.
 // Prueba sin enviar nada: probarRevisionIa().
 // =====================================================================
 
-// false: la revision sale de las tablas de pertinencia y no se llama a la API (sin costo).
-var IA_HALLAZGOS_ACTIVOS = false;
+var IA_HALLAZGOS_ACTIVOS = true;
 var IA_MODELO_DEFECTO = "claude-sonnet-5-5";
+var IA_ESFUERZO = "medium";                      // output_config.effort: low | medium | high
 var IA_URL = "https://api.anthropic.com/v1/messages";
 var IA_VERSION_API = "2023-06-01";
-var IA_MAX_TOKENS = 4096;   // incluye el razonamiento del modelo: con 1500 un caso se corto (max_tokens)
+var IA_BETA_RESPALDO = "server-side-fallback-2026-07-01";   // si el modelo declina, la API reintenta en otro
+var IA_MAX_TOKENS = 8000;   // incluye el razonamiento del modelo: con 1500 un caso se corto (max_tokens)
 var IA_CHAT_PRUEBA = "120363412506101174@g.us";   // PRUEBA BOT
-var IA_MAX_HALLAZGOS_MENSAJE = 3;
-var IA_CODIGOS = ["ESP", "DUP", "DUR", "IND", "CAM", "DES"];
-// Vancomicina y linezolid solos no disparan alerta; con un hallazgo de severidad alta si se envian.
+var IA_MAX_CARACTERES = 170;                     // por frase del mensaje
+// Vancomicina y linezolid solos no disparan alerta; con veredicto "intervenir" si se envian.
 var IA_ALERTA_SI_ALTA_SIN_DISPARO = true;
-var IA_FICHAS_URL = "https://raw.githubusercontent.com/jsaavedran1-glitch/alertas-whatsapp-antimicrobianos/main/docs/antimicrobianos-restringidos.md";
+var IA_DOCS_URL = "https://raw.githubusercontent.com/jsaavedran1-glitch/alertas-whatsapp-antimicrobianos/main/docs/";
+var IA_DOCS = ["antimicrobianos-restringidos.md", "microorganismos.md"];
 var IA_FICHAS_CACHE_SEG = 21600;
 var IA_ESPERA_RESPUESTA_MS = 1500;               // entre el mensaje base y la revision citada
+var IA_NIVELES = ["pertinente", "verificar", "intervenir"];
 
 // USD por millon de tokens (entrada, salida), solo para el costo aproximado del registro.
 var IA_PRECIOS_MTOK = { "claude-haiku-5-5": [0.10, 0.50], "claude-sonnet-5-5": [2, 10], "claude-opus-5-5": [4, 20] };
 
 var IA_REGLAS = [
-  "Eres el quimico farmaceutico del Programa de Optimizacion de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia.",
-  "Revisas una solicitud de antimicrobiano restringido y devuelves hallazgos en seis revisiones:",
-  "- ESP espectro frente a microorganismo y foco: farmaco sin actividad frente al aislado o que no sirve en ese foco (p. ej. daptomicina en neumonia, tigeciclina en bacteriemia o neumonia nosocomial, ertapenem con Pseudomonas, Acinetobacter o Enterococcus, ceftazidima/avibactam sola frente a NDM, rifampicina sin acompanante).",
-  "- DUP duplicidad de espectro en la combinacion (dos carbapenemicos, carbapenemico + piperacilina/tazobactam, dos anti-SARM, un carbapenemico agregado a ceftazidima/avibactam frente a KPC).",
-  "- DUR duracion ordenada frente a foco e indicacion (profilaxis de mas de 24 h, un Reserve ordenado a 14 dias cuando el foco admite 7, dias que no cuadran con el diagnostico).",
-  "- IND indicacion frente a la ficha: si el diagnostico, el microorganismo, el origen (IAAS o comunidad) y el tipo de indicacion (empirica, etiologica, profilactica) justifican ese antimicrobiano restringido segun su ficha (para que se usa y por que esta restringido). Ejemplos: ceftazidima/avibactam sin carbapenemasa ni Pseudomonas multirresistente documentada o con sospecha fundada; caspofungina sin Candida aislada ni sospecha de candidiasis invasiva; tigeciclina fuera de infeccion intraabdominal o de piel; linezolid o daptomicina sin grampositivo resistente documentado o sospechado; anfotericina B liposomal donde la convencional bastaria; rifampicina sin tuberculosis ni material protesico; un Reserve en profilaxis.",
-  "- CAM coherencia del cambio: razon declarada que no cuadra con el cultivo o el microorganismo, indicacion empirica con aislado y cambio por antibiograma, escalamiento sin cultivo tomado.",
-  "- DES oportunidad de desescalar o pasar a via oral (acompanante de amplio espectro que no aporta frente al aislado, linezolid IV con via oral disponible).",
-  "Reglas:",
-  "- Referencia: las fichas del PROA que siguen. Severidad alta solo cuando la ficha lo sustenta; un principio farmacologico general que no este en las fichas va como media o baja, con ficha = \"conocimiento general\".",
-  "- Severidad alta = riesgo de falla terapeutica o de toxicidad; media = optimizacion con impacto clinico o de costo; baja = registro incoherente o dato faltante.",
-  "- No evalues dosis ni ajuste renal: el formulario no trae creatinina y los rangos de dosis los marca el bot.",
-  "- No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da.",
-  "- El formulario no trae antibiograma, solo el nombre del microorganismo: los hallazgos DES van como \"considerar\".",
-  "- Si falta el dato que una revision necesita, no supongas: omite esa revision y nombra el dato en datos_faltantes.",
-  "- detalle: una frase de maximo 120 caracteres, en espanol, con tono de sugerencia (valorar, revaluar, considerar), nunca una orden.",
-  "- En detalle usa ortograf\u00eda espa\u00f1ola correcta, con tildes (p. ej. neumon\u00eda, d\u00edas).",
-  "- Maximo 5 hallazgos, de mayor a menor severidad. Sin hallazgos, lista vacia."
+  "Eres el químico farmacéutico del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia.",
+  "Revisas una solicitud de antimicrobiano restringido y decides si el tratamiento y los días ordenados son pertinentes. Tu respuesta la lee el grupo de WhatsApp del PROA para decidir si interviene, así que debe ser corta y accionable.",
+  "",
+  "Referencias, en este orden: las fichas de antimicrobianos y de microorganismos del PROA, la tabla de duración por síndrome y el análisis de las tablas del bot para este caso, que van abajo. Lo que no esté en ellas puedes sustentarlo en guías reconocidas (IDSA, ESCMID, ACIN, OMS/OPS, CDC) solo si estás seguro; si no, dílo como algo por verificar. No inventes cifras ni citas.",
+  "",
+  "Qué evaluar:",
+  "- Tratamiento: si cada antimicrobiano restringido se justifica frente al microorganismo aislado, el foco, el origen (IAAS o comunidad) y el tipo de indicación; si cubre o no al aislado; si hay una opción de menor espectro que bastaría; si la combinación duplica espectro.",
+  "- Días: si los días ordenados de cada antimicrobiano corresponden a la duración de referencia del foco. Menos días que el mínimo no es un hallazgo: las órdenes se renuevan.",
+  "",
+  "Veredicto: intervenir = riesgo de falla terapéutica o toxicidad, o exceso claro (antimicrobiano que no cubre el aislado o no sirve en ese foco, días al doble de la referencia, profilaxis de más de 24 h, reserva sin sustento alguno); verificar = falta un dato o hay una optimización posible; pertinente = tratamiento y días acordes con la referencia. Si el análisis de las tablas trae una regla de espectro en rojo, el veredicto es intervenir.",
+  "",
+  "Límites del formulario: no trae antibiograma (solo el nombre del microorganismo y lo que el médico escriba, como BLEE o KPC), ni creatinina, ni evolución clínica. No evalúes dosis ni ajuste renal. \"Ninguno\", \"0\", \"pendiente\" o una tinción de Gram no son un aislamiento. No supongas datos que no están: nómbralos en datos_faltantes.",
+  "",
+  "Formato: tratamiento, dias y accion son una sola frase cada una, de máximo 150 caracteres, en español con tildes, sin preámbulos, sin repetir los datos del caso y sin markdown. Empieza por la conclusión. En dias cita la referencia y su fuente entre paréntesis. accion es lo que el QF debe proponer hoy, en tono de sugerencia (proponer, revaluar, confirmar), nunca una orden; si el veredicto es pertinente, accion va vacía. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
 ].join("\n");
 
 var IA_ESQUEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
-    hallazgos: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          codigo: { type: "string", enum: IA_CODIGOS },
-          severidad: { type: "string", enum: ["alta", "media", "baja"] },
-          antimicrobiano: { type: "string", description: "Antimicrobiano al que se refiere el hallazgo." },
-          detalle: { type: "string", description: "Una frase de maximo 120 caracteres." },
-          ficha: { type: "string", description: "Ficha que lo sustenta (p. ej. Ficha 7 Ertapenem) o conocimiento general." }
-        },
-        required: ["codigo", "severidad", "antimicrobiano", "detalle", "ficha"]
-      }
-    },
+    veredicto: { type: "string", enum: IA_NIVELES },
+    tratamiento: { type: "string", description: "Una frase: si el tratamiento es pertinente y por que." },
+    dias: { type: "string", description: "Una frase: si los dias son pertinentes, con la referencia y su fuente." },
+    accion: { type: "string", description: "Una frase: que proponer hoy. Vacia si el veredicto es pertinente." },
     datos_faltantes: { type: "array", items: { type: "string" } }
   },
-  required: ["hallazgos", "datos_faltantes"]
+  required: ["veredicto", "tratamiento", "dias", "accion", "datos_faltantes"]
 };
 
 // =====================================================================
@@ -161,59 +145,61 @@ function responderConRevision_(e, coincidencias, revision, base, chatId) {
 }
 
 function hayHallazgoAlto_(revision) {
-  return !!revision && IA_ALERTA_SI_ALTA_SIN_DISPARO && revision.hallazgos.some(function(h) { return h.severidad === "alta"; });
+  return !!revision && IA_ALERTA_SI_ALTA_SIN_DISPARO && revision.veredicto === "intervenir";
 }
 
-// Mensaje de revision: sugerencia PROA (48-72 h) + pertinencia (tablas) + hallazgos alta/media del modelo
-// si IA_HALLAZGOS_ACTIVOS. "" si no hay nada que decir.
+// Mensaje de revision: sugerencia PROA (48-72 h) + analisis del modelo; sin revision del modelo, el
+// analisis de las tablas. "" si no hay nada que decir.
 function mensajeRevision_(e, coincidencias, revision) {
   var valores = (e && e.namedValues) ? e.namedValues : {};
   var tipo = tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION));
   var sugerencia = sugerenciaPROA(tipo, coincidencias, acompanantesNoRestringidos(e));
-  var hallazgos = (revision ? revision.hallazgos : []).filter(function(h) {
-    // la duracion la dan las tablas de pertinencia
-    return h.codigo !== "DUR" && (h.severidad === "alta" || h.severidad === "media");
-  }).sort(function(a, b) {
-    return (a.severidad === "alta" ? 0 : 1) - (b.severidad === "alta" ? 0 : 1);
-  }).slice(0, IA_MAX_HALLAZGOS_MENSAJE);
-  var pertinencia = pertinenciaDesdeEvento(e, coincidencias);
-  if (!sugerencia && hallazgos.length === 0 && pertinencia.length === 0) return "";
-
   var E = function(cp) { return String.fromCodePoint(cp); };
+  var cuerpo = [];
+  if (revision) {
+    var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)][IA_NIVELES.indexOf(revision.veredicto)];
+    cuerpo.push(color + " *Pertinencia PROA: " + revision.veredicto + "*");
+    if (revision.tratamiento) cuerpo.push(E(0x1F48A) + " Tratamiento: " + revision.tratamiento);
+    if (revision.dias) cuerpo.push(E(0x1F4CF) + " Días: " + revision.dias);
+    if (revision.accion) cuerpo.push(E(0x27A1) + E(0xFE0F) + " Acción sugerida: " + revision.accion);
+    cuerpo.push("_Análisis asistido por IA · valida el QF_");
+  } else {
+    cuerpo = pertinenciaDesdeEvento(e, coincidencias);
+  }
+  if (!sugerencia && cuerpo.length === 0) return "";
+
   var nombres = coincidencias.map(function(am) { return capitalizar(am.nombre); }).join(" + ");
-  var lineas = [E(0x1F50E) + " *Revisi\u00f3n PROA \u00b7 " + nombres + "*"];
+  var lineas = [E(0x1F50E) + " *Revisión PROA · " + nombres + "*"];
   if (sugerencia) lineas.push(E(0x1F4A1) + " " + sugerencia.replace(/^Sugerencia PROA:\s*/, "").replace(/^./, function(c) { return c.toUpperCase(); }));
-  pertinencia.forEach(function(l) { lineas.push(l); });
-  hallazgos.forEach(function(h) {
-    lineas.push((h.severidad === "alta" ? E(0x1F534) : E(0x1F7E0)) + " " + h.codigo + " \u00b7 " + h.detalle);
-  });
-  if (hallazgos.length > 0) lineas.push("_Revisi\u00f3n asistida por IA_");
-  return lineas.join("\n");
+  return lineas.concat(cuerpo).join("\n");
 }
 
-// Pide la revision a la API. Devuelve { hallazgos, datosFaltantes, tokens } o null si algo falla.
+// Pide el analisis a la API. Devuelve { veredicto, tratamiento, dias, accion, datosFaltantes, ... } o null
+// si algo falla (el mensaje lleva entonces el analisis de las tablas).
 function revisarCasoConIa_(e, coincidencias, cfg) {
   if (!IA_HALLAZGOS_ACTIVOS) return null;
   try {
-    var fichas = fichasProa_();
-    if (!fichas) {
-      Logger.log("Revision IA omitida: no se pudieron leer las fichas (%s).", IA_FICHAS_URL);
+    var referencia = referenciaProa_();
+    if (!referencia) {
+      Logger.log("Revision IA omitida: no se pudieron leer las fichas (%s).", IA_DOCS_URL);
       return null;
     }
+    var tablas = analisisPertinenciaDesdeEvento(e, coincidencias);
     var cuerpo = {
       model: cfg.modelo,
       max_tokens: IA_MAX_TOKENS,
-      system: IA_REGLAS + "\n\nFICHAS DEL PROA (referencia):\n\n" + fichas,
-      output_config: { format: { type: "json_schema", schema: IA_ESQUEMA } },
-      messages: [{ role: "user", content: textoCasoIa_(e, coincidencias) }]
+      system: IA_REGLAS + "\n\n" + referencia + "\n\n" + tablaDuracionIa_(),
+      output_config: { effort: IA_ESFUERZO, format: { type: "json_schema", schema: IA_ESQUEMA } },
+      fallbacks: "default",
+      messages: [{ role: "user", content: textoCasoIa_(e, coincidencias) + "\n\nAnálisis de las tablas del bot para este caso:\n" +
+        (tablas.lineas.length ? tablas.lineas.join("\n").replace(/[*_]/g, "") : "Sin criterio en las tablas.") }]
     };
-    var resp = UrlFetchApp.fetch(IA_URL, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify(cuerpo),
-      muteHttpExceptions: true,
-      headers: { "x-api-key": cfg.clave, "anthropic-version": IA_VERSION_API }
-    });
+    var resp = llamarApiIa_(cuerpo, cfg, true);
+    // Si la API no acepta el respaldo ante declinaciones, se repite la peticion sin el.
+    if (resp.getResponseCode() === 400 && /fallback/i.test(resp.getContentText())) {
+      delete cuerpo.fallbacks;
+      resp = llamarApiIa_(cuerpo, cfg, false);
+    }
     var texto = resp.getContentText();
     if (resp.getResponseCode() !== 200) {
       Logger.log("Revision IA: API HTTP %s: %s", resp.getResponseCode(), ocultarClaveIa_(texto.substring(0, 300), cfg.clave));
@@ -226,23 +212,41 @@ function revisarCasoConIa_(e, coincidencias, cfg) {
     }
     var bloque = (datos.content || []).filter(function(b) { return b.type === "text" && b.text; })[0];
     var salida = JSON.parse(bloque.text);
+    var nivel = IA_NIVELES.indexOf(String(salida.veredicto || "").toLowerCase());
+    if (nivel < 0) { Logger.log("Revision IA sin resultado: veredicto no reconocido."); return null; }
+    // Piso: una regla de espectro de las tablas no se puede rebajar.
+    if (tablas.espectroRojo) nivel = 2;
     var revision = {
-      hallazgos: (salida.hallazgos || []).map(normalizarHallazgo_).filter(function(h) {
-        return h.detalle && IA_CODIGOS.indexOf(h.codigo) >= 0;
-      }),
+      veredicto: IA_NIVELES[nivel],
+      tratamiento: fraseIa_(salida.tratamiento),
+      dias: fraseIa_(salida.dias),
+      accion: nivel === 0 ? "" : fraseIa_(salida.accion),
       datosFaltantes: salida.datos_faltantes || [],
+      modelo: datos.model || cfg.modelo,
       entrada: (datos.usage && datos.usage.input_tokens) || 0,
       salida: (datos.usage && datos.usage.output_tokens) || 0
     };
     var p = IA_PRECIOS_MTOK[cfg.modelo];
-    Logger.log("Revision IA (%s): %s hallazgo(s) %s; faltan: %s; tokens %s/%s%s.", cfg.modelo, revision.hallazgos.length,
-      JSON.stringify(revision.hallazgos), revision.datosFaltantes.join(", ") || "nada", revision.entrada, revision.salida,
+    Logger.log("Revision IA (%s): %s; tablas: %s; faltan: %s; tokens %s/%s%s.", revision.modelo, revision.veredicto,
+      tablas.nivel < 0 ? "sin criterio" : IA_NIVELES[tablas.nivel], revision.datosFaltantes.join(", ") || "nada", revision.entrada, revision.salida,
       p ? ", aprox. USD " + ((revision.entrada * p[0] + revision.salida * p[1]) / 1e6).toFixed(4) : "");
     return revision;
   } catch (err) {
     Logger.log("Revision IA sin resultado: %s", ocultarClaveIa_(String(err), cfg.clave));
     return null;
   }
+}
+
+function llamarApiIa_(cuerpo, cfg, conRespaldo) {
+  var encabezados = { "x-api-key": cfg.clave, "anthropic-version": IA_VERSION_API };
+  if (conRespaldo) encabezados["anthropic-beta"] = IA_BETA_RESPALDO;
+  return UrlFetchApp.fetch(IA_URL, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(cuerpo),
+    muteHttpExceptions: true,
+    headers: encabezados
+  });
 }
 
 // =====================================================================
@@ -285,42 +289,54 @@ function textoCasoIa_(e, coincidencias) {
   return lineas.join("\n");
 }
 
-// Fichas del repositorio, en cache 6 h. null si no se pueden leer.
-function fichasProa_() {
-  var cache = null;
+// Tabla de duracion por sindrome (la misma que usa Codigo.gs), como texto para el modelo.
+function tablaDuracionIa_() {
+  var filas = obtenerPertinencia().map(function(f) {
+    var rango = f.max === null ? "sin rango" : ((f.min !== null && f.min !== f.max) ? f.min + "-" + f.max : f.max) + " días";
+    return "- " + f.sindrome + " (CIE10 " + (f.prefijos.join(", ") || "-") + "): " + rango + (f.nota ? " · " + f.nota : "") + " · fuente: " + f.fuente;
+  });
+  return "TABLA DE DURACIÓN POR SÍNDROME (referencia)\n" + filas.join("\n") +
+    "\n- Profilaxis quirúrgica: máximo 24 h (48 h en cirugía cardiaca) · fuente: OMS 2018; CDC 2017";
+}
+
+// Fichas del repositorio (antimicrobianos y microorganismos), en cache 6 h. null si falta alguna.
+function referenciaProa_() {
+  var partes = [];
+  for (var i = 0; i < IA_DOCS.length; i++) {
+    var texto = documentoProa_(IA_DOCS[i]);
+    if (!texto) return null;
+    partes.push("=== " + IA_DOCS[i] + " (referencia) ===\n\n" + texto);
+  }
+  return partes.join("\n\n");
+}
+
+function documentoProa_(nombre) {
+  var cache = null, clave = "IA_PROA_DOC_" + nombre;
   try {
     cache = CacheService.getScriptCache();
-    var enCache = cache.get("IA_PROA_FICHAS");
+    var enCache = cache.get(clave);
     if (enCache) return enCache;
   } catch (e) {}
-  var url = PropertiesService.getScriptProperties().getProperty("IA_FICHAS_URL") || IA_FICHAS_URL;
+  var base = PropertiesService.getScriptProperties().getProperty("IA_DOCS_URL") || IA_DOCS_URL;
   try {
-    var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    var resp = UrlFetchApp.fetch(base + nombre, { muteHttpExceptions: true });
     if (resp.getResponseCode() !== 200) return null;
     var texto = resp.getContentText("UTF-8");
     if (texto.length < 1000) return null;
-    try { if (cache) cache.put("IA_PROA_FICHAS", texto, IA_FICHAS_CACHE_SEG); } catch (e2) {}
+    try { if (cache) cache.put(clave, texto, IA_FICHAS_CACHE_SEG); } catch (e2) {}
     return texto;
   } catch (e3) {
     return null;
   }
 }
 
-function normalizarHallazgo_(h) {
-  var limpiar = function(s) { return String(s === undefined || s === null ? "" : s).replace(/[*_~\x60]/g, " ").replace(/\s+/g, " ").trim(); };
-  // "DepCr 18" -> "depuraci\u00f3n de creatinina de 18": el termino completo se entiende en todos los servicios.
-  var detalle = limpiar(h.detalle)
-    .replace(/\b(?:DepCr|ClCr|CrCl)\s+(?:de\s+)?(?=\d)/g, "depuraci\u00f3n de creatinina de ")
-    .replace(/\b(?:DepCr|ClCr|CrCl)\b/g, "depuraci\u00f3n de creatinina")
+// Una frase limpia para WhatsApp: sin marcas de formato y con tope de longitud.
+function fraseIa_(s) {
+  var t = String(s === undefined || s === null ? "" : s).replace(/[*_~\x60]/g, " ").replace(/\s+/g, " ").trim()
+    .replace(/\b(?:DepCr|ClCr|CrCl)\b/g, "depuración de creatinina")
     .replace(/^./, function(c) { return c.toUpperCase(); });
-  if (detalle.length > 180) detalle = detalle.substring(0, 179).replace(/\s+\S*$/, "") + "\u2026";
-  return {
-    codigo: limpiar(h.codigo).toUpperCase(),
-    severidad: limpiar(h.severidad).toLowerCase(),
-    antimicrobiano: limpiar(h.antimicrobiano),
-    detalle: detalle,
-    ficha: limpiar(h.ficha)
-  };
+  if (t.length > IA_MAX_CARACTERES) t = t.substring(0, IA_MAX_CARACTERES - 1).replace(/\s+\S*$/, "") + "…";
+  return t;
 }
 
 function ocultarClaveIa_(texto, clave) {
@@ -341,7 +357,7 @@ function probarRevisionIa() {
   }
   [["Daptomicina + meropenem, sepsis por SARM", eventoPruebaDaptomicina()],
    ["Ceftazidima/avibactam + meropenem, ITU por KPC", eventoPruebaIaCeftazidimaMeropenem()],
-   ["Ceftazidima/avibactam emp\u00edrica, neumon\u00eda de la comunidad sin cultivos", eventoPruebaIaCeftazidimaComunidad()],
+   ["Ceftazidima/avibactam empírica, neumonía de la comunidad sin cultivos", eventoPruebaIaCeftazidimaComunidad()],
    ["Daptomicina en neumonia por SARM + piperacilina/tazobactam", eventoPruebaIaDaptomicinaNeumonia()],
    ["Ertapenem con Pseudomonas", eventoPruebaIaErtapenemPseudomonas()],
    ["Vancomicina sola (no dispara alerta)", eventoPruebaVancomicinaSola()]].forEach(function(caso) {
@@ -405,7 +421,7 @@ function eventoPruebaIaCeftazidimaComunidad() {
 }
 
 // Envia SOLO a PRUEBA BOT (IA_CHAT_PRUEBA fijo; no usa GREENAPI_GROUP_CHATID ni toca produccion) el
-// flujo completo de dos casos de prueba: mensaje base + revision de la IA citada. Unos USD 0,04 por caso.
+// flujo completo de dos casos de prueba: mensaje base + revision de la IA citada. Unos USD 0,05 por caso.
 function enviarPruebaIaAPruebaBot() {
   var cfg = iaConfigProa_();
   if (!cfg.clave) { Logger.log("Falta ANTHROPIC_API_KEY en Propiedades del script."); return; }
@@ -414,6 +430,6 @@ function enviarPruebaIaAPruebaBot() {
     var revision = revisarCasoConIa_(e, coincidencias, cfg);
     var base = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, true), { chatId: IA_CHAT_PRUEBA });
     responderConRevision_(e, coincidencias, revision, base, IA_CHAT_PRUEBA);
-    Logger.log("PRUEBA BOT: base " + JSON.stringify(base) + " \u00b7 hallazgos " + (revision ? revision.hallazgos.length : "sin revision"));
+    Logger.log("PRUEBA BOT: base " + JSON.stringify(base) + " · veredicto " + (revision ? revision.veredicto : "sin revision (tablas)"));
   });
 }

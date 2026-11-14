@@ -379,21 +379,89 @@ prueba('mensaje: campos ausentes salen como "-" y nunca como undefined', functio
   incluye(t, '⚠️ Sin interconsulta a Infectología');
 });
 
-prueba('revision (IA_PROA.gs): el analisis es la pertinencia de las tablas y no se llama a la API', function () {
+// UrlFetchApp simulado para IA_PROA.gs: sirve las fichas reales de docs/ y una respuesta fija de la API.
+function conApiSimulada(respuestaApi, fn) {
+  var real = global.UrlFetchApp, llamadas = [];
+  global.UrlFetchApp = { fetch: function (url, op) {
+    if (url.indexOf('raw.githubusercontent.com') > -1) {
+      var doc = fs.readFileSync(path.join(__dirname, '..', 'docs', url.split('/').pop()), 'utf8');
+      return { getResponseCode: function () { return 200; }, getContentText: function () { return doc; } };
+    }
+    assert.ok(/^https:\/\/api\.anthropic\.com\/v1\/messages$/.test(url), 'solo la API de mensajes: ' + url);
+    llamadas.push({ cuerpo: JSON.parse(op.payload), encabezados: op.headers });
+    var r = typeof respuestaApi === 'function' ? respuestaApi(llamadas.length) : respuestaApi;
+    return { getResponseCode: function () { return r.codigo || 200; }, getContentText: function () { return JSON.stringify(r.cuerpo); } };
+  } };
+  try { fn(llamadas); } finally { global.UrlFetchApp = real; }
+}
+function respuestaIa(salida) {
+  return { cuerpo: { model: 'claude-sonnet-5-5', stop_reason: 'end_turn', usage: { input_tokens: 9000, output_tokens: 300 },
+    content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify(salida) }] } };
+}
+
+prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y las tablas como referencia', function () {
   var e = eventoPruebaCeftazidimaAvibactam();
   var co = filtrarAntimicrobianosRestringidos(e);
-  assert.strictEqual(revisarCasoConIa_(e, co, { clave: 'x', modelo: 'm' }), null);
+  var cfg = { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO };
+  assert.strictEqual(IA_MODELO_DEFECTO, 'claude-sonnet-5-5');
+  var salida = { veredicto: 'verificar', tratamiento: 'Pertinente: *KPC* documentada sustenta ceftazidima/avibactam.',
+    dias: '14 d superan los 5-7 d de la ITU complicada (IDSA 2025; ACIN 2023).', accion: 'Proponer suspender el día 7 si hay respuesta clínica.', datos_faltantes: ['antibiograma'] };
+  conApiSimulada(respuestaIa(salida), function (llamadas) {
+    var rev = revisarCasoConIa_(e, co, cfg);
+    assert.strictEqual(llamadas.length, 1);
+    var c = llamadas[0].cuerpo;
+    assert.strictEqual(c.model, 'claude-sonnet-5-5');
+    assert.strictEqual(c.output_config.format.type, 'json_schema');
+    assert.strictEqual(c.fallbacks, 'default');
+    assert.ok(!('thinking' in c) && !('temperature' in c));
+    incluye(c.system, 'antimicrobianos-restringidos.md'); incluye(c.system, 'Candida auris'); incluye(c.system, 'TABLA DE DURACIÓN POR SÍNDROME');
+    incluye(c.system, 'Infección urinaria complicada / pielonefritis (CIE10 N39, N10, N12, N30): 5-7 días');
+    var caso = c.messages[0].content;
+    incluye(caso, 'Análisis de las tablas del bot'); incluye(caso, 'CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia');
+    noIncluye(caso, '88888888'); noIncluye(caso, 'Historia');   // seudonimizado
+    assert.strictEqual(rev.veredicto, 'verificar');
+    var r = mensajeRevision_(e, co, rev);
+    incluye(r, '🔎 *Revisión PROA · Ceftazidima / avibactam*');
+    incluye(r, '🟡 *Pertinencia PROA: verificar*');
+    incluye(r, '💊 Tratamiento: Pertinente: KPC documentada sustenta ceftazidima/avibactam.');   // sin marcas de formato
+    incluye(r, '📏 Días: 14 d superan los 5-7 d de la ITU complicada (IDSA 2025; ACIN 2023).');
+    incluye(r, '➡️ Acción sugerida: Proponer suspender el día 7 si hay respuesta clínica.');
+    incluye(r, '_Análisis asistido por IA · valida el QF_');
+    assert.ok(r.split('\n').length <= 7, 'respuesta concisa');
+  });
+  // frases largas se recortan
+  assert.ok(fraseIa_(new Array(60).join('palabra ')).length <= IA_MAX_CARACTERES);
   var base = construirMensajeDesdeEvento(e, co, true);
   noIncluye(base, 'Pertinencia PROA'); noIncluye(base, 'Sugerencia PROA');
-  var r = mensajeRevision_(e, co, null);
-  incluye(r, '🔎 *Revisión PROA · Ceftazidima / avibactam*');
-  incluye(r, '🔴 *Pertinencia PROA: intervenir*');
-  incluye(r, '📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)');
-  incluye(r, '🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia · hasta 10-14 d si hay absceso, obstrucción, prostatitis o respuesta lenta');
-  noIncluye(r, 'asistida por IA');
-  // flujo de un solo mensaje: la pertinencia sigue en el mensaje base
-  incluye(construirMensajeDesdeEvento(e, co), 'Pertinencia PROA');
   assert.ok(srcIa.indexOf('sk-ant') === -1);
+});
+
+prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caida de la API', function () {
+  var cfg = { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO };
+  // ertapenem con Pseudomonas: regla de espectro en rojo; el modelo no puede rebajarla
+  var e = eventoPruebaIaErtapenemPseudomonas(), co = filtrarAntimicrobianosRestringidos(e);
+  conApiSimulada(respuestaIa({ veredicto: 'pertinente', tratamiento: 'x', dias: 'y', accion: '', datos_faltantes: [] }), function () {
+    assert.strictEqual(revisarCasoConIa_(e, co, cfg).veredicto, 'intervenir');
+  });
+  // la API rechaza el parametro fallbacks: se repite sin el
+  conApiSimulada(function (n) {
+    return n === 1 ? { codigo: 400, cuerpo: { error: { message: 'fallbacks: Extra inputs are not permitted' } } }
+      : respuestaIa({ veredicto: 'intervenir', tratamiento: 'x', dias: 'y', accion: 'z', datos_faltantes: [] });
+  }, function (llamadas) {
+    assert.strictEqual(revisarCasoConIa_(e, co, cfg).veredicto, 'intervenir');
+    assert.strictEqual(llamadas.length, 2); assert.ok(!('fallbacks' in llamadas[1].cuerpo)); assert.ok(!llamadas[1].encabezados['anthropic-beta']);
+  });
+  // API caida o declinacion: sale el analisis de las tablas, y la clave no queda en el registro
+  var registro = []; var logReal = Logger.log; Logger.log = function () { registro.push(Array.prototype.join.call(arguments, ' ')); };
+  try {
+    conApiSimulada({ codigo: 401, cuerpo: { error: { message: 'invalid x-api-key CLAVE-DE-PRUEBA' } } }, function () {
+      assert.strictEqual(revisarCasoConIa_(e, co, cfg), null);
+    });
+    conApiSimulada({ cuerpo: { stop_reason: 'refusal', content: [] } }, function () { assert.strictEqual(revisarCasoConIa_(e, co, cfg), null); });
+  } finally { Logger.log = logReal; }
+  noIncluye(registro.join('\n'), 'CLAVE-DE-PRUEBA');
+  var r = mensajeRevision_(e, co, null);
+  incluye(r, '🔴 *Pertinencia PROA: intervenir*'); incluye(r, 'ERTAPENEM no tiene actividad frente a Pseudomonas'); noIncluye(r, 'asistido por IA');
 });
 
 prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {

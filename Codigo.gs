@@ -712,16 +712,23 @@ function veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorgan
 // Lineas de pertinencia del mensaje: veredicto global, tratamiento y dias. esquemas: todos los
 // antimicrobianos de la solicitud. Semaforo: verde pertinente, amarillo verificar, rojo intervenir.
 function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas) {
-  if (!CONFIG.PERTINENCIA_ACTIVA) return [];
+  return analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas).lineas;
+}
+
+// { lineas, nivel (-1 sin criterio, 0 pertinente, 1 verificar, 2 intervenir), espectroRojo (una regla de
+// espectro descarta algun antimicrobiano) }. IA_PROA.gs lo usa como referencia y como piso del veredicto.
+function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas) {
+  var vacio = { lineas: [], nivel: -1, espectroRojo: false };
+  if (!CONFIG.PERTINENCIA_ACTIVA) return vacio;
   var E = function(cp) { return String.fromCodePoint(cp); };
   var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
   var sindrome = sindromePara(diagnosticoCrudo, obtenerPertinencia());
-  var peor = -1, tratamiento = [], dias = [];
+  var peor = -1, tratamiento = [], dias = [], espectroRojo = false;
   var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
 
   esquemas.forEach(function(am) {
     var v = veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorganismo);
-    if (v) marcar(tratamiento, v.nivel, am.nombre + ': ' + v.texto);
+    if (v) { marcar(tratamiento, v.nivel, am.nombre + ': ' + v.texto); if (v.nivel === 2) espectroRojo = true; }
   });
   if (tipoIndicacion === 'Etiológico' && sinAislamiento(microorganismo)) {
     marcar(tratamiento, 1, 'Indicación etiológica sin microorganismo registrado: verificar');
@@ -752,14 +759,14 @@ function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, es
     encabezadoDias = 'Días · ' + sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')';
   }
 
-  if (peor < 0 && !encabezadoDias) return [];
+  if (peor < 0 && !encabezadoDias) return vacio;
   var titulo = ['pertinente', 'verificar', 'intervenir'][Math.max(peor, 0)];
   var lineas = [color[Math.max(peor, 0)] + ' *Pertinencia PROA: ' + titulo + '*'];
   if (tratamiento.length) lineas.push(E(0x1F48A) + ' Tratamiento (fichas PROA)');
   tratamiento.forEach(function(l) { lineas.push(l); });
   if (encabezadoDias) lineas.push(E(0x1F4CF) + ' ' + encabezadoDias);
   dias.forEach(function(l) { lineas.push(l); });
-  return lineas;
+  return { lineas: lineas, nivel: peor, espectroRojo: espectroRojo };
 }
 
 /* =====================================================================
@@ -767,10 +774,15 @@ function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, es
    ===================================================================== */
 // Lineas de pertinencia (duracion de referencia, profilaxis, espectro) de una solicitud.
 function pertinenciaDesdeEvento(e, coincidenciasOpt) {
+  var coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
+  return analisisPertinenciaDesdeEvento(e, coincidencias).lineas;
+}
+
+function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var valores = (e && e.namedValues) ? e.namedValues : {};
   var coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
   var micro = campoDelEvento(valores, CAMPOS.MICROORGANISMO);
-  return evaluarPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
+  return analisisPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
     micro === '-' ? '' : micro, coincidencias.concat(acompanantesNoRestringidos(e)));
 }
 
