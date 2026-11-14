@@ -35,7 +35,7 @@ var IA_VERSION_API = "2023-06-01";
 var IA_BETA_RESPALDO = "server-side-fallback-2026-07-01";   // si el modelo declina, la API reintenta en otro
 var IA_MAX_TOKENS = 8000;   // incluye el razonamiento del modelo: con 1500 un caso se corto (max_tokens)
 var IA_CHAT_PRUEBA = "120363412506101174@g.us";   // PRUEBA BOT
-var IA_MAX_CARACTERES = 140;                     // por frase del mensaje
+var IA_MAX_CARACTERES = 200;                     // por frase del mensaje
 // Vancomicina y linezolid solos no disparan alerta; con veredicto "intervenir" si se envian.
 var IA_ALERTA_SI_ALTA_SIN_DISPARO = true;
 var IA_DOCS_URL = "https://raw.githubusercontent.com/jsaavedran1-glitch/alertas-whatsapp-antimicrobianos/main/docs/";
@@ -172,7 +172,6 @@ function mensajeRevision_(e, coincidencias, revision) {
   if (revision) {
     var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
     cuerpo.push(color[IA_NIVELES.indexOf(revision.veredicto)] + " *Pertinencia PROA: " + ETIQUETA_NIVEL[IA_NIVELES.indexOf(revision.veredicto)] + "*");
-    if (revision.tratamiento.length) cuerpo.push(E(0x1F48A) + " Tratamiento (fichas PROA)");
     revision.tratamiento.forEach(function(t) {
       cuerpo.push(color[t.nivel] + " " + t.nombre + ": " + ETIQUETA_NIVEL[t.nivel] + " \u00b7 " + t.motivo);
     });
@@ -225,7 +224,9 @@ function revisarCasoConIa_(e, coincidencias, cfg) {
     }
     var datos = JSON.parse(texto);
     if (datos.stop_reason === "refusal" || datos.stop_reason === "max_tokens") {
-      Logger.log("Revision IA sin resultado (%s).", datos.stop_reason);
+      // stop_details.category dice que filtro declino (p. ej. bio): sirve para ajustar el texto del caso.
+      Logger.log("Revision IA sin resultado (%s%s; modelo %s).", datos.stop_reason,
+        datos.stop_details && datos.stop_details.category ? ", categoria " + datos.stop_details.category : "", datos.model || cfg.modelo);
       return null;
     }
     var bloque = (datos.content || []).filter(function(b) { return b.type === "text" && b.text; })[0];
@@ -374,7 +375,7 @@ function itemsIa_(lista, esquemas) {
 function fraseIa_(s) {
   var t = String(s === undefined || s === null ? "" : s).replace(/[*~\x60]/g, "").replace(/_/g, " ").replace(/\s+/g, " ").trim()
     .replace(/\b(?:DepCr|ClCr|CrCl)\b/g, "depuración de creatinina")
-    .replace(/^./, function(c) { return c.toUpperCase(); });
+    .replace(/^./, function(c) { return c.toUpperCase(); }).replace(/\.$/, "");
   if (t.length > IA_MAX_CARACTERES) t = t.substring(0, IA_MAX_CARACTERES - 1).replace(/\s+\S*$/, "") + "…";
   return t;
 }

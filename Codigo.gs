@@ -765,7 +765,6 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   if (peor < 0 && !encabezadoDias) return vacio;
   var titulo = ETIQUETA_NIVEL[Math.max(peor, 0)];
   var lineas = [color[Math.max(peor, 0)] + ' *Pertinencia PROA: ' + titulo + '*'];
-  if (tratamiento.length) lineas.push(E(0x1F48A) + ' Tratamiento (fichas PROA)');
   tratamiento.forEach(function(l) { lineas.push(l); });
   if (encabezadoDias) lineas.push(E(0x1F4CF) + ' ' + encabezadoDias);
   dias.forEach(function(l) { lineas.push(l); });

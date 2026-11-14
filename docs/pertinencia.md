@@ -29,7 +29,6 @@ El bloque abre con un veredicto global, que es el peor de los individuales:
 
 ```
 🔴 *Pertinencia PROA: intervenir*
-💊 Tratamiento (fichas PROA)
 🟢 CEFTAZIDIMA / AVIBACTAM: pertinente · el aislamiento registrado está dentro de su indicación
 📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)
 🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia · hasta 10-14 d si hay absceso, obstrucción, prostatitis o respuesta lenta

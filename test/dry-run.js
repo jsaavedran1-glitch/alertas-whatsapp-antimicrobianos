@@ -426,7 +426,6 @@ prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y la
     var r = mensajeRevision_(e, co, rev);
     assert.strictEqual(r, ['🔎 *Revisión PROA · Ceftazidima / avibactam*',
       '🔴 *Pertinencia PROA: se sugiere revaluar*',
-      '💊 Tratamiento (fichas PROA)',
       '🟢 CEFTAZIDIMA / AVIBACTAM: acorde con la referencia · el aislamiento registrado (KPC) está dentro de su indicación',
       '📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)',
       '🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia · hasta 10-14 d si hay absceso u obstrucción',

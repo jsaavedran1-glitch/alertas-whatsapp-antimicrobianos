@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.10.2] - 2026-11-14
+
+### Cambiado
+- Se quita la línea `💊 Tratamiento (fichas PROA)` del bloque de pertinencia.
+- Revisión por IA: tope de 200 caracteres por motivo (con 140 una frase salió cortada), sin punto final, y el registro muestra la categoría cuando el modelo declina un caso.
+
 ## [1.10.1] - 2026-11-14
 
 ### Cambiado
