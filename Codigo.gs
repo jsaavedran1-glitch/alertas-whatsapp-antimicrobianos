@@ -718,7 +718,7 @@ function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, es
 // { lineas, nivel (-1 sin criterio, 0 pertinente, 1 verificar, 2 intervenir), espectroRojo (una regla de
 // espectro descarta algun antimicrobiano) }. IA_PROA.gs lo usa como referencia y como piso del veredicto.
 function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas) {
-  var vacio = { lineas: [], nivel: -1, espectroRojo: false };
+  var vacio = { lineas: [], nivel: -1, espectroRojo: false, encabezadoDias: '' };
   if (!CONFIG.PERTINENCIA_ACTIVA) return vacio;
   var E = function(cp) { return String.fromCodePoint(cp); };
   var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
@@ -766,7 +766,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   tratamiento.forEach(function(l) { lineas.push(l); });
   if (encabezadoDias) lineas.push(E(0x1F4CF) + ' ' + encabezadoDias);
   dias.forEach(function(l) { lineas.push(l); });
-  return { lineas: lineas, nivel: peor, espectroRojo: espectroRojo };
+  return { lineas: lineas, nivel: peor, espectroRojo: espectroRojo, encabezadoDias: encabezadoDias };
 }
 
 /* =====================================================================

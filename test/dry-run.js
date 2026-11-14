@@ -404,8 +404,11 @@ prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y la
   var co = filtrarAntimicrobianosRestringidos(e);
   var cfg = { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO };
   assert.strictEqual(IA_MODELO_DEFECTO, 'claude-sonnet-5-5');
-  var salida = { analisis: 'repaso de factores', veredicto: 'verificar', tratamiento: 'Pertinente: *KPC* documentada sustenta ceftazidima/avibactam.',
-    dias: '14 d superan los 5-7 d de la ITU complicada (IDSA 2025; ACIN 2023).', accion: 'Proponer suspender el día 7 si hay respuesta clínica.', datos_faltantes: ['antibiograma'] };
+  var salida = { analisis: 'repaso de factores',
+    tratamiento: [{ antimicrobiano: 'Ceftazidima/avibactam', nivel: 'pertinente', motivo: 'El aislamiento registrado (*KPC*) está dentro de su indicación' },
+      { antimicrobiano: 'COLISTINA', nivel: 'no_pertinente', motivo: 'no es de esta solicitud' }],
+    dias: [{ antimicrobiano: 'CEFTAZIDIMA / AVIBACTAM', nivel: 'no_pertinente', motivo: 'supera la referencia · hasta 10-14 d si hay absceso u obstrucción' }],
+    datos_faltantes: ['antibiograma'] };
   conApiSimulada(respuestaIa(salida), function (llamadas) {
     var rev = revisarCasoConIa_(e, co, cfg);
     assert.strictEqual(llamadas.length, 1);
@@ -419,16 +422,17 @@ prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y la
     var caso = c.messages[0].content;
     incluye(caso, 'Análisis de las tablas del bot'); incluye(caso, 'CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia');
     noIncluye(caso, '88888888'); noIncluye(caso, 'Historia');   // seudonimizado
-    assert.strictEqual(rev.veredicto, 'verificar');
+    assert.strictEqual(rev.veredicto, 'intervenir');
     var r = mensajeRevision_(e, co, rev);
-    incluye(r, '🔎 *Revisión PROA · Ceftazidima / avibactam*');
-    incluye(r, '🟡 *Pertinencia PROA: verificar*');
-    incluye(r, '💊 Tratamiento: Pertinente: KPC documentada sustenta ceftazidima/avibactam.');   // sin marcas de formato
-    incluye(r, '📏 Días: 14 d superan los 5-7 d de la ITU complicada (IDSA 2025; ACIN 2023).');
-    incluye(r, '➡️ Acción sugerida: Proponer suspender el día 7 si hay respuesta clínica.');
-    incluye(r, '_Análisis asistido por IA_'); noIncluye(r, 'valida el QF'); noIncluye(r, 'repaso de factores');
+    assert.strictEqual(r, ['🔎 *Revisión PROA · Ceftazidima / avibactam*',
+      '🔴 *Pertinencia PROA: intervenir*',
+      '💊 Tratamiento (fichas PROA)',
+      '🟢 CEFTAZIDIMA / AVIBACTAM: pertinente · el aislamiento registrado (KPC) está dentro de su indicación',
+      '📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)',
+      '🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia · hasta 10-14 d si hay absceso u obstrucción',
+      '_Análisis asistido por IA_'].join('\n'));   // misma estructura que el analisis de las tablas; lo ajeno a la solicitud se descarta
     incluye(c.system, 'médico infectólogo'); incluye(c.system, 'químico farmacéutico clínico'); assert.strictEqual(c.output_config.effort, 'high');
-    assert.strictEqual(c.output_config.format.schema.required[0], 'analisis');
+    assert.deepStrictEqual(c.output_config.format.schema.required, ['analisis', 'tratamiento', 'dias', 'datos_faltantes']);
     assert.ok(r.split('\n').length <= 7, 'respuesta concisa');
   });
   // frases largas se recortan
@@ -442,13 +446,13 @@ prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caid
   var cfg = { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO };
   // ertapenem con Pseudomonas: regla de espectro en rojo; el modelo no puede rebajarla
   var e = eventoPruebaIaErtapenemPseudomonas(), co = filtrarAntimicrobianosRestringidos(e);
-  conApiSimulada(respuestaIa({ veredicto: 'pertinente', tratamiento: 'x', dias: 'y', accion: '', datos_faltantes: [] }), function () {
+  conApiSimulada(respuestaIa({ analisis: 'a', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: 'x' }], dias: [], datos_faltantes: [] }), function () {
     assert.strictEqual(revisarCasoConIa_(e, co, cfg).veredicto, 'intervenir');
   });
   // la API rechaza el parametro fallbacks: se repite sin el
   conApiSimulada(function (n) {
     return n === 1 ? { codigo: 400, cuerpo: { error: { message: 'fallbacks: Extra inputs are not permitted' } } }
-      : respuestaIa({ veredicto: 'intervenir', tratamiento: 'x', dias: 'y', accion: 'z', datos_faltantes: [] });
+      : respuestaIa({ analisis: 'a', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'x' }], dias: [], datos_faltantes: [] });
   }, function (llamadas) {
     assert.strictEqual(revisarCasoConIa_(e, co, cfg).veredicto, 'intervenir');
     assert.strictEqual(llamadas.length, 2); assert.ok(!('fallbacks' in llamadas[1].cuerpo)); assert.ok(!llamadas[1].encabezados['anthropic-beta']);

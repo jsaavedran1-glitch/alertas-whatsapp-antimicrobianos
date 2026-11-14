@@ -5,8 +5,8 @@
 // Cada caso sale en dos mensajes al mismo grupo:
 //   1. el mensaje base de siempre, sin la linea de sugerencia PROA ni el bloque de pertinencia;
 //   2. segundos despues, la revision como RESPUESTA CITADA al mensaje 1 (quotedMessageId de Green-API):
-//      veredicto (pertinente / verificar / intervenir), una frase sobre el tratamiento, una sobre los dias
-//      y la accion sugerida.
+//      la misma estructura del analisis de las tablas: veredicto global, una linea por antimicrobiano
+//      sobre el tratamiento y una sobre los dias, con la duracion de referencia y su fuente.
 // El modelo recibe como referencia: las fichas de antimicrobianos y de microorganismos del repositorio
 // (docs/), la tabla de duracion por sindrome (PERTINENCIA_DURACION) y el analisis de las tablas de
 // Codigo.gs para ese caso. Si una regla de espectro de las tablas descarta un antimicrobiano, el veredicto
@@ -35,7 +35,7 @@ var IA_VERSION_API = "2023-06-01";
 var IA_BETA_RESPALDO = "server-side-fallback-2026-07-01";   // si el modelo declina, la API reintenta en otro
 var IA_MAX_TOKENS = 8000;   // incluye el razonamiento del modelo: con 1500 un caso se corto (max_tokens)
 var IA_CHAT_PRUEBA = "120363412506101174@g.us";   // PRUEBA BOT
-var IA_MAX_CARACTERES = 170;                     // por frase del mensaje
+var IA_MAX_CARACTERES = 140;                     // por frase del mensaje
 // Vancomicina y linezolid solos no disparan alerta; con veredicto "intervenir" si se envian.
 var IA_ALERTA_SI_ALTA_SIN_DISPARO = true;
 var IA_DOCS_URL = "https://raw.githubusercontent.com/jsaavedran1-glitch/alertas-whatsapp-antimicrobianos/main/docs/";
@@ -59,25 +59,35 @@ var IA_REGLAS = [
   "- Tratamiento: si cada antimicrobiano restringido se justifica frente al microorganismo aislado, el foco, el origen (IAAS o comunidad) y el tipo de indicación; si cubre o no al aislado; si hay una opción de menor espectro que bastaría; si la combinación duplica espectro.",
   "- Días: si los días ordenados de cada antimicrobiano corresponden a la duración de referencia del foco. Menos días que el mínimo no es un hallazgo: las órdenes se renuevan.",
   "",
-  "Veredicto: intervenir = riesgo de falla terapéutica o toxicidad, o exceso claro (antimicrobiano que no cubre el aislado o no sirve en ese foco, días al doble de la referencia, profilaxis de más de 24 h, reserva sin sustento alguno); verificar = falta un dato o hay una optimización posible; pertinente = tratamiento y días acordes con la referencia. Si el análisis de las tablas trae una regla de espectro en rojo, el veredicto es intervenir.",
+  "Niveles, por cada antimicrobiano: no_pertinente = riesgo de falla terapéutica o toxicidad, o exceso claro (no cubre el aislado o no sirve en ese foco, días al doble de la referencia o más, profilaxis de más de 24 h); verificar = falta un dato o hay una optimización posible (aislado que no justifica la reserva, sin aislamiento ni foco que lo sustente, días por encima de la referencia); pertinente = acorde con la referencia.",
+  "Parte del análisis de las tablas del bot: conserva su nivel y su redacción para cada antimicrobiano, y cámbialos solo cuando una ficha o la tabla de duración lo sustente con claridad; en ese caso el motivo dice por qué. Una regla de espectro en rojo de las tablas no se rebaja.",
   "",
   "Límites del formulario: no trae antibiograma (solo el nombre del microorganismo y lo que el médico escriba, como BLEE o KPC), ni creatinina, ni evolución clínica. No evalúes dosis ni ajuste renal. \"Ninguno\", \"0\", \"pendiente\" o una tinción de Gram no son un aislamiento. No supongas datos que no están: nómbralos en datos_faltantes.",
   "",
-  "Formato: tratamiento, dias y accion son una sola frase cada una, de máximo 150 caracteres, en español con tildes, sin preámbulos, sin repetir los datos del caso y sin markdown. Empieza por la conclusión. En dias cita la referencia y su fuente entre paréntesis. accion es lo que el QF debe proponer hoy, en tono de sugerencia (proponer, revaluar, confirmar), nunca una orden; si el veredicto es pertinente, accion va vacía. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
+  "Formato de la respuesta (misma estructura del análisis de las tablas): en tratamiento, una entrada por cada antimicrobiano restringido de la solicitud, y por cada acompañante solo si tiene un hallazgo; en dias, una entrada por cada antimicrobiano con días ordenados, si hay duración de referencia para el foco. antimicrobiano es el nombre tal como viene en la solicitud. motivo es una sola frase de máximo 120 caracteres, en español con tildes, sin preámbulos, sin repetir los datos del caso, sin el nombre del antimicrobiano y sin markdown, con el estilo de las tablas (\"el aislamiento registrado está dentro de su indicación\", \"sin aislamiento ni foco que lo sustente; reservado para ...\", \"dentro de la referencia\", \"supera la referencia · hasta 10-14 d si hay absceso\"). Tono de sugerencia, nunca una orden. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
 ].join("\n");
+
+var IA_ITEM = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    antimicrobiano: { type: "string", description: "Nombre tal como viene en la solicitud." },
+    nivel: { type: "string", enum: ["pertinente", "verificar", "no_pertinente"] },
+    motivo: { type: "string", description: "Una frase de maximo 120 caracteres." }
+  },
+  required: ["antimicrobiano", "nivel", "motivo"]
+};
 
 var IA_ESQUEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
     analisis: { type: "string", description: "Repaso de todos los factores del caso y que implica cada uno, antes del veredicto. Maximo 1200 caracteres. No va al mensaje." },
-    veredicto: { type: "string", enum: IA_NIVELES },
-    tratamiento: { type: "string", description: "Una frase: si el tratamiento es pertinente y por que." },
-    dias: { type: "string", description: "Una frase: si los dias son pertinentes, con la referencia y su fuente." },
-    accion: { type: "string", description: "Una frase: que proponer hoy. Vacia si el veredicto es pertinente." },
+    tratamiento: { type: "array", items: IA_ITEM },
+    dias: { type: "array", items: IA_ITEM },
     datos_faltantes: { type: "array", items: { type: "string" } }
   },
-  required: ["analisis", "veredicto", "tratamiento", "dias", "accion", "datos_faltantes"]
+  required: ["analisis", "tratamiento", "dias", "datos_faltantes"]
 };
 
 // =====================================================================
@@ -160,12 +170,17 @@ function mensajeRevision_(e, coincidencias, revision) {
   var E = function(cp) { return String.fromCodePoint(cp); };
   var cuerpo = [];
   if (revision) {
-    var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)][IA_NIVELES.indexOf(revision.veredicto)];
-    cuerpo.push(color + " *Pertinencia PROA: " + revision.veredicto + "*");
-    if (revision.tratamiento) cuerpo.push(E(0x1F48A) + " Tratamiento: " + revision.tratamiento);
-    if (revision.dias) cuerpo.push(E(0x1F4CF) + " Días: " + revision.dias);
-    if (revision.accion) cuerpo.push(E(0x27A1) + E(0xFE0F) + " Acción sugerida: " + revision.accion);
-    cuerpo.push("_Análisis asistido por IA_");
+    var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
+    cuerpo.push(color[IA_NIVELES.indexOf(revision.veredicto)] + " *Pertinencia PROA: " + revision.veredicto + "*");
+    if (revision.tratamiento.length) cuerpo.push(E(0x1F48A) + " Tratamiento (fichas PROA)");
+    revision.tratamiento.forEach(function(t) {
+      cuerpo.push(color[t.nivel] + " " + t.nombre + ": " + ["pertinente", "verificar", "no pertinente"][t.nivel] + " \u00b7 " + t.motivo);
+    });
+    if (revision.dias.length) cuerpo.push(E(0x1F4CF) + " " + (revision.encabezadoDias || "D\u00edas"));
+    revision.dias.forEach(function(d) {
+      cuerpo.push(color[d.nivel] + " " + d.nombre + (d.dias ? " " + d.dias + " d" : "") + ": " + d.motivo);
+    });
+    cuerpo.push("_An\u00e1lisis asistido por IA_");
   } else {
     cuerpo = pertinenciaDesdeEvento(e, coincidencias);
   }
@@ -177,7 +192,7 @@ function mensajeRevision_(e, coincidencias, revision) {
   return lineas.concat(cuerpo).join("\n");
 }
 
-// Pide el analisis a la API. Devuelve { veredicto, tratamiento, dias, accion, datosFaltantes, ... } o null
+// Pide el analisis a la API. Devuelve { veredicto, tratamiento[], dias[], encabezadoDias, ... } o null
 // si algo falla (el mensaje lleva entonces el analisis de las tablas).
 function revisarCasoConIa_(e, coincidencias, cfg) {
   if (!IA_HALLAZGOS_ACTIVOS) return null;
@@ -215,15 +230,19 @@ function revisarCasoConIa_(e, coincidencias, cfg) {
     }
     var bloque = (datos.content || []).filter(function(b) { return b.type === "text" && b.text; })[0];
     var salida = JSON.parse(bloque.text);
-    var nivel = IA_NIVELES.indexOf(String(salida.veredicto || "").toLowerCase());
-    if (nivel < 0) { Logger.log("Revision IA sin resultado: veredicto no reconocido."); return null; }
+    var esquemas = leerSlots(e);
+    var tratamiento = itemsIa_(salida.tratamiento, esquemas);
+    var diasIa = tablas.encabezadoDias ? itemsIa_(salida.dias, esquemas).filter(function(d) { return d.dias; }) : [];
+    if (tratamiento.length === 0 && diasIa.length === 0) { Logger.log("Revision IA sin resultado: respuesta sin antimicrobianos de la solicitud."); return null; }
+    var nivel = 0;
+    tratamiento.concat(diasIa).forEach(function(x) { if (x.nivel > nivel) nivel = x.nivel; });
     // Piso: una regla de espectro de las tablas no se puede rebajar.
     if (tablas.espectroRojo) nivel = 2;
     var revision = {
       veredicto: IA_NIVELES[nivel],
-      tratamiento: fraseIa_(salida.tratamiento),
-      dias: fraseIa_(salida.dias),
-      accion: nivel === 0 ? "" : fraseIa_(salida.accion),
+      tratamiento: tratamiento,
+      dias: diasIa,
+      encabezadoDias: tablas.encabezadoDias,
       datosFaltantes: salida.datos_faltantes || [],
       modelo: datos.model || cfg.modelo,
       entrada: (datos.usage && datos.usage.input_tokens) || 0,
@@ -334,9 +353,26 @@ function documentoProa_(nombre) {
   }
 }
 
+// Entradas del modelo (tratamiento o dias) limitadas a los antimicrobianos de la solicitud.
+function itemsIa_(lista, esquemas) {
+  var niveles = ["pertinente", "verificar", "no_pertinente"];
+  var clave = function(t) { return normalizarTexto(t).replace(/[^A-Z0-9]/g, ""); };
+  var salida = [];
+  (lista || []).forEach(function(x) {
+    var nombre = clave(x.antimicrobiano), nivel = niveles.indexOf(String(x.nivel || "").toLowerCase());
+    if (!nombre || nivel < 0) return;
+    var am = null;
+    esquemas.forEach(function(q) { var c = clave(q.nombre); if (!am && (c === nombre || c.indexOf(nombre) > -1 || nombre.indexOf(c) > -1)) am = q; });
+    if (!am) return;
+    var n = numeroONulo(am.dias);
+    salida.push({ nombre: am.nombre, nivel: nivel, motivo: fraseIa_(x.motivo).replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ ])/, function(c) { return c.toLowerCase(); }), dias: (n !== null && n > 0) ? formatoNumero(n, 0) : "" });
+  });
+  return salida;
+}
+
 // Una frase limpia para WhatsApp: sin marcas de formato y con tope de longitud.
 function fraseIa_(s) {
-  var t = String(s === undefined || s === null ? "" : s).replace(/[*_~\x60]/g, " ").replace(/\s+/g, " ").trim()
+  var t = String(s === undefined || s === null ? "" : s).replace(/[*~\x60]/g, "").replace(/_/g, " ").replace(/\s+/g, " ").trim()
     .replace(/\b(?:DepCr|ClCr|CrCl)\b/g, "depuración de creatinina")
     .replace(/^./, function(c) { return c.toUpperCase(); });
   if (t.length > IA_MAX_CARACTERES) t = t.substring(0, IA_MAX_CARACTERES - 1).replace(/\s+\S*$/, "") + "…";

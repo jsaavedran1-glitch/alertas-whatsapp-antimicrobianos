@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.10.0] - 2026-11-14
+
+### Cambiado
+- La revisión por IA responde con **la misma estructura del análisis de las tablas** (preferida por el referente): veredicto global, `💊 Tratamiento (fichas PROA)` con una línea por antimicrobiano y `📏 Días · <síndrome>: referencia ... (fuente)` con una línea por antimicrobiano. El modelo parte del nivel y la redacción de las tablas y solo los cambia con sustento en una ficha; el encabezado de días y su fuente salen siempre de la tabla. Se descartan entradas de antimicrobianos que no estén en la solicitud. Se retira la línea de acción sugerida.
+
 ## [1.9.1] - 2026-11-14
 
 ### Cambiado
