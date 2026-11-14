@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.10.3] - 2026-11-14
+
+### Cambiado
+- Cuando el tratamiento de un antimicrobiano queda en rojo, sus días ya no salen en verde: la línea pasa a `⚪ ... d: la duración no se valora mientras se revalúa el tratamiento`, en las tablas y en la revisión por IA.
+
 ## [1.10.2] - 2026-11-14
 
 ### Cambiado

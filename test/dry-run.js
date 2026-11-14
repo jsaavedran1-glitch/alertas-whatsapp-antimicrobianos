@@ -451,10 +451,11 @@ prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caid
   // la API rechaza el parametro fallbacks: se repite sin el
   conApiSimulada(function (n) {
     return n === 1 ? { codigo: 400, cuerpo: { error: { message: 'fallbacks: Extra inputs are not permitted' } } }
-      : respuestaIa({ analisis: 'a', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'x' }], dias: [], datos_faltantes: [] });
+      : respuestaIa({ analisis: 'a', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'x' }], dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: 'dentro de la referencia' }], datos_faltantes: [] });
   }, function (llamadas) {
     assert.strictEqual(revisarCasoConIa_(e, co, cfg).veredicto, 'intervenir');
-    assert.strictEqual(llamadas.length, 2); assert.ok(!('fallbacks' in llamadas[1].cuerpo)); assert.ok(!llamadas[1].encabezados['anthropic-beta']);
+    incluye(mensajeRevision_(e, co, revisarCasoConIa_(e, co, cfg)), '⚪ ERTAPENEM 7 d: la duración no se valora mientras se revalúa el tratamiento');
+    assert.ok(!('fallbacks' in llamadas[1].cuerpo)); assert.ok(!llamadas[1].encabezados['anthropic-beta']);
   });
   // API caida o declinacion: sale el analisis de las tablas, y la clave no queda en el registro
   var registro = []; var logReal = Logger.log; Logger.log = function () { registro.push(Array.prototype.join.call(arguments, ' ')); };
@@ -466,6 +467,7 @@ prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caid
   } finally { Logger.log = logReal; }
   noIncluye(registro.join('\n'), 'CLAVE-DE-PRUEBA');
   var r = mensajeRevision_(e, co, null);
+  incluye(r, '⚪ ERTAPENEM 7 d: la duración no se valora mientras se revalúa el tratamiento'); noIncluye(r, 'dentro de la referencia');
   incluye(r, '🔴 *Pertinencia PROA: se sugiere revaluar*'); incluye(r, 'ERTAPENEM no tiene actividad frente a Pseudomonas'); noIncluye(r, 'asistido por IA');
 });
 

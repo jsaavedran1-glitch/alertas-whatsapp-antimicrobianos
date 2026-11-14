@@ -64,6 +64,8 @@ var IA_REGLAS = [
   "",
   "Límites del formulario: no trae antibiograma (solo el nombre del microorganismo y lo que el médico escriba, como BLEE o KPC), ni creatinina, ni evolución clínica. No evalúes dosis ni ajuste renal. \"Ninguno\", \"0\", \"pendiente\" o una tinción de Gram no son un aislamiento. No supongas datos que no están: nómbralos en datos_faltantes.",
   "",
+  "Si el tratamiento de un antimicrobiano queda en no_pertinente, no valores sus días: el bot los muestra como no valorados.",
+  "",
   "Formato de la respuesta (misma estructura del análisis de las tablas): en tratamiento, una entrada por cada antimicrobiano restringido de la solicitud, y por cada acompañante solo si tiene un hallazgo; en dias, una entrada por cada antimicrobiano con días ordenados, si hay duración de referencia para el foco. antimicrobiano es el nombre tal como viene en la solicitud. motivo es una sola frase de máximo 120 caracteres, en español con tildes, sin preámbulos, sin repetir los datos del caso, sin el nombre del antimicrobiano y sin markdown, con el estilo de las tablas (\"el aislamiento registrado está dentro de su indicación\", \"sin aislamiento ni foco que lo sustente; reservado para ...\", \"dentro de la referencia\", \"supera la referencia; se sugiere revaluar la duración · hasta 10-14 d si hay absceso\"). El mensaje es un apoyo para quien prescribe y para el QF, no un dictamen: redacta cada motivo como observación o sugerencia (se sugiere, convendría, valdría la pena confirmar), nunca como orden ni como juicio sobre el médico. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
 ].join("\n");
 
@@ -177,7 +179,7 @@ function mensajeRevision_(e, coincidencias, revision) {
     });
     if (revision.dias.length) cuerpo.push(E(0x1F4CF) + " " + (revision.encabezadoDias || "D\u00edas"));
     revision.dias.forEach(function(d) {
-      cuerpo.push(color[d.nivel] + " " + d.nombre + (d.dias ? " " + d.dias + " d" : "") + ": " + d.motivo);
+      cuerpo.push((d.nivel < 0 ? E(0x26AA) : color[d.nivel]) + " " + d.nombre + (d.dias ? " " + d.dias + " d" : "") + ": " + d.motivo);
     });
     cuerpo.push("_An\u00e1lisis asistido por IA_");
   } else {
@@ -235,6 +237,9 @@ function revisarCasoConIa_(e, coincidencias, cfg) {
     var tratamiento = itemsIa_(salida.tratamiento, esquemas);
     var diasIa = tablas.encabezadoDias ? itemsIa_(salida.dias, esquemas).filter(function(d) { return d.dias; }) : [];
     if (tratamiento.length === 0 && diasIa.length === 0) { Logger.log("Revision IA sin resultado: respuesta sin antimicrobianos de la solicitud."); return null; }
+    // Tratamiento en rojo (del modelo o de las tablas): sus dias no se valoran.
+    var rojos = tablas.rojos.concat(tratamiento.filter(function(t) { return t.nivel === 2; }).map(function(t) { return t.nombre; }));
+    diasIa.forEach(function(d) { if (rojos.indexOf(d.nombre) > -1) { d.nivel = -1; d.motivo = TEXTO_DIAS_SIN_VALORAR; } });
     var nivel = 0;
     tratamiento.concat(diasIa).forEach(function(x) { if (x.nivel > nivel) nivel = x.nivel; });
     // Piso: una regla de espectro de las tablas no se puede rebajar.

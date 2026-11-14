@@ -677,6 +677,8 @@ function sinAislamiento(microorganismo) {
 }
 
 // Redaccion de apoyo (sugerencia, no veredicto): decision del referente PROA, 2026-11-14.
+// Dias de un antimicrobiano cuyo tratamiento esta en rojo: no se valoran (linea neutra, sin semaforo).
+var TEXTO_DIAS_SIN_VALORAR = 'la duración no se valora mientras se revalúa el tratamiento';
 var ETIQUETA_NIVEL = ['acorde con la referencia', 'se sugiere verificar', 'se sugiere revaluar'];
 
 // Veredicto de un antimicrobiano frente al aislamiento y el foco (CONFIG.INDICACIONES y REGLAS_ESPECTRO).
@@ -721,17 +723,19 @@ function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, es
 // { lineas, nivel (-1 sin criterio, 0 pertinente, 1 verificar, 2 intervenir), espectroRojo (una regla de
 // espectro descarta algun antimicrobiano) }. IA_PROA.gs lo usa como referencia y como piso del veredicto.
 function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas) {
-  var vacio = { lineas: [], nivel: -1, espectroRojo: false, encabezadoDias: '' };
+  var vacio = { lineas: [], nivel: -1, espectroRojo: false, encabezadoDias: '', rojos: [] };
   if (!CONFIG.PERTINENCIA_ACTIVA) return vacio;
   var E = function(cp) { return String.fromCodePoint(cp); };
   var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
   var sindrome = sindromePara(diagnosticoCrudo, obtenerPertinencia());
-  var peor = -1, tratamiento = [], dias = [], espectroRojo = false;
+  var peor = -1, tratamiento = [], dias = [], espectroRojo = false, rojos = [];
+  var neutro = E(0x26AA);
+  var sinValorar = function(am, n) { dias.push(neutro + ' ' + am.nombre + ' ' + formatoNumero(n, 0) + ' d: ' + TEXTO_DIAS_SIN_VALORAR); };
   var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
 
   esquemas.forEach(function(am) {
     var v = veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorganismo);
-    if (v) { marcar(tratamiento, v.nivel, am.nombre + ': ' + v.texto); if (v.nivel === 2) espectroRojo = true; }
+    if (v) { marcar(tratamiento, v.nivel, am.nombre + ': ' + v.texto); if (v.nivel === 2) { espectroRojo = true; rojos.push(am.nombre); } }
   });
   if (tipoIndicacion === 'Etiológico' && sinAislamiento(microorganismo)) {
     marcar(tratamiento, 1, 'Indicación etiológica sin microorganismo registrado: se sugiere verificar');
@@ -743,6 +747,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
     encabezadoDias = 'Días · profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)';
     conDias.forEach(function(am) {
       var n = numeroONulo(am.dias);
+      if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
       if (n > 1) marcar(dias, 2, am.nombre + ' ' + formatoNumero(n, 0) + ' d: supera las 24 h de la profilaxis; se sugiere revaluar');
       else marcar(dias, 0, am.nombre + ' ' + formatoNumero(n, 0) + ' d: dentro de la referencia');
     });
@@ -751,6 +756,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
     encabezadoDias = 'Días · ' + sindrome.sindrome + ': referencia ' + rango + ' d (' + sindrome.fuente + ')';
     conDias.forEach(function(am) {
       var n = numeroONulo(am.dias);
+      if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
       if (n > sindrome.max) {
         // el doble de la referencia o mas: rojo
         marcar(dias, n >= 2 * sindrome.max ? 2 : 1, am.nombre + ' ' + formatoNumero(n, 0) + ' d: supera la referencia; se sugiere revaluar la duración' + (sindrome.nota ? ' · ' + sindrome.nota : ''));
@@ -768,7 +774,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   tratamiento.forEach(function(l) { lineas.push(l); });
   if (encabezadoDias) lineas.push(E(0x1F4CF) + ' ' + encabezadoDias);
   dias.forEach(function(l) { lineas.push(l); });
-  return { lineas: lineas, nivel: peor, espectroRojo: espectroRojo, encabezadoDias: encabezadoDias };
+  return { lineas: lineas, nivel: peor, espectroRojo: espectroRojo, encabezadoDias: encabezadoDias, rojos: rojos };
 }
 
 /* =====================================================================
