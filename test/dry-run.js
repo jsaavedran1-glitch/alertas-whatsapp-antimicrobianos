@@ -456,7 +456,8 @@ prueba('tablas: Candida solo en orina, antifungico en foco bacteriano y caspofun
   var l = analisisPertinencia('N390', 'Etiológico', 'CANDIDA AURIS', ams, { cultivos: 'UROCULTIVO' });
   assert.strictEqual(l.nivel, 1);
   incluye(l.lineas.join('\n'), '🟡 CASPOFUNGINA 50, 70: se sugiere verificar · Candida solo en urocultivo suele ser colonización');
-  incluye(l.lineas.join('\n'), '⚪ CASPOFUNGINA 50, 70 7 d: la referencia de este foco es bacteriana y no aplica al antifúngico');
+  incluye(l.lineas.join('\n'), '⚪ CASPOFUNGINA 50, 70 7 d: sin duración de referencia para un antifúngico en este foco');
+  noIncluye(l.lineas.join('\n'), 'Infección urinaria complicada'); assert.strictEqual(l.encabezadoDias, '');
   noIncluye(l.lineas.join('\n'), 'dentro de la referencia');
   l = analisisPertinencia('N390', 'Etiológico', 'CANDIDA AURIS', ams, { cultivos: 'HEMOCULTIVO, UROCULTIVO' }).lineas.join('\n');
   incluye(l, '🟢 CASPOFUNGINA 50, 70: acorde con la referencia');

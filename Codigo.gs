@@ -801,6 +801,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
     marcar(tratamiento, 1, 'Indicación etiológica sin microorganismo registrado: se sugiere verificar');
   }
 
+  var soloAntifungico = 0;
   var conDias = esquemas.filter(function(am) { var n = numeroONulo(am.dias); return n !== null && n > 0; });
   var encabezadoDias = '';
   if (tipoIndicacion === 'Profiláctico') {
@@ -818,7 +819,8 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
       var n = numeroONulo(am.dias);
       if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
       if (esAntifungico(am.nombre) && CONFIG.SINDROMES_FUNGICOS.indexOf(sindrome.clave) === -1) {
-        dias.push(neutro + ' ' + etiquetaDias(am, n) + ': la referencia de este foco es bacteriana y no aplica al antifúngico');
+        dias.push(neutro + ' ' + etiquetaDias(am, n) + ': sin duración de referencia para un antifúngico en este foco');
+        soloAntifungico++;
         return;
       }
       var total = am.diasAcumulados > n ? am.diasAcumulados : n;
@@ -833,7 +835,9 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
     encabezadoDias = 'Días · ' + sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')';
   }
 
-  if (peor < 0 && !encabezadoDias) return vacio;
+  // Si ninguna linea de dias se comparo con la referencia bacteriana, esa referencia no se muestra.
+  if (soloAntifungico > 0 && soloAntifungico === dias.length) encabezadoDias = '';
+  if (peor < 0 && !encabezadoDias && dias.length === 0) return vacio;
   var titulo = ETIQUETA_NIVEL[Math.max(peor, 0)];
   var lineas = [color[Math.max(peor, 0)] + ' *Pertinencia PROA: ' + titulo + '*'];
   tratamiento.forEach(function(l) { lineas.push(l); });
