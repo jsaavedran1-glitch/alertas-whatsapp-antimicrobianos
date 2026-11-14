@@ -2,7 +2,7 @@
 
 Fichas cortas de los microorganismos que aparecen en el campo "Microorganismo aislado" del formulario. Las usa la revisión asistida por IA (`IA_PROA.gs`) como referencia, junto con `antimicrobianos-restringidos.md`. Son apoyo para la revisión del QF: **no reemplazan el antibiograma ni el concepto de Infectología**, y deben ser validadas por el comité PROA.
 
-**Estado de cada ficha.** V = contrastada en esta revisión (2026-11-14) con la fuente o un resumen de ella; G = conocimiento general de referencia, sin contrastar en esta revisión.
+**Estado de cada ficha.** V = contrastada el 2026-11-14 con la fuente o un resumen de ella; G = conocimiento general de referencia, sin contrastar en esta revisión.
 
 ## Qué se ha aislado (1.003 solicitudes de abril-mayo y octubre de 2026)
 
@@ -29,30 +29,30 @@ El formulario no trae antibiograma: el mecanismo de resistencia solo se conoce s
 ### 1. *Klebsiella pneumoniae*
 - **Qué es:** enterobacteria; ITU, neumonía, bacteriemia e infección intraabdominal, con frecuencia asociada a la atención en salud.
 - **Resistencia:** intrínseca a ampicilina. Adquirida: BLEE, carbapenemasas KPC (serina, clase A), NDM (metalo, clase B) y OXA-48.
-- **Tratamiento según mecanismo (IDSA 2024):** sensible: betalactámico según antibiograma (ceftriaxona). BLEE: carbapenémico (ertapenem si no hay choque ni Pseudomonas; meropenem en paciente crítico); en ITU, quinolona o TMP-SMX si es sensible. KPC: ceftazidima/avibactam. NDM u otra metalo-betalactamasa: ceftazidima/avibactam **más** aztreonam. KPC + NDM: se trata como NDM.
-- **Restringidos:** ertapenem pertinente en BLEE; ceftazidima/avibactam solo con carbapenemasa documentada o sospecha fundada; polimixina B y tigeciclina como rescate en combinación.
-- **Estado:** V para BLEE y metalo-betalactamasas (resumen de IDSA 2024); G para KPC.
+- **Tratamiento según mecanismo (IDSA 2026):** sensible: betalactámico según antibiograma (ceftriaxona). BLEE: en ITU complicada, TMP-SMX o quinolona si es sensible, y carbapenémico si no se pueden usar; fuera de la vía urinaria, carbapenémico (ertapenem en paciente estable; meropenem o imipenem en paciente crítico o con hipoalbuminemia). KPC: ceftazidima/avibactam (también meropenem/vaborbactam o imipenem/relebactam). OXA-48: ceftazidima/avibactam. NDM u otra metalo-betalactamasa: aztreonam/avibactam o cefiderocol; si no hay, ceftazidima/avibactam **más** aztreonam. KPC + NDM: se trata como NDM.
+- **Restringidos:** ertapenem pertinente en BLEE; ceftazidima/avibactam solo con carbapenemasa documentada o sospecha fundada; tigeciclina no se sugiere en bacteriemia ni ITU por enterobacterias resistentes a carbapenémicos; la combinación con polimixina no se sugiere de rutina.
+- **Estado:** V (texto de la guía IDSA 2026).
 
 ### 2. *Escherichia coli*
 - **Qué es:** primera causa de ITU y de bacteriemia de foco urinario o abdominal.
 - **Resistencia:** BLEE frecuente; carbapenemasas raras.
 - **Tratamiento:** sensible ("multisensible"): cefalosporina de 1.ª-3.ª generación u otro agente según antibiograma; un restringido no se justifica. BLEE: en pielonefritis o ITU complicada, TMP-SMX o quinolona si es sensible; carbapenémico cuando la resistencia lo impide o hay bacteriemia (ertapenem en paciente estable).
 - **Restringidos:** ertapenem pertinente en BLEE; ceftazidima/avibactam no se justifica sin carbapenemasa.
-- **Estado:** V (resumen de IDSA 2024).
+- **Estado:** V (texto de la guía IDSA 2026).
 
 ### 3. *Pseudomonas aeruginosa*
 - **Qué es:** bacilo gramnegativo no fermentador; neumonía asociada a ventilador, ITU asociada a sonda, quemados, neutropenia.
 - **Resistencia intrínseca:** ertapenem, ceftriaxona, ampicilina/sulbactam, tigeciclina.
-- **Tratamiento:** sensible ("multisensible"): piperacilina/tazobactam, cefepime, ceftazidima o meropenem; no requiere combinación ni restringido. Resistente a carbapenémicos pero sensible a otro betalactámico: ese betalactámico a dosis alta en infusión extendida (IDSA 2024). Difícil de tratar (DTR): ceftolozano/tazobactam o ceftazidima/avibactam.
+- **Tratamiento (IDSA 2026):** sensible ("multisensible"): piperacilina/tazobactam, cefepime, ceftazidima o meropenem; no requiere combinación ni restringido. Difícil de tratar (DTR): ceftazidima/avibactam, ceftolozano/tazobactam o imipenem/relebactam (ceftolozano/tazobactam de preferencia en neumonía; cefiderocol también en ITU y si produce metalo-betalactamasa). Si se necesita una polimixina fuera de la vía urinaria, polimixina B antes que colistina.
 - **Restringidos:** ertapenem y tigeciclina **no** sirven; ceftazidima/avibactam solo en multirresistente documentada; polimixina B como rescate.
-- **Estado:** V para infusión extendida (resumen de IDSA 2024); G para DTR.
+- **Estado:** V (texto de la guía IDSA 2026).
 
 ### 4. *Enterobacter cloacae*, *Citrobacter freundii* (grupo AmpC)
 - **Qué son:** enterobacterias con betalactamasa AmpC cromosómica inducible.
 - **Resistencia:** la AmpC puede desreprimirse durante el tratamiento con ceftriaxona o ceftazidima, aunque el antibiograma inicial las muestre sensibles.
-- **Tratamiento (IDSA 2024):** cefepime; carbapenémico si hay BLEE asociada o resistencia a cefepime.
+- **Tratamiento (IDSA 2026):** cefepime si la CIM es ≤ 8 µg/mL y no hay BLEE; carbapenémico si hay BLEE asociada o resistencia a cefepime. Evitar ceftriaxona y ceftazidima aunque el antibiograma inicial las muestre sensibles.
 - **Restringidos:** ertapenem aceptable si no hay alternativa; ceftazidima/avibactam no se justifica sin carbapenemasa.
-- **Estado:** V (resumen de IDSA 2024).
+- **Estado:** V (texto de la guía IDSA 2026).
 
 ### 5. *Serratia marcescens*
 - **Qué es:** enterobacteria nosocomial; bacteriemia asociada a catéter, neumonía, ITU.
@@ -64,9 +64,9 @@ El formulario no trae antibiograma: el mecanismo de resistencia solo se conoce s
 ### 6. *Acinetobacter baumannii*
 - **Qué es:** cocobacilo gramnegativo nosocomial; neumonía asociada a ventilador y bacteriemia en UCI; a menudo colonizante.
 - **Resistencia intrínseca:** ertapenem, aztreonam. Resistencia a carbapenémicos (CRAB) frecuente.
-- **Tratamiento del CRAB (IDSA 2024):** sulbactam/durlobactam con un carbapenémico; si no hay, ampicilina/sulbactam a dosis alta en combinación con polimixina B, tigeciclina o minociclina.
+- **Tratamiento del CRAB (IDSA 2026):** sulbactam/durlobactam con imipenem o meropenem; alternativas: cefiderocol o polimixina B, siempre con otro agente; ampicilina/sulbactam a dosis alta solo como puente. En neumonía nosocomial por *Acinetobacter*, la guía IDSA/ATS 2016 recomienda no usar tigeciclina.
 - **Restringidos:** polimixina B y tigeciclina pertinentes en CRAB, en combinación; ertapenem no sirve.
-- **Estado:** V para sulbactam/durlobactam (resumen de IDSA 2024); G para la combinación alternativa.
+- **Estado:** V (texto de la guía IDSA 2026; la alternativa con polimixina B, por resumen).
 
 ### 7. *Staphylococcus aureus*
 - **Qué es:** piel y tejidos blandos, bacteriemia, endocarditis, osteomielitis, neumonía.
@@ -93,10 +93,10 @@ El formulario no trae antibiograma: el mecanismo de resistencia solo se conoce s
 ### 10. *Candida auris*
 - **Qué es:** levadura multirresistente de transmisión hospitalaria; candidemia en UCI; persiste en superficies y coloniza piel. Exige aislamiento de contacto y notificación.
 - **Resistencia:** casi siempre a fluconazol; variable a anfotericina B; creciente a equinocandinas.
-- **Tratamiento (CDC):** equinocandina (caspofungina) como inicio en adultos y niños mayores de 2 meses; anfotericina B liposomal si hay resistencia a equinocandinas o no hay mejoría a los 5 días. En menores de 2 meses, anfotericina B deoxicolato. **No** se trata la colonización ni el aislamiento en sitios no invasivos sin infección.
-- **Duración:** candidemia, 14 días desde el primer hemocultivo negativo (IDSA 2016).
+- **Tratamiento (CDC):** equinocandina como inicio en adultos y niños mayores de 2 meses (caspofungina 70 mg de carga y luego 50 mg/día; micafungina 100 mg/día; anidulafungina 200 mg de carga y luego 100 mg/día); anfotericina B liposomal 5 mg/kg/día si hay resistencia a equinocandinas o no hay mejoría a los 5 días. En menores de 2 meses, anfotericina B deoxicolato 1 mg/kg/día. **No** se trata a ningún paciente sin signos o síntomas de infección, incluida la detección en orina o vía respiratoria.
+- **Duración:** candidemia, 2 semanas después del primer hemocultivo negativo y de la resolución de los síntomas (IDSA 2016). **En orina (IDSA 2016):** la candiduria sin síntomas no se trata (salvo riesgo de diseminación) y se retira la sonda; las equinocandinas no alcanzan nivel terapéutico en orina; cistitis por *Candida* resistente a fluconazol: anfotericina B deoxicolato 0,3-0,6 mg/kg/día por 1-7 días.
 - **Restringidos:** caspofungina pertinente; anfotericina B liposomal como segunda línea.
-- **Estado:** V (CDC).
+- **Estado:** V (texto del CDC; IDSA 2016 en parte por resumen del texto).
 
 ### 11. Levaduras sin tipificar ("levaduras", "levaduras en gemación")
 - **Qué son:** informe preliminar; la mayoría son *Candida*. En sangre o líquido estéril se tratan como candidemia hasta tipificar; en orina o esputo suelen ser colonización.
@@ -135,11 +135,11 @@ El formulario no trae antibiograma: el mecanismo de resistencia solo se conoce s
 
 ## Fuentes
 
-- IDSA 2024, *Guidance on the Treatment of Antimicrobial-Resistant Gram-Negative Infections* (Tamma et al., Clin Infect Dis 2024): resúmenes en [Contagion Live](https://www.contagionlive.com/view/idsa-2024-guidance-key-updates-on-managing-antimicrobial-resistant-gram-negative-infections) y [Healio](https://www.healio.com/news/infectious-disease/20240917/idsa-updates-guidance-on-resistant-gramnegative-infections). No se pudo abrir el texto original desde este entorno; la guía está escrita para la epidemiología y disponibilidad de EE. UU. (sulbactam/durlobactam y ceftolozano/tazobactam pueden no estar disponibles en el HDV).
+- IDSA 2026, [*Guidance on the Treatment of Antimicrobial-Resistant Gram-Negative Infections*](https://www.idsociety.org/practice-guideline/amr-guidance/) (publicada el 30 de julio de 2026; reemplaza la versión 2024). Leída en el texto de la guía. Está escrita para la epidemiología y disponibilidad de EE. UU.: aztreonam/avibactam, cefiderocol, sulbactam/durlobactam, ceftolozano/tazobactam, meropenem/vaborbactam e imipenem/relebactam pueden no estar disponibles en el HDV.
 - CDC, [*Clinical Treatment of C. auris infections*](https://www.cdc.gov/candida-auris/hcp/clinical-care).
 - *Management of Staphylococcus aureus Bacteremia: A Review*, [JAMA 2025](https://www.themednet.org/publications/management-of-staphylococcus-aureus-bacteremia-a-review).
 - Enterococo resistente a vancomicina y dosis de daptomicina: [revisión en PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC6454563) (estudios observacionales).
-- IDSA 2016 candidiasis, IDSA 2009 infección asociada a catéter, OPS 2020 histoplasmosis: referencia general, no contrastadas en esta revisión.
+- [IDSA 2016, candidiasis](https://pmc.ncbi.nlm.nih.gov/articles/PMC4725385/), [IDSA 2009, infección asociada a catéter](https://pmc.ncbi.nlm.nih.gov/articles/PMC4039170/), [IDSA/ATS 2016, neumonía nosocomial](https://pmc.ncbi.nlm.nih.gov/articles/PMC4981759/) y [OPS/OMS 2020, histoplasmosis](https://pmc.ncbi.nlm.nih.gov/articles/PMC7918769/): leídas en el texto o en su resumen.
 
 ## Pendiente
 

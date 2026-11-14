@@ -26,7 +26,7 @@ var CONFIG = {
     ['ANFOTERICINA B', 0.25, 1.5, null, null, 'NO', 'Ficha FDA deoxicolato: inicio 0,25 mg/kg/dia, habitual 0,5-1, nunca >1,5 mg/kg/dia. Nefrotoxica (vigilar K y creatinina)'],
     ['ERTAPENEM', 10, 20, 500, 1000, 'SI', 'Ficha FDA Invanz 2020: 1 g c/24 h (>=13 a); 15 mg/kg c/12 h (3 m-12 a, max 1 g/dia); 500 mg/dia si DepCr <=30'],
     ['AZTREONAM', 20, 50, 500, 2000, 'SI', 'Ficha FDA Azactam 2021: 0,5-2 g c/6-12 h (max 8 g/dia); pediatria 30 mg/kg c/6-8 h; mitad de dosis si DepCr 10-30'],
-    ['CEFTAZIDIMA / AVIBACTAM', 30, 65, 940, 2500, 'SI', 'Ficha FDA Avycaz 2024: 2,5 g c/8 h; 1,25 g (DepCr 31-50); 0,94 g c/12-48 h (<=30); pediatria 62,5 mg/kg max 2,5 g. IDSA 2024: infusion 3 h'],
+    ['CEFTAZIDIMA / AVIBACTAM', 30, 65, 940, 2500, 'SI', 'Ficha FDA Avycaz 2024: 2,5 g c/8 h; 1,25 g (DepCr 31-50); 0,94 g c/12-48 h (<=30); pediatria 62,5 mg/kg max 2,5 g. ficha: infusion de 2 h'],
     ['TYGECICLINA', 1, 2.5, 25, 100, 'NO', 'Ficha FDA Tygacil 2025: 100 mg carga, 50 mg c/12 h; 8-11 a 1,2 mg/kg (max 50); Child-Pugh C 25 mg. Dosis alta 200/100 fuera de ficha'],
     ['DORIPENEM', null, null, 250, 1000, 'SI', 'Ficha FDA 2009 (producto original descontinuado): 500 mg c/8 h; 250 mg c/8 h (DepCr 30-50) o c/12 h (10-30). Verificar con ficha vigente'],
     ['RIFAMPICINA', 10, 20, 300, 900, 'NO', 'Ficha FDA Rifadin 2024: 600 mg/dia (10 mg/kg); pediatria 10-20 mg/kg max 600; infeccion protesica 600-900 mg/dia (IDSA). Sin ajuste renal; inductor CYP450'],
@@ -66,39 +66,39 @@ var CONFIG = {
   // respaldo (fuentes y estado de verificacion en docs/pertinencia.md).
   // Columnas: clave, prefijos CIE10, palabras clave, sindrome, dias min, dias max, nota, fuente.
   PERTINENCIA_RESPALDO: [
-    ['ITU', 'N39,N10,N12,N30', 'INFECCION URINARIA,VIAS URINARIAS,SEPSIS URINARIA,UROSEPSIS,PIELONEFRITIS,IVU,ITU', 'Infección urinaria complicada / pielonefritis', 5, 7, 'hasta 10-14 d si hay absceso, obstrucción, prostatitis o respuesta lenta', 'IDSA 2025 ITU complicada; ACIN Infectio 2023'],
-    ['BACTERIEMIA', 'A40,A41,A49,R57,R65', 'BACTEREMIA,BACTERIEMIA,SEPSIS,SEPTICEMIA,CHOQUE SEPTICO', 'Bacteriemia / sepsis', 7, 14, '7 d si hay control del foco y no es S. aureus ni Candida; S. aureus: mínimo 14 d desde el hemocultivo negativo (4-6 sem si es complicada)', 'BALANCE, NEJM 2025; Surviving Sepsis 2021'],
-    ['NEUMONIA', 'J12,J13,J14,J15,J16,J17,J18,J22', 'NEUMONIA,BRONCONEUMONIA,NAC', 'Neumonía', 5, 7, 'comunitaria: 5 d con estabilidad clínica; nosocomial o asociada a ventilador: 7 d', 'ACIN NAC 2022; ATS/IDSA 2019; IDSA/ATS 2016'],
+    ['ITU', 'N39,N10,N12,N30', 'INFECCION URINARIA,VIAS URINARIAS,SEPSIS URINARIA,UROSEPSIS,PIELONEFRITIS,IVU,ITU', 'Infección urinaria complicada / pielonefritis', 5, 7, '7 d si no es fluoroquinolona y también con bacteriemia de foco urinario; 10-14 d si se sospecha prostatitis; individualizar con absceso, obstrucción o sonda', 'IDSA 2025 ITU complicada; ACIN Infectio 2023'],
+    ['BACTERIEMIA', 'A40,A41,A49,R57,R65', 'BACTEREMIA,BACTERIEMIA,SEPSIS,SEPTICEMIA,CHOQUE SEPTICO', 'Bacteriemia / sepsis', 7, 14, '7 d si hay control del foco y no es S. aureus ni Candida; S. aureus: mínimo 14 d desde el hemocultivo negativo (4-6 sem si es complicada)', 'BALANCE, NEJM 2025; Surviving Sepsis 2021 (cursos cortos)'],
+    ['NEUMONIA', 'J12,J13,J14,J15,J16,J17,J18,J22', 'NEUMONIA,BRONCONEUMONIA,NAC', 'Neumonía', 5, 7, 'comunitaria: mínimo 5 d y hasta la estabilidad clínica; 7 d si es por SARM o Pseudomonas; nosocomial o asociada a ventilador: 7 d', 'ATS/IDSA 2019; IDSA/ATS 2016; ACIN NAC 2022'],
     ['EMPIEMA', 'J85,J86', 'EMPIEMA,ABSCESO PULMONAR', 'Empiema / absceso pulmonar', 14, 42, '2-3 semanas pueden bastar con drenaje y buena evolución (ensayo SLIM); más si la evolución es lenta', 'SLIM, ERJ Open Res 2023; BTS 2023'],
-    ['INTRAABDOMINAL', 'K35,K36,K37,K57,K63,K65,K80,K81,K83', 'PERITONITIS,APENDICITIS,COLANGITIS,COLECISTITIS,INTRAABDOMINAL,DIVERTICULITIS', 'Infección intraabdominal', 4, 7, '4 d después de un control adecuado del foco; colangitis 4-7 d tras el drenaje', 'STOP-IT, NEJM 2015; SIS 2017; Tokyo 2018'],
+    ['INTRAABDOMINAL', 'K35,K36,K37,K57,K63,K65,K80,K81,K83', 'PERITONITIS,APENDICITIS,COLANGITIS,COLECISTITIS,INTRAABDOMINAL,DIVERTICULITIS', 'Infección intraabdominal', 4, 7, '4 d completos después del control del foco dieron el mismo resultado que 8 d', 'STOP-IT, NEJM 2015; SIS 2017'],
     ['PIEL', 'L01,L02,L03,L08,A46', 'CELULITIS,ERISIPELA,PIEL Y TEJIDOS BLANDOS,TEJIDOS BLANDOS,ABSCESO CUTANEO', 'Infección de piel y tejidos blandos', 5, 7, 'extender solo si no hay mejoría; fascitis necrosante: hasta 48-72 h después del último desbridamiento', 'IDSA 2014 piel y tejidos blandos'],
     ['PIE_DIABETICO', '', 'PIE DIABETICO', 'Pie diabético', 7, 14, 'partes blandas 1-2 semanas; osteomielitis 6 semanas sin resección y hasta 3 tras amputación menor con margen positivo', 'IWGDF/IDSA 2023'],
-    ['OSTEOMIELITIS', 'M86,M46', 'OSTEOMIELITIS,ESPONDILODISCITIS,DISCITIS', 'Osteomielitis / espondilodiscitis', 28, 42, '6 semanas; valorar paso a vía oral', 'IDSA 2015 vertebral; OVIVA, NEJM 2019'],
-    ['ARTRITIS', 'M00', 'ARTRITIS SEPTICA', 'Artritis séptica', 14, 28, 'tras drenaje adecuado; las guías clásicas indican 4-6 semanas y menos de 4 se asoció a más recaídas en una cohorte', 'Gjika, Ann Rheum Dis 2019; referencia general'],
+    ['OSTEOMIELITIS', 'M86,M46', 'OSTEOMIELITIS,ESPONDILODISCITIS,DISCITIS', 'Osteomielitis / espondilodiscitis', 42, 42, '6 semanas en total, por vía parenteral u oral de alta biodisponibilidad', 'IDSA 2015 vertebral; OVIVA, NEJM 2019'],
+    ['ARTRITIS', 'M00', 'ARTRITIS SEPTICA', 'Artritis séptica', 14, 28, '2 semanas no fueron inferiores a 4 tras el drenaje, en un ensayo con predominio de mano y muñeca; en articulaciones grandes se usan 4 semanas o más', 'Gjika, Ann Rheum Dis 2019'],
     ['PROTESIS', 'T84', 'PROTESIS ARTICULAR,PERIPROTESICA', 'Infección de prótesis articular', 42, 84, '6 semanas no fueron no inferiores a 12 (18,1 % frente a 9,4 % de infección persistente)', 'DATIPO, NEJM 2021'],
     ['ENDOCARDITIS', 'I33,I38,I39', 'ENDOCARDITIS', 'Endocarditis infecciosa', 14, 42, 'válvula nativa 2-6 semanas; válvula protésica 6 semanas o más, contadas desde el primer hemocultivo negativo', 'ESC 2023'],
-    ['CATETER', 'T82', 'ASOCIADA A CATETER,INFECCION DE CATETER', 'Bacteriemia asociada a catéter', 5, 14, 'estafilococo coagulasa negativo 5-7 d con retiro del catéter; gramnegativos 7-14 d; S. aureus y Candida mínimo 14 d', 'IDSA 2009'],
+    ['CATETER', 'T82', 'ASOCIADA A CATETER,INFECCION DE CATETER', 'Bacteriemia asociada a catéter', 5, 14, 'con retiro del catéter: estafilococo coagulasa negativo 5-7 d, enterococo y gramnegativos 7-14 d, S. aureus mínimo 14 d; 4-6 semanas si la bacteriemia persiste más de 72 h tras el retiro', 'IDSA 2009'],
     ['MENINGITIS', 'G00,G01,G03', 'MENINGITIS', 'Meningitis bacteriana', 7, 21, 'meningococo 5-7 d; neumococo 10-14 d; Listeria y bacilos gramnegativos 21 d', 'ESCMID 2016'],
     ['ABSCESO_CEREBRAL', 'G06,G07', 'ABSCESO CEREBRAL', 'Absceso cerebral', 42, 56, '6-8 semanas IV', 'ESCMID 2023'],
-    ['CANDIDEMIA', 'B37', 'CANDIDEMIA,CANDIDIASIS INVASIVA,FUNGEMIA', 'Candidemia / candidiasis invasiva', 14, 21, '14 d contados desde el primer hemocultivo negativo, sin focos metastásicos', 'IDSA 2016; ACIN candidiasis'],
+    ['CANDIDEMIA', 'B37', 'CANDIDEMIA,CANDIDIASIS INVASIVA,FUNGEMIA', 'Candidemia / candidiasis invasiva', 14, 21, '2 semanas después del primer hemocultivo negativo y de la resolución de los síntomas, sin focos metastásicos', 'IDSA 2016'],
     ['CRIPTOCOCOSIS', 'B45', 'CRIPTOCOC,CRYPTOCOC', 'Criptococosis (inducción)', 1, 14, 'OMS 2022: dosis única de anfotericina B liposomal 10 mg/kg más 14 d de flucitosina y fluconazol', 'OMS 2022'],
     ['HISTOPLASMOSIS', 'B39', 'HISTOPLASM', 'Histoplasmosis (inducción con anfotericina)', 14, 14, 'anfotericina B liposomal 3 mg/kg por 2 semanas y luego itraconazol 12 meses', 'OPS/OMS 2020'],
     ['ASPERGILOSIS', 'B44', 'ASPERGIL', 'Aspergilosis invasiva', 42, 84, 'mínimo 6-12 semanas', 'IDSA 2016'],
     ['NEUTROPENIA', 'D70', 'NEUTROPENIA FEBRIL', 'Neutropenia febril', '', '', 'sin foco: se puede suspender tras 72 h o más de tratamiento si lleva 48 h afebril y estable, sin esperar la recuperación de neutrófilos; con foco, la duración del foco', 'ECIL-4'],
-    ['ISO', 'T81', 'SITIO OPERATORIO,HERIDA QUIRURGICA,CONSECUTIVA A PROCEDIMIENTO', 'Infección del sitio operatorio', '', '', 'superficial: drenaje y 5-7 d si hay compromiso sistémico; órgano o espacio: según el foco', 'Referencia general (IDSA 2014)'],
+    ['ISO', 'T81', 'SITIO OPERATORIO,HERIDA QUIRURGICA,CONSECUTIVA A PROCEDIMIENTO', 'Infección del sitio operatorio', '', '', 'el tratamiento es abrir y drenar; antibiótico sistémico en curso breve solo si hay respuesta sistémica importante; órgano o espacio: según el foco', 'IDSA 2014'],
     ['TUBERCULOSIS', 'A15,A16,A17,A18,A19', 'TUBERCULOSIS,TBC', 'Tuberculosis', '', '', 'esquema de meses: la duración no se evalúa aquí', 'Programa nacional de TB']
   ],
   // Reglas de espectro/indicacion. am: nombre contenido en el antimicrobiano; sindromes: claves de la tabla
   // de duracion; micro: expresion regular sobre el aislamiento (mayusculas, sin tildes); soloSiUnico: solo si
   // es el unico antimicrobiano de la solicitud; salvoCon: no avisar si la solicitud incluye ese antimicrobiano.
   REGLAS_ESPECTRO: [
-    { am: 'DAPTOMICINA', sindromes: ['NEUMONIA', 'EMPIEMA'], mensaje: 'DAPTOMICINA no está indicada en neumonía: el surfactante pulmonar la inactiva (ficha técnica)' },
-    { am: 'TYGECICLINA', sindromes: ['BACTERIEMIA', 'NEUMONIA', 'CATETER'], mensaje: 'TIGECICLINA: concentraciones séricas bajas y advertencia de mayor mortalidad (FDA); en bacteriemia o neumonía solo si no hay alternativa' },
+    { am: 'DAPTOMICINA', sindromes: ['NEUMONIA', 'EMPIEMA'], mensaje: 'DAPTOMICINA no está indicada en neumonía: el surfactante pulmonar la inactiva (ficha técnica; IDSA/ATS 2016)' },
+    { am: 'TYGECICLINA', sindromes: ['BACTERIEMIA', 'NEUMONIA', 'CATETER', 'ITU'], mensaje: 'TIGECICLINA no se sugiere en bacteriemia ni en infección urinaria (IDSA 2026) y no está indicada en neumonía nosocomial; advertencia de mayor mortalidad (ficha técnica): solo si no hay alternativa' },
     { am: 'ERTAPENEM', micro: 'PSEUDOMONA|ACINETOBACTER|ENTEROCOC', mensaje: 'ERTAPENEM no tiene actividad frente a Pseudomonas, Acinetobacter ni Enterococcus (ficha técnica)' },
     { am: 'AZTREONAM', micro: 'STAPH|ESTAF|STREPTO|ESTREPTO|ENTEROCOC|GRAM ?POSITIV|SAMR|MRSA', soloSiUnico: true, mensaje: 'AZTREONAM no tiene actividad frente a grampositivos: verificar cobertura' },
     { am: 'CASPOFUNGINA', micro: 'CRYPTOCOC|CRIPTOCOC|MUCOR|RHIZOPUS|HISTOPLASM', mensaje: 'CASPOFUNGINA no tiene actividad frente a Cryptococcus, mucorales ni Histoplasma' },
     { am: 'CASPOFUNGINA', sindromes: ['CRIPTOCOCOSIS', 'HISTOPLASMOSIS'], mensaje: 'CASPOFUNGINA no tiene actividad frente a Cryptococcus ni Histoplasma' },
-    { am: 'CEFTAZIDIMA / AVIBACTAM', micro: 'NDM|METALO|MBL|\\bVIM\\b|\\bIMP\\b', salvoCon: 'AZTREONAM', mensaje: 'CEFTAZIDIMA/AVIBACTAM sola no cubre metalo-betalactamasas (NDM, VIM, IMP): asociar aztreonam (IDSA 2024)' },
+    { am: 'CEFTAZIDIMA / AVIBACTAM', micro: 'NDM|METALO|MBL|\\bVIM\\b|\\bIMP\\b', salvoCon: 'AZTREONAM', mensaje: 'CEFTAZIDIMA/AVIBACTAM sola no cubre metalo-betalactamasas (NDM, VIM, IMP): asociar aztreonam (IDSA 2026)' },
     { am: 'POLIMIXINA B', micro: 'PROTEUS|SERRATIA|MORGANELLA|PROVIDENCIA|BURKHOLDERIA', mensaje: 'POLIMIXINA B: Proteus, Serratia, Morganella, Providencia y Burkholderia son intrínsecamente resistentes' },
     { am: 'VANCOMICINA', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|PSEUDOMONA|ACINETOBACTER|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|GRAM ?NEGATIV|KPC|BLEE', soloSiUnico: true, mensaje: 'VANCOMICINA no tiene actividad frente a gramnegativos: verificar cobertura' },
     { am: 'LINEZOLID', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|PSEUDOMONA|ACINETOBACTER|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|GRAM ?NEGATIV|KPC|BLEE', soloSiUnico: true, mensaje: 'LINEZOLID no tiene actividad frente a gramnegativos: verificar cobertura' },
@@ -758,7 +758,8 @@ function veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorgan
   if (ind.con && nombres.some(function(n) { return n.indexOf(ind.con) > -1; })) return { nivel: 0, texto: ETIQUETA_NIVEL[0] + ' · combinación dentro de su indicación (' + ind.reserva + ')' };
   var cultivos = normalizarTexto(contexto && contexto.cultivos);
   if (esAntifungico(nombre) && /CANDIDA|LEVADURA/.test(micro) && /URO|ORINA/.test(cultivos) && !/HEMO|SANGRE/.test(cultivos)) {
-    return { nivel: 1, texto: ETIQUETA_NIVEL[1] + ' · Candida solo en urocultivo suele ser colonización; convendría confirmar infección, tomar hemocultivos y retirar o cambiar la sonda (IDSA 2016; CDC)' };
+    return { nivel: 1, texto: ETIQUETA_NIVEL[1] + ' · Candida solo en urocultivo suele ser colonización y sin síntomas no se trata; convendría confirmar infección, tomar hemocultivos y retirar o cambiar la sonda' +
+      (nombre.indexOf('CASPOFUNGINA') > -1 ? '; las equinocandinas no alcanzan nivel terapéutico en orina' : '') + ' (IDSA 2016; CDC)' };
   }
   if (!sinAislamiento(microorganismo)) {
     if ((new RegExp(ind.micro)).test(micro)) return { nivel: 0, texto: ETIQUETA_NIVEL[0] + ' · el aislamiento registrado está dentro de su indicación' };

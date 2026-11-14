@@ -4,9 +4,9 @@ Fichas de las 13 moléculas que vigilaba el bot PROA ALERTAS al 2026-10-30 (pest
 
 **Cómo leerlas.** Cada ficha trae la dosis autorizada por administración (que es lo que evalúa el bot: el formulario registra dosis, vía, frecuencia y días por separado), la regla que usa el bot, qué parte está verificada contra una fuente primaria y qué no. Los rangos del bot son deliberadamente amplios: su función es marcar valores atípicos para que el farmacéutico revise, no definir la dosis correcta. **La validación clínica final es del QF del Servicio Farmacéutico**; estas fichas son su insumo, no su reemplazo.
 
-**Fuentes.** Fichas técnicas FDA (DailyMed / Drugs@FDA) y EMA (EPAR/SmPC), consenso ASHP/IDSA/PIDS/SIDP 2020 de vancomicina, consenso internacional de polimixinas 2019, guía IDSA 2024 de gramnegativos resistentes, protocolo ACIN de candidiasis sistémica, Manual MSD versión para profesionales (contraste en español) y la guía OPS/OMS 2024 *Intervenciones para la optimización del uso de antimicrobianos* (criterios PROA, no dosis). Lo que se marca como "no verificado" proviene de conocimiento general y debe confirmarse en la ficha INVIMA del producto que compra el HDV o en la guía OPS *Tratamiento de las enfermedades infecciosas 2024-2026*.
+**Fuentes.** Fichas técnicas FDA (DailyMed / Drugs@FDA) y EMA (EPAR/SmPC), consenso ASHP/IDSA/PIDS/SIDP 2020 de vancomicina, consenso internacional de polimixinas 2019, guía IDSA 2026 de gramnegativos resistentes (reemplaza la de 2024), protocolo ACIN de candidiasis sistémica, Manual MSD versión para profesionales (contraste en español) y la guía OPS/OMS 2024 *Intervenciones para la optimización del uso de antimicrobianos* (criterios PROA, no dosis). Lo que se marca como "no verificado" proviene de conocimiento general y debe confirmarse en la ficha INVIMA del producto que compra el HDV o en la guía OPS *Tratamiento de las enfermedades infecciosas 2024-2026*.
 
-**Clasificación AWaRe.** Las categorías indicadas corresponden a la lista OMS 2023 (Access/Watch/Reserve) según conocimiento general; no se pudo abrir el anexo C de la lista desde este entorno, así que conviene confirmarlas allí. Los antifúngicos no tienen categoría AWaRe.
+**Clasificación AWaRe.** Verificada el 2026-11-14 en el [portal AWaRe de la OMS](https://aware.essentialmeds.org/list): Reserve para aztreonam, ceftazidima/avibactam, daptomicina, linezolid, tigeciclina y polimixina B; Watch para ertapenem, doripenem, vancomicina y rifampicina (las seis primeras de esta lista, en el texto de la página; las demás, por el resumen de la página). Los antifúngicos no tienen categoría AWaRe.
 
 ## Resumen
 
@@ -20,7 +20,7 @@ Fichas de las 13 moléculas que vigilaba el bot PROA ALERTAS al 2026-10-30 (pest
 | Anfotericina B liposomal | Poliénico · — | 3–5 mg/kg/día (6 en criptococo; hasta 10 en mucormicosis) | Igual | Menos nefrotóxica | 3–10 mg/kg | Ficha FDA, ACIN |
 | Ertapenem | Carbapenémico · Watch | 1 g c/24 h | 3 m–12 a: 15 mg/kg c/12 h (máx. 1 g/día) | 500 mg/día si DepCr ≤ 30 | 500–1000 mg **o** 10–20 mg/kg | Ficha FDA |
 | Aztreonam | Monobactámico · Reserve | 1–2 g c/8–12 h; grave 2 g c/6–8 h (máx. 8 g/día) | 30 mg/kg c/6–8 h (máx. 120 mg/kg/día) | Mitad de dosis si DepCr 10–30 | 500–2000 mg **o** 20–50 mg/kg | Ficha FDA |
-| Ceftazidima/avibactam | Cefalosporina + inhibidor · Reserve | 2,5 g c/8 h en infusión de 2–3 h | ≥ 2 años: 62,5 mg/kg (máx. 2,5 g) c/8 h | 1,25 g c/8 h (DepCr 31–50); 0,94 g c/12–48 h (≤ 30) | 940–2500 mg **o** 30–65 mg/kg | Ficha FDA, IDSA 2024, ACIN |
+| Ceftazidima/avibactam | Cefalosporina + inhibidor · Reserve | 2,5 g c/8 h en infusión de 2–3 h | ≥ 2 años: 62,5 mg/kg (máx. 2,5 g) c/8 h | 1,25 g c/8 h (DepCr 31–50); 0,94 g c/12–48 h (≤ 30) | 940–2500 mg **o** 30–65 mg/kg | Ficha FDA, IDSA 2026, ACIN |
 | Tigeciclina | Glicilciclina · Reserve | 100 mg carga, luego 50 mg c/12 h | 8–11 a: 1,2 mg/kg c/12 h (máx. 50 mg); ≥ 12 a: 50 mg c/12 h | No (hepático: 25 mg c/12 h en Child-Pugh C) | 25–100 mg **o** 1–2,5 mg/kg | Ficha FDA/EMA |
 | Doripenem | Carbapenémico · Watch | 500 mg c/8 h | No autorizado | 250 mg c/8 h (DepCr 30–50); 250 mg c/12 h (10–30) | 250–1000 mg | Ficha FDA 2009 (no en DailyMed actual) |
 | Rifampicina | Rifamicina · Watch | 600 mg/día (10 mg/kg); en infección protésica 600–900 mg/día como adyuvante | 10–20 mg/kg/día, máx. 600 mg | No | 300–900 mg **o** 10–20 mg/kg | Ficha FDA, MSD |
@@ -138,25 +138,25 @@ Vancomicina concentra el 73 % de las alertas de octubre; en esa muestra el 67 % 
 
 - **Clase / AWaRe:** monobactámico · Reserve.
 - **Para qué se usa:** gramnegativos aerobios incluida *Pseudomonas*; sin actividad frente a grampositivos ni anaerobios. Útil en alergia grave a betalactámicos (no comparte reactividad cruzada salvo con ceftazidima) y, combinado con ceftazidima/avibactam, para enterobacterias productoras de metalo-betalactamasas (NDM).
-- **Dosis adulto:** 1–2 g c/8–12 h; infección grave 2 g c/6–8 h; máx. 8 g/día. En la combinación con ceftazidima/avibactam: 2 g c/8 h en infusión de 3 h (IDSA 2024).
+- **Dosis adulto:** 1–2 g c/8–12 h; infección grave 2 g c/6–8 h; máx. 8 g/día. En la combinación con ceftazidima/avibactam: 2 g c/8 h en infusión de 3 h (IDSA 2026).
 - **Pediatría:** 30 mg/kg c/8 h (leve-moderada) o c/6–8 h (grave); máx. 120 mg/kg/día.
 - **Ajuste:** DepCr 10–30 mL/min: carga 1–2 g y luego la mitad de la dosis; < 10: un cuarto.
 - **Monitoreo:** pocas toxicidades; elevación de transaminasas; usar siempre con cobertura para grampositivos/anaerobios si se sospechan.
 - **Por qué está restringida:** reserva para multirresistentes y alérgicos; en Colombia su uso principal es el rescate de NDM.
 - **Regla del bot:** 500–2000 mg **o** 20–50 mg/kg.
-- **Fuentes:** [Azactam, ficha FDA 2021](https://www.accessdata.fda.gov/drugsatfda_docs/label/2021/050580Orig1s046lbl.pdf); IDSA 2024, [Guidance on the Treatment of Antimicrobial-Resistant Gram-Negative Infections](https://academic.oup.com/cid/advance-article/doi/10.1093/cid/ciae403/7728556); MSD profesional [monobactámicos](https://www.msdmanuals.com/es/professional/enfermedades-infecciosas/bacterias-y-f%C3%A1rmacos-antibacterianos/monobact%C3%A1micos).
+- **Fuentes:** [Azactam, ficha FDA 2021](https://www.accessdata.fda.gov/drugsatfda_docs/label/2021/050580Orig1s046lbl.pdf); IDSA 2026, [Guidance on the Treatment of Antimicrobial-Resistant Gram-Negative Infections](https://academic.oup.com/cid/advance-article/doi/10.1093/cid/ciae403/7728556); MSD profesional [monobactámicos](https://www.msdmanuals.com/es/professional/enfermedades-infecciosas/bacterias-y-f%C3%A1rmacos-antibacterianos/monobact%C3%A1micos).
 
 ### 9. Ceftazidima/avibactam
 
 - **Clase / AWaRe:** cefalosporina de 3.ª generación + inhibidor de betalactamasas · Reserve.
 - **Para qué se usa:** enterobacterias productoras de KPC, OXA-48, AmpC y BLEE, y *Pseudomonas* multirresistente; neumonía nosocomial, infección intraabdominal y urinaria complicadas. **No cubre** metalo-betalactamasas (NDM) sola: ahí se combina con aztreonam.
-- **Dosis adulto:** 2,5 g (2 g ceftazidima + 0,5 g avibactam) c/8 h en infusión de 2 h (ficha) o 3 h (IDSA 2024, consenso ACIN de carbapenemasas). Revisar cómo registra el formulario la dosis: 2.000 (solo ceftazidima) o 2.500 (total).
+- **Dosis adulto:** 2,5 g (2 g ceftazidima + 0,5 g avibactam) c/8 h en infusión de 2 h (ficha) o 3 h (IDSA, consenso ACIN de carbapenemasas). Revisar cómo registra el formulario la dosis: 2.000 (solo ceftazidima) o 2.500 (total).
 - **Pediatría (≥ 2 años):** 62,5 mg/kg c/8 h, máx. 2,5 g; 3 m–2 a: 62,5 mg/kg c/8 h (ficha FDA).
 - **Ajuste:** DepCr 31–50: 1,25 g c/8 h; 16–30: 0,94 g c/12 h; 6–15: 0,94 g c/24 h; < 6: 0,94 g c/48 h. Mayor mortalidad reportada cuando la dosis no se reajusta al mejorar la función renal (ficha).
 - **Monitoreo:** función renal frecuente (la dosis cambia con ella), alteraciones neurológicas en falla renal con dosis plena, *C. difficile*; resistencia emergente durante el tratamiento (vigilar antibiograma).
 - **Por qué está restringida:** antibiótico de último recurso para carbapenemasas; su protección es prioridad nacional.
 - **Regla del bot:** 940–2500 mg **o** 30–65 mg/kg.
-- **Fuentes:** [Avycaz, DailyMed](https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=d9c2803f-dc9c-4b19-b4a3-8303bc8c15fd); [ficha FDA 2024](https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/206494s012lbl.pdf); IDSA 2024 (arriba); ACIN, [consenso enterobacterales productores de carbapenemasas, *Infectio*](https://www.revistainfectio.org/P_OJS/index.php/infectio/article/download/1130/1269/3816).
+- **Fuentes:** [Avycaz, DailyMed](https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=d9c2803f-dc9c-4b19-b4a3-8303bc8c15fd); [ficha FDA 2024](https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/206494s012lbl.pdf); IDSA 2026 (arriba); ACIN, [consenso enterobacterales productores de carbapenemasas, *Infectio*](https://www.revistainfectio.org/P_OJS/index.php/infectio/article/download/1130/1269/3816).
 
 ### 10. Tigeciclina
 
@@ -218,10 +218,23 @@ Vancomicina concentra el 73 % de las alertas de octubre; en esa muestra el 67 % 
 5. **Errores de digitación detectables:** peso 1 kg con 1.000 mg de vancomicina, 10.000 mg, 100 mg en adulto. El mensaje ahora los hace visibles; una validación mínima en el formulario (peso entre 0,5 y 250 kg) los evitaría desde el origen.
 6. **Pediatría:** las reglas en mg/kg existen para no marcar dosis pediátricas correctas, pero caspofungina y tigeciclina se dosifican por m² o por edad; la aproximación en mg/kg puede marcar un caso correcto. Cuando eso pase, el farmacéutico lo verá en la línea "⚠️ revisar" y nada más.
 
+## Verificación del 2026-11-14 contra fichas técnicas y consensos
+
+Leído en la ficha técnica de EE. UU. (openFDA) o en el consenso indicado:
+
+- **Daptomicina:** 4 mg/kg c/24 h (piel) y 6 mg/kg c/24 h (bacteriemia por *S. aureus*, 2-6 semanas); c/48 h si la depuración es < 30 mL/min; "no está indicada para el tratamiento de la neumonía".
+- **Tigeciclina:** 100 mg y luego 50 mg c/12 h; 25 mg c/12 h en Child-Pugh C. Indicaciones: piel complicada, intraabdominal complicada y neumonía bacteriana de la comunidad; **no** en neumonía nosocomial ni asociada a ventilador. Recuadro de mayor mortalidad: reservar para cuando no haya alternativa. IDSA 2026 no la sugiere en ITU ni en bacteriemia por enterobacterias resistentes a carbapenémicos.
+- **Ertapenem:** 1 g c/24 h desde los 13 años; 500 mg/día si la depuración es ≤ 30; 3 meses a 12 años: 15 mg/kg c/12 h (máx. 1 g/día).
+- **Ceftazidima/avibactam:** 2,5 g c/8 h en infusión de 2 h; 1,25 g c/8 h (depuración 31-50); 0,94 g c/12 h (16-30), c/24 h (6-15) y c/48 h (≤ 5); 2 a 17 años: 62,5 mg/kg (máx. 2,5 g) c/8 h.
+- **Caspofungina:** 70 mg el día 1 y luego 50 mg/día; 70 mg/día con rifampicina; 35 mg/día en Child-Pugh 7-9; pediatría 70 mg/m² y luego 50 mg/m² (máx. 70 mg). La dosis de 70 mg/día en mayores de 80 kg es de la ficha europea.
+- **Linezolid:** 600 mg c/12 h desde los 12 años; 10 mg/kg c/8 h hasta los 11 años.
+- **Aztreonam:** máximo 8 g/día (texto de la ficha); dosis y ajuste renal, por resumen de la ficha.
+- **Polimixina B:** ficha: 15.000-25.000 UI/kg/día, 1 mg = 10.000 UI. [Consenso internacional 2019](https://pmc.ncbi.nlm.nih.gov/articles/PMC7437259/): carga 2,0-2,5 mg/kg, mantenimiento 1,25-1,5 mg/kg c/12 h, **sin** ajuste renal, y de elección frente a colistina en infección invasiva (colistina en ITU baja).
+- **Doripenem:** openFDA no devuelve ficha vigente, lo que concuerda con que el producto original fue descontinuado.
+
 ## Pendientes de verificación
 
-- Categorías AWaRe 2023 contra el anexo C oficial de la OMS.
 - Doripenem con una ficha vigente (genérico) o con la guía OPS 2024-2026.
-- Dosis alta de tigeciclina (200/100 mg) y esquemas de daptomicina 8–12 mg/kg contra las guías que las respaldan (IDSA SARM 2011; IDSA gramnegativos 2024).
+- Dosis alta de tigeciclina (200/100 mg) y esquemas de daptomicina 8–12 mg/kg contra las guías que las respaldan (IDSA SARM 2011; IDSA gramnegativos 2026).
 - Ficha INVIMA de cada producto que compra el HDV (la unidad de polimixina B y la forma de expresar ceftazidima/avibactam dependen del fabricante).
 - Guía institucional de antibióticos del HDV, si existe: manda sobre todo lo anterior.

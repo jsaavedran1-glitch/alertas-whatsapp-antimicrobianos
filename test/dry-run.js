@@ -314,7 +314,7 @@ prueba('pertinencia: veredicto de dias (referencia, exceso, doble, profilaxis)',
   var l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '14')]).join('\n');
   incluye(l, '🔴 *Pertinencia PROA: se sugiere revaluar*');
   incluye(l, '📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)');
-  incluye(l, '🔴 ERTAPENEM 14 d: supera la referencia; se sugiere revaluar la duración · hasta 10-14 d si hay absceso');   // el doble: rojo
+  incluye(l, '🔴 ERTAPENEM 14 d: supera la referencia; se sugiere revaluar la duración · 7 d si no es fluoroquinolona');   // el doble: rojo
   l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '10')]).join('\n');
   incluye(l, '🟡 *Pertinencia PROA: se sugiere verificar*'); incluye(l, '🟡 ERTAPENEM 10 d: supera la referencia; se sugiere revaluar la duración');
   l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '7')]).join('\n');
@@ -322,7 +322,7 @@ prueba('pertinencia: veredicto de dias (referencia, exceso, doble, profilaxis)',
   incluye(l, '🟢 ERTAPENEM: acorde con la referencia · el aislamiento registrado está dentro de su indicación');
   incluye(l, '🟢 ERTAPENEM 7 d: dentro de la referencia'); noIncluye(l, 'supera');
   l = evaluarPertinencia('M869', 'Etiológico', 'S. aureus', [am('DAPTOMICINA', '14')]).join('\n');
-  incluye(l, 'Osteomielitis / espondilodiscitis: referencia 28-42 d'); noIncluye(l, 'supera');   // por debajo del minimo no se marca
+  incluye(l, 'Osteomielitis / espondilodiscitis: referencia 42 d'); noIncluye(l, 'supera');   // por debajo del minimo no se marca
   l = evaluarPertinencia('D70X', 'Empírico', 'Ninguno', [am('CASPOFUNGINA 50, 70', '14')]).join('\n');
   incluye(l, '📏 Días · Neutropenia febril: sin foco'); noIncluye(l, 'supera'); noIncluye(l, 'dentro de la referencia');
   incluye(l, '🟢 CASPOFUNGINA 50, 70: acorde con la referencia para el foco · sin aislamiento, se sugiere revaluar con cultivos');
@@ -341,6 +341,8 @@ prueba('pertinencia: veredicto de tratamiento (fichas y reglas de espectro)', fu
   incluye(ev('J189', 'Etiológico', 'SAMR', ['DAPTOMICINA']), '🔴 DAPTOMICINA: se sugiere revaluar · DAPTOMICINA no está indicada en neumonía');
   incluye(ev('A419', 'Etiológico', 'SAMR', ['DAPTOMICINA']), '🟢 DAPTOMICINA: acorde con la referencia');
   incluye(ev('A419', 'Etiológico', 'Klebsiella KPC', ['TYGECICLINA']), '🔴 TYGECICLINA: se sugiere revaluar · TIGECICLINA');
+  incluye(ev('N390', 'Etiológico', 'Klebsiella KPC', ['TYGECICLINA']), 'TIGECICLINA no se sugiere en bacteriemia ni en infección urinaria (IDSA 2026)');
+  incluye(ev('N390', 'Etiológico', 'CANDIDA AURIS', ['CASPOFUNGINA 50, 70']), 'acorde');   // sin dato de cultivos no aplica la regla de orina
   incluye(ev('N390', 'Etiológico', 'Pseudomonas aeruginosa', ['ERTAPENEM']), 'ERTAPENEM no tiene actividad frente a Pseudomonas');
   noIncluye(ev('N390', 'Etiológico', 'E. coli BLEE', ['ERTAPENEM']), 'se sugiere revaluar ·');
   incluye(ev('G060', 'Etiológico', 'Cryptococcus neoformans', ['CASPOFUNGINA 50, 70']), 'CASPOFUNGINA no tiene actividad frente a Cryptococcus');

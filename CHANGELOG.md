@@ -2,6 +2,15 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.13.0] - 2026-11-14
+
+### Cambiado (revisión contra el texto de las guías y fichas técnicas)
+- **Gramnegativos resistentes:** la referencia pasa a la guía **IDSA 2026** (reemplazó la de 2024): NDM con aztreonam/avibactam o cefiderocol (ceftazidima/avibactam más aztreonam si no hay), KPC y OXA-48 con ceftazidima/avibactam, y tigeciclina no sugerida en ITU ni bacteriemia. La regla de tigeciclina ahora también aplica en ITU.
+- **Tabla de duración:** ITU (IDSA 2025: 5-7 d con fluoroquinolona, 7 d con otro antibiótico o con bacteriemia urinaria, 10-14 d si prostatitis), neumonía (ATS/IDSA 2019 e IDSA/ATS 2016), intraabdominal (STOP-IT), osteomielitis (IDSA 2015: 6 semanas), artritis séptica (Gjika 2019), catéter (IDSA 2009), candidemia (IDSA 2016) y sitio operatorio (IDSA 2014). Requiere `reescribirHojaPertinencia()`.
+- **Candida en orina:** con caspofungina se añade que las equinocandinas no alcanzan nivel terapéutico en orina (IDSA 2016).
+- **Fichas (`docs/`):** categorías AWaRe verificadas en el portal de la OMS; dosis de daptomicina, tigeciclina, ertapenem, ceftazidima/avibactam, caspofungina, linezolid y polimixina B contrastadas con la ficha técnica o el consenso de polimixinas 2019; fichas de microorganismos actualizadas a IDSA 2026, CDC e IDSA 2016.
+- Sin poder leer: ESCMID 2016 (meningitis), BTS 2023 (empiema), SIS 2017 y Tokyo 2018 (duración), ficha de doripenem.
+
 ## [1.12.0] - 2026-11-14
 
 ### Cambiado
