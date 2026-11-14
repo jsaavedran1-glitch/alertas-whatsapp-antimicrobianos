@@ -43,7 +43,57 @@ var CONFIG = {
   // Coherencia de datos: avisos cuando peso, edad o dosis no cuadran entre si (errores de digitacion).
   PESO_MIN_KG: 0.4,
   PESO_MAX_KG: 250,
-  MG_KG_IMPLAUSIBLE: 100
+  MG_KG_IMPLAUSIBLE: 100,
+
+  // ---- Pertinencia: duracion de referencia por sindrome y reglas de espectro ----
+  PERTINENCIA_ACTIVA: true,
+  HOJA_PERTINENCIA: 'PERTINENCIA_DURACION',
+  // Duracion de referencia (dias totales de tratamiento) por sindrome. El diagnostico se ubica por
+  // prefijo CIE10 (gana el mas largo) o, si no hay codigo, por palabra clave del texto (gana la mas
+  // larga). Solo se marca cuando los dias ordenados SUPERAN el maximo; un rango vacio muestra solo la nota.
+  // La lista vigente es la pestana PERTINENCIA_DURACION, que valida y ajusta el comite PROA; esta es el
+  // respaldo (fuentes y estado de verificacion en docs/pertinencia.md).
+  // Columnas: clave, prefijos CIE10, palabras clave, sindrome, dias min, dias max, nota, fuente.
+  PERTINENCIA_RESPALDO: [
+    ['ITU', 'N39,N10,N12,N30', 'INFECCION URINARIA,VIAS URINARIAS,SEPSIS URINARIA,UROSEPSIS,PIELONEFRITIS,IVU,ITU', 'Infección urinaria complicada / pielonefritis', 5, 7, 'hasta 10-14 d si hay absceso, obstrucción, prostatitis o respuesta lenta', 'IDSA 2025 ITU complicada; ACIN Infectio 2023'],
+    ['BACTERIEMIA', 'A40,A41,A49,R57,R65', 'BACTEREMIA,BACTERIEMIA,SEPSIS,SEPTICEMIA,CHOQUE SEPTICO', 'Bacteriemia / sepsis', 7, 14, '7 d si hay control del foco y no es S. aureus ni Candida; S. aureus: mínimo 14 d desde el hemocultivo negativo (4-6 sem si es complicada)', 'BALANCE, NEJM 2025; Surviving Sepsis 2021'],
+    ['NEUMONIA', 'J12,J13,J14,J15,J16,J17,J18,J22', 'NEUMONIA,BRONCONEUMONIA', 'Neumonía', 5, 7, 'comunitaria: 5 d con estabilidad clínica; nosocomial o asociada a ventilador: 7 d', 'ACIN NAC 2022; ATS/IDSA 2019; IDSA/ATS 2016'],
+    ['EMPIEMA', 'J85,J86', 'EMPIEMA,ABSCESO PULMONAR', 'Empiema / absceso pulmonar', 14, 42, 'según drenaje y evolución radiológica', 'Referencia general (BTS 2023)'],
+    ['INTRAABDOMINAL', 'K35,K36,K37,K57,K63,K65,K80,K81,K83', 'PERITONITIS,APENDICITIS,COLANGITIS,COLECISTITIS,INTRAABDOMINAL,DIVERTICULITIS', 'Infección intraabdominal', 4, 7, '4 d después de un control adecuado del foco; colangitis 4-7 d tras el drenaje', 'STOP-IT, NEJM 2015; SIS 2017; Tokyo 2018'],
+    ['PIEL', 'L01,L02,L03,L08,A46', 'CELULITIS,ERISIPELA,PIEL Y TEJIDOS BLANDOS,TEJIDOS BLANDOS,ABSCESO CUTANEO', 'Infección de piel y tejidos blandos', 5, 7, 'extender solo si no hay mejoría; fascitis necrosante: hasta 48-72 h después del último desbridamiento', 'IDSA 2014 piel y tejidos blandos'],
+    ['PIE_DIABETICO', '', 'PIE DIABETICO', 'Pie diabético', 7, 14, 'partes blandas 1-2 sem; osteomielitis 6 sem (3 sem tras amputación con margen positivo)', 'IWGDF/IDSA 2023'],
+    ['OSTEOMIELITIS', 'M86,M46', 'OSTEOMIELITIS,ESPONDILODISCITIS,DISCITIS', 'Osteomielitis / espondilodiscitis', 28, 42, '6 semanas; valorar paso a vía oral', 'IDSA 2015 vertebral; OVIVA, NEJM 2019'],
+    ['ARTRITIS', 'M00', 'ARTRITIS SEPTICA', 'Artritis séptica', 14, 28, 'tras drenaje adecuado', 'Referencia general (Gjika, Ann Rheum Dis 2019)'],
+    ['PROTESIS', 'T84', 'PROTESIS ARTICULAR,PERIPROTESICA', 'Infección de prótesis articular', 42, 84, '12 semanas fue superior a 6 con retención del implante', 'DATIPO, NEJM 2021; IDSA 2013'],
+    ['ENDOCARDITIS', 'I33,I38,I39', 'ENDOCARDITIS', 'Endocarditis infecciosa', 14, 42, '2-6 semanas según germen y tipo de válvula', 'ESC 2023'],
+    ['CATETER', 'T82', 'ASOCIADA A CATETER,INFECCION DE CATETER', 'Bacteriemia asociada a catéter', 5, 14, 'estafilococo coagulasa negativo 5-7 d con retiro del catéter; gramnegativos 7-14 d; S. aureus y Candida mínimo 14 d', 'IDSA 2009'],
+    ['MENINGITIS', 'G00,G01,G03', 'MENINGITIS', 'Meningitis bacteriana', 7, 21, 'meningococo 5-7 d; neumococo 10-14 d; Listeria y bacilos gramnegativos 21 d', 'ESCMID 2016'],
+    ['ABSCESO_CEREBRAL', 'G06,G07', 'ABSCESO CEREBRAL', 'Absceso cerebral', 42, 56, '6-8 semanas IV', 'ESCMID 2023'],
+    ['CANDIDEMIA', 'B37', 'CANDIDEMIA,CANDIDIASIS INVASIVA,FUNGEMIA', 'Candidemia / candidiasis invasiva', 14, 21, '14 d contados desde el primer hemocultivo negativo, sin focos metastásicos', 'IDSA 2016; ACIN candidiasis'],
+    ['CRIPTOCOCOSIS', 'B45', 'CRIPTOCOC,CRYPTOCOC', 'Criptococosis (inducción)', 1, 14, 'inducción máximo 14 d; OMS 2022: dosis única de anfotericina B liposomal 10 mg/kg más flucitosina y fluconazol', 'OMS 2022; IDSA 2010'],
+    ['HISTOPLASMOSIS', 'B39', 'HISTOPLASM', 'Histoplasmosis (inducción con anfotericina)', 7, 14, '1-2 semanas y luego itraconazol', 'Referencia general (OPS 2020; IDSA 2007)'],
+    ['ASPERGILOSIS', 'B44', 'ASPERGIL', 'Aspergilosis invasiva', 42, 84, 'mínimo 6-12 semanas', 'IDSA 2016'],
+    ['NEUTROPENIA', 'D70', 'NEUTROPENIA FEBRIL', 'Neutropenia febril', '', '', 'sin foco: hasta 48-72 h afebril y recuperación de neutrófilos; con foco, la duración del foco', 'IDSA 2010; ECIL-4'],
+    ['ISO', 'T81', 'SITIO OPERATORIO,HERIDA QUIRURGICA', 'Infección del sitio operatorio', '', '', 'superficial: drenaje y 5-7 d si hay compromiso sistémico; órgano o espacio: según el foco', 'Referencia general (IDSA 2014)'],
+    ['TUBERCULOSIS', 'A15,A16,A17,A18,A19', 'TUBERCULOSIS,TBC', 'Tuberculosis', '', '', 'esquema de meses: la duración no se evalúa aquí', 'Programa nacional de TB']
+  ],
+  // Reglas de espectro/indicacion. am: nombre contenido en el antimicrobiano; sindromes: claves de la tabla
+  // de duracion; micro: expresion regular sobre el aislamiento (mayusculas, sin tildes); soloSiUnico: solo si
+  // es el unico antimicrobiano de la solicitud; salvoCon: no avisar si la solicitud incluye ese antimicrobiano.
+  REGLAS_ESPECTRO: [
+    { am: 'DAPTOMICINA', sindromes: ['NEUMONIA', 'EMPIEMA'], mensaje: 'DAPTOMICINA no está indicada en neumonía: el surfactante pulmonar la inactiva (ficha técnica)' },
+    { am: 'TYGECICLINA', sindromes: ['BACTERIEMIA', 'NEUMONIA', 'CATETER'], mensaje: 'TIGECICLINA: concentraciones séricas bajas y advertencia de mayor mortalidad (FDA); en bacteriemia o neumonía solo si no hay alternativa' },
+    { am: 'ERTAPENEM', micro: 'PSEUDOMONA|ACINETOBACTER|ENTEROCOC', mensaje: 'ERTAPENEM no tiene actividad frente a Pseudomonas, Acinetobacter ni Enterococcus (ficha técnica)' },
+    { am: 'AZTREONAM', micro: 'STAPH|ESTAF|STREPTO|ESTREPTO|ENTEROCOC|GRAM ?POSITIV|SAMR|MRSA', soloSiUnico: true, mensaje: 'AZTREONAM no tiene actividad frente a grampositivos: verificar cobertura' },
+    { am: 'CASPOFUNGINA', micro: 'CRYPTOCOC|CRIPTOCOC|MUCOR|RHIZOPUS|HISTOPLASM', mensaje: 'CASPOFUNGINA no tiene actividad frente a Cryptococcus, mucorales ni Histoplasma' },
+    { am: 'CASPOFUNGINA', sindromes: ['CRIPTOCOCOSIS', 'HISTOPLASMOSIS'], mensaje: 'CASPOFUNGINA no tiene actividad frente a Cryptococcus ni Histoplasma' },
+    { am: 'CEFTAZIDIMA / AVIBACTAM', micro: 'NDM|METALO|MBL|\\bVIM\\b|\\bIMP\\b', salvoCon: 'AZTREONAM', mensaje: 'CEFTAZIDIMA/AVIBACTAM sola no cubre metalo-betalactamasas (NDM, VIM, IMP): asociar aztreonam (IDSA 2024)' },
+    { am: 'POLIMIXINA B', micro: 'PROTEUS|SERRATIA|MORGANELLA|PROVIDENCIA|BURKHOLDERIA', mensaje: 'POLIMIXINA B: Proteus, Serratia, Morganella, Providencia y Burkholderia son intrínsecamente resistentes' },
+    { am: 'VANCOMICINA', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|PSEUDOMONA|ACINETOBACTER|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|GRAM ?NEGATIV|KPC|BLEE', soloSiUnico: true, mensaje: 'VANCOMICINA no tiene actividad frente a gramnegativos: verificar cobertura' },
+    { am: 'LINEZOLID', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|PSEUDOMONA|ACINETOBACTER|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|GRAM ?NEGATIV|KPC|BLEE', soloSiUnico: true, mensaje: 'LINEZOLID no tiene actividad frente a gramnegativos: verificar cobertura' },
+    { am: 'DAPTOMICINA', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|PSEUDOMONA|ACINETOBACTER|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|GRAM ?NEGATIV|KPC|BLEE', soloSiUnico: true, mensaje: 'DAPTOMICINA no tiene actividad frente a gramnegativos: verificar cobertura' },
+    { am: 'RIFAMPICINA', soloSiUnico: true, exceptoSindromes: ['TUBERCULOSIS'], mensaje: 'RIFAMPICINA no debe usarse en monoterapia: genera resistencia rápidamente' }
+  ]
 };
 
 /* =====================================================================
@@ -516,6 +566,145 @@ function sugerenciaPROA(tipoIndicacion, coincidencias, acompanantes) {
 }
 
 /* =====================================================================
+   Pertinencia: duracion de referencia por sindrome y espectro
+   ===================================================================== */
+// Mayusculas, sin tildes, espacios colapsados.
+function normalizarTexto(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+}
+
+function listaDe(texto) {
+  return String(texto || '').split(',').map(normalizarTexto).filter(Boolean);
+}
+
+function filaAPertinencia(fila) {
+  var clave = normalizarTexto(fila[0]);
+  if (!clave) return null;
+  return {
+    clave: clave, prefijos: listaDe(fila[1]), palabras: listaDe(fila[2]), sindrome: String(fila[3] || '').trim(),
+    min: numeroONulo(fila[4]), max: numeroONulo(fila[5]), nota: String(fila[6] || '').trim(), fuente: String(fila[7] || '').trim()
+  };
+}
+
+function obtenerPertinencia() {
+  var respaldo = CONFIG.PERTINENCIA_RESPALDO.map(filaAPertinencia).filter(Boolean);
+  try {
+    var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_PERTINENCIA);
+    if (!hoja || hoja.getLastRow() < 2) return respaldo;
+    var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, 8).getValues().map(filaAPertinencia).filter(Boolean);
+    return filas.length ? filas : respaldo;
+  } catch (err) {
+    Logger.log('Error leyendo la hoja de pertinencia, se usa el respaldo: ' + err);
+    return respaldo;
+  }
+}
+
+// Crea la pestana PERTINENCIA_DURACION con la tabla del codigo. No la toca si ya existe.
+function crearHojaPertinencia() {
+  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  if (ss.getSheetByName(CONFIG.HOJA_PERTINENCIA)) {
+    Logger.log('La pestana ' + CONFIG.HOJA_PERTINENCIA + ' ya existe; no se modifica.');
+    return;
+  }
+  escribirPertinencia(ss.insertSheet(CONFIG.HOJA_PERTINENCIA));
+  Logger.log('Pestana ' + CONFIG.HOJA_PERTINENCIA + ' creada con ' + CONFIG.PERTINENCIA_RESPALDO.length + ' sindromes. Debe revisarla el comite PROA.');
+}
+
+// Reemplaza la pestana por la tabla del codigo (borra lo editado a mano en ella).
+function reescribirHojaPertinencia() {
+  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var hoja = ss.getSheetByName(CONFIG.HOJA_PERTINENCIA) || ss.insertSheet(CONFIG.HOJA_PERTINENCIA);
+  hoja.clearContents();
+  escribirPertinencia(hoja);
+}
+
+function escribirPertinencia(hoja) {
+  var enc = ['clave', 'cie10_prefijos', 'palabras_clave', 'sindrome', 'dias_min', 'dias_max', 'nota', 'fuente'];
+  hoja.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold');
+  hoja.setFrozenRows(1);
+  hoja.getRange(2, 1, CONFIG.PERTINENCIA_RESPALDO.length, enc.length).setValues(CONFIG.PERTINENCIA_RESPALDO);
+}
+
+// Sindrome del diagnostico: por prefijo CIE10 (el mas largo) y, si no, por palabra clave (la mas larga).
+function sindromePara(diagnosticoCrudo, tabla) {
+  var codigo = extraerCodigoCIE10(diagnosticoCrudo);
+  var mejor = null, largo = 0;
+  if (codigo) {
+    tabla.forEach(function(f) {
+      f.prefijos.forEach(function(p) {
+        if (codigo.indexOf(p) === 0 && p.length > largo) { mejor = f; largo = p.length; }
+      });
+    });
+    if (mejor) return mejor;
+  }
+  var texto = ' ' + normalizarTexto(diagnosticoCrudo) + ' ';
+  tabla.forEach(function(f) {
+    f.palabras.forEach(function(p) {
+      // palabras de hasta 4 letras (ITU, IVU, TBC) deben ir como palabra completa
+      var hay = (p.length <= 4) ? texto.indexOf(' ' + p + ' ') > -1 : texto.indexOf(p) > -1;
+      if (hay && p.length > largo) { mejor = f; largo = p.length; }
+    });
+  });
+  return mejor;
+}
+
+function sinAislamiento(microorganismo) {
+  var m = normalizarTexto(microorganismo).replace(/[^A-Z0-9 ]/g, '').trim();
+  return m === '' || m === '0' || m === 'NO' || m === 'NA' || m === 'N A' || /^NIN/.test(m) || /^NEGATIV/.test(m) || /^SIN /.test(m);
+}
+
+// Lineas de pertinencia del mensaje. esquemas: todos los antimicrobianos de la solicitud.
+function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas) {
+  var lineas = [];
+  if (!CONFIG.PERTINENCIA_ACTIVA) return lineas;
+  var E = function(cp) { return String.fromCodePoint(cp); };
+  var regla = E(0x1F4CF), ok = E(0x2705), adv = E(0x26A0) + E(0xFE0F);
+  var conDias = esquemas.filter(function(am) { var n = numeroONulo(am.dias); return n !== null && n > 0; });
+
+  if (tipoIndicacion === 'Profiláctico') {
+    conDias.forEach(function(am) {
+      if (numeroONulo(am.dias) > 1) lineas.push(adv + ' Profilaxis: ' + am.nombre + ' con ' + formatoNumero(numeroONulo(am.dias), 0) + ' días ordenados; la profilaxis quirúrgica no debe pasar de 24 h (OMS 2018; CDC 2017)');
+    });
+  }
+
+  var sindrome = sindromePara(diagnosticoCrudo, obtenerPertinencia());
+  if (sindrome && tipoIndicacion !== 'Profiláctico') {
+    if (sindrome.max !== null) {
+      var rango = (sindrome.min !== null && sindrome.min !== sindrome.max) ? formatoNumero(sindrome.min, 0) + '-' + formatoNumero(sindrome.max, 0) : formatoNumero(sindrome.max, 0);
+      lineas.push(regla + ' Duración de referencia · ' + sindrome.sindrome + ': ' + rango + ' días (' + sindrome.fuente + ')');
+      var excedidos = conDias.filter(function(am) { return numeroONulo(am.dias) > sindrome.max; });
+      if (excedidos.length) {
+        lineas.push(adv + ' Superan la referencia: ' + excedidos.map(function(am) { return am.nombre + ' ' + formatoNumero(numeroONulo(am.dias), 0) + ' d'; }).join(', ') + (sindrome.nota ? ' · ' + sindrome.nota : ''));
+      } else if (conDias.length) {
+        lineas.push(ok + ' Días ordenados dentro de la referencia');
+      }
+    } else if (sindrome.nota) {
+      lineas.push(regla + ' Duración · ' + sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')');
+    }
+  }
+
+  var micro = normalizarTexto(microorganismo);
+  var nombres = esquemas.map(function(am) { return String(am.nombre).toUpperCase(); });
+  var vistos = {};
+  CONFIG.REGLAS_ESPECTRO.forEach(function(r) {
+    if (!nombres.some(function(n) { return n.indexOf(r.am) > -1; })) return;
+    if (r.soloSiUnico && esquemas.length !== 1) return;
+    if (r.salvoCon && nombres.some(function(n) { return n.indexOf(r.salvoCon) > -1; })) return;
+    if (r.sindromes && !(sindrome && r.sindromes.indexOf(sindrome.clave) > -1)) return;
+    if (r.exceptoSindromes && sindrome && r.exceptoSindromes.indexOf(sindrome.clave) > -1) return;
+    if (r.micro && !(new RegExp(r.micro)).test(micro)) return;
+    if (vistos[r.am + r.mensaje.slice(0, 30)]) return;
+    vistos[r.am + r.mensaje.slice(0, 30)] = true;
+    lineas.push(adv + ' Espectro: ' + r.mensaje);
+  });
+
+  if (tipoIndicacion === 'Etiológico' && sinAislamiento(microorganismo)) {
+    lineas.push(adv + ' Indicación etiológica sin microorganismo registrado: verificar');
+  }
+  return lineas;
+}
+
+/* =====================================================================
    Mensaje
    ===================================================================== */
 function construirMensajeDesdeEvento(e, coincidenciasOpt) {
@@ -594,6 +783,10 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
     am.mgKg = (pesoKg !== null && numeroONulo(am.dosis) !== null) ? numeroONulo(am.dosis) / pesoKg : null;
     lineas.push('', emojiMas + ' Acompañante: ' + am.nombre + ' · ' + lineaEsquema(am) + ' · ' + diasTexto(am.dias));
   });
+
+  var pertinencia = evaluarPertinencia(campo('DIAGNOSTICO'), tipoIndicacion, campo('MICROORGANISMO') === '-' ? '' : campo('MICROORGANISMO'), coincidencias.concat(acompanantes));
+  if (pertinencia.length) lineas.push('');
+  pertinencia.forEach(function(l) { lineas.push(l); });
 
   var avisos = advertenciasCoherencia(pesoKg, campo('EDAD_ANIOS'), campo('EDAD_MESES'), coincidencias.concat(acompanantes));
   var sugerencia = sugerenciaPROA(tipoIndicacion, coincidencias, acompanantes);

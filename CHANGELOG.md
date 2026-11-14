@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.6.0] - 2026-11-14
+
+### Agregado
+- **Verificación de pertinencia** en el mensaje: duración de referencia por síndrome (21 síndromes por CIE10 o palabra clave, pestaña `PERTINENCIA_DURACION`), aviso cuando los días ordenados la superan, profilaxis de más de 24 h, 12 reglas de espectro (daptomicina en neumonía, ertapenem frente a *Pseudomonas*, ceftazidima/avibactam sola frente a NDM, etc.) e indicación etiológica sin aislamiento. `crearHojaPertinencia()` / `reescribirHojaPertinencia()`. Fuentes y estado de verificación en `docs/pertinencia.md`.
+
 ## [1.5.0] - 2026-11-02
 
 ### Cambiado

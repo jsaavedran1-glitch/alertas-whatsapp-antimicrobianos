@@ -280,6 +280,81 @@ prueba('coherencia: peso implausible, peso vs edad, dosis/kg absurda; ajuste ren
   noIncluye(construirMensajeDesdeEvento(v, filtrarAntimicrobianosRestringidos(v)), 'no requiere ajuste renal');
 });
 
+prueba('pertinencia: sindrome por CIE10 y por texto libre', function () {
+  var tabla = obtenerPertinencia(); // respaldo (la pestana no existe en la simulacion)
+  function clave(dx) { var s = sindromePara(dx, tabla); return s ? s.clave : null; }
+  assert.strictEqual(clave('N390'), 'ITU');
+  assert.strictEqual(clave('N39.0'), 'ITU');
+  assert.strictEqual(clave('A419 sepsis'), 'BACTERIEMIA');
+  assert.strictEqual(clave('J22X'), 'NEUMONIA');
+  assert.strictEqual(clave('B377'), 'CANDIDEMIA');
+  assert.strictEqual(clave('SEPSIS URINARIA'), 'ITU');                 // gana la palabra mas larga
+  assert.strictEqual(clave('SEPSIS DE PIEL Y TEJIDOS BLANDOS'), 'PIEL');
+  assert.strictEqual(clave('BACTEREMIA'), 'BACTERIEMIA');
+  assert.strictEqual(clave('Infección vías urinarias complicada'), 'ITU');
+  assert.strictEqual(clave('INFECCIÓN CEREBRAL POR CRYPTOCOCCUS NEOFORMANS'), 'CRIPTOCOCOSIS');
+  assert.strictEqual(clave('RABDOMIOSARCOMA-NEUTROPENIA FEBRIL'), 'NEUTROPENIA');
+  assert.strictEqual(clave('C169'), null);
+  assert.strictEqual(clave('INSTITUTO'), null);                        // "ITU" solo como palabra completa
+  assert.strictEqual(clave(''), null);
+});
+
+prueba('pertinencia: duracion de referencia, exceso, dentro de rango, profilaxis', function () {
+  var am = function (n, d) { return { nombre: n, dias: d }; };
+  var l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '14')]);
+  incluye(l.join('\n'), '📏 Duración de referencia · Infección urinaria complicada / pielonefritis: 5-7 días (IDSA 2025 ITU complicada; ACIN Infectio 2023)');
+  incluye(l.join('\n'), '⚠️ Superan la referencia: ERTAPENEM 14 d · hasta 10-14 d si hay absceso');
+  l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '7')]).join('\n');
+  incluye(l, '✅ Días ordenados dentro de la referencia'); noIncluye(l, 'Superan');
+  l = evaluarPertinencia('M869', 'Etiológico', 'S. aureus', [am('DAPTOMICINA', '14')]).join('\n');
+  incluye(l, 'Osteomielitis / espondilodiscitis: 28-42 días'); noIncluye(l, 'Superan');   // por debajo del minimo no se marca
+  l = evaluarPertinencia('D70X', 'Empírico', 'Ninguno', [am('CASPOFUNGINA 50, 70', '14')]).join('\n');
+  incluye(l, '📏 Duración · Neutropenia febril: sin foco'); noIncluye(l, 'Superan'); noIncluye(l, 'dentro de la referencia');
+  l = evaluarPertinencia('C169', 'Empírico', 'Ninguno', [am('ERTAPENEM', '14')]);
+  assert.strictEqual(l.length, 0, 'diagnostico sin sindrome: sin lineas');
+  l = evaluarPertinencia('S720', 'Profiláctico', 'Ninguno', [am('ERTAPENEM', '5')]).join('\n');
+  incluye(l, '⚠️ Profilaxis: ERTAPENEM con 5 días ordenados; la profilaxis quirúrgica no debe pasar de 24 h');
+  l = evaluarPertinencia('S720', 'Profiláctico', 'Ninguno', [am('ERTAPENEM', 'Dosis Unica')]);
+  assert.strictEqual(l.length, 0);
+  l = evaluarPertinencia('N390', 'Empírico', 'Ninguno', [am('ERTAPENEM', 'Dosis Unica')]).join('\n');
+  noIncluye(l, 'dentro de la referencia'); noIncluye(l, 'Superan');
+});
+
+prueba('pertinencia: reglas de espectro', function () {
+  var am = function (n) { return { nombre: n, dias: '7' }; };
+  function ev(dx, tipo, micro, ams) { return evaluarPertinencia(dx, tipo, micro, ams.map(am)).join('\n'); }
+  incluye(ev('J189', 'Etiológico', 'SAMR', ['DAPTOMICINA']), 'Espectro: DAPTOMICINA no está indicada en neumonía');
+  noIncluye(ev('A419', 'Etiológico', 'SAMR', ['DAPTOMICINA']), 'Espectro');
+  incluye(ev('A419', 'Etiológico', 'Klebsiella KPC', ['TYGECICLINA']), 'Espectro: TIGECICLINA');
+  incluye(ev('N390', 'Etiológico', 'Pseudomonas aeruginosa', ['ERTAPENEM']), 'ERTAPENEM no tiene actividad frente a Pseudomonas');
+  noIncluye(ev('N390', 'Etiológico', 'E. coli BLEE', ['ERTAPENEM']), 'Espectro');
+  incluye(ev('G060', 'Etiológico', 'Cryptococcus neoformans', ['CASPOFUNGINA 50, 70']), 'CASPOFUNGINA no tiene actividad frente a Cryptococcus');
+  noIncluye(ev('B377', 'Etiológico', 'Candida auris', ['CASPOFUNGINA 50, 70']), 'Espectro');
+  incluye(ev('A419', 'Etiológico', 'Klebsiella NDM', ['CEFTAZIDIMA / AVIBACTAM']), 'asociar aztreonam');
+  noIncluye(ev('A419', 'Etiológico', 'Klebsiella NDM', ['CEFTAZIDIMA / AVIBACTAM', 'AZTREONAM']), 'asociar aztreonam');
+  noIncluye(ev('A419', 'Etiológico', 'Klebsiella KPC', ['CEFTAZIDIMA / AVIBACTAM']), 'Espectro');
+  incluye(ev('A419', 'Etiológico', 'Serratia marcescens', ['POLIMIXINA B']), 'intrínsecamente resistentes');
+  incluye(ev('N390', 'Etiológico', 'Echerichia coli', ['VANCOMICINA']), 'VANCOMICINA no tiene actividad frente a gramnegativos');
+  noIncluye(ev('N390', 'Etiológico', 'Echerichia coli', ['VANCOMICINA', 'MEROPENEM']), 'gramnegativos'); // hay otro que cubre
+  incluye(ev('M869', 'Etiológico', 'S. aureus', ['RIFAMPICINA']), 'RIFAMPICINA no debe usarse en monoterapia');
+  noIncluye(ev('A150', 'Etiológico', 'M. tuberculosis', ['RIFAMPICINA']), 'monoterapia');
+  noIncluye(ev('M869', 'Etiológico', 'S. aureus', ['RIFAMPICINA', 'VANCOMICINA']), 'monoterapia');
+  incluye(ev('A419', 'Etiológico', 'NINUGNO', ['ERTAPENEM']), 'Indicación etiológica sin microorganismo registrado');
+  incluye(ev('A419', 'Etiológico', '0', ['ERTAPENEM']), 'sin microorganismo registrado');
+  noIncluye(ev('A419', 'Empírico', 'Ninguno', ['ERTAPENEM']), 'sin microorganismo');
+  CONFIG.PERTINENCIA_ACTIVA = false;
+  assert.strictEqual(evaluarPertinencia('N390', 'Empírico', '', [{ nombre: 'ERTAPENEM', dias: '14' }]).length, 0);
+  CONFIG.PERTINENCIA_ACTIVA = true;
+});
+
+prueba('pertinencia en el mensaje completo (ceftazidima/avibactam 14 d en ITU)', function () {
+  var e = eventoPruebaCeftazidimaAvibactam();
+  var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
+  incluye(t, '📏 Duración de referencia · Infección urinaria complicada / pielonefritis: 5-7 días');
+  incluye(t, '⚠️ Superan la referencia: CEFTAZIDIMA / AVIBACTAM 14 d');
+  noIncluye(t, 'undefined');
+});
+
 prueba('mensaje: campos ausentes salen como "-" y nunca como undefined', function () {
   var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = ['ERTAPENEM - UT-1'];
   var t = construirMensajeDesdeEvento({ namedValues: nv });

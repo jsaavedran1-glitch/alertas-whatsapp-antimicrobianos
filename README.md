@@ -76,6 +76,7 @@ Si se cambia la lista de la pestaña, conviene actualizar también la de respald
 | 💊 Antimicrobiano restringido | `Nombre Antimicrobiano 1/2/3` con dosis (+ mg/kg), vía, frecuencia, días y fecha fin (hoy + días) |
 | ⚠️ Dosis fuera del rango (solo si aplica) | Pestaña `RANGOS_DOSIS` |
 | ➕ Acompañante | Los antimicrobianos de la solicitud que no son restringidos |
+| 📏 Duración de referencia / ⚠️ Superan la referencia / ⚠️ Espectro (solo si aplica) | Pertinencia: duración por síndrome (pestaña `PERTINENCIA_DURACION`, por CIE10 o palabra clave), profilaxis > 24 h, reglas de espectro (`CONFIG.REGLAS_ESPECTRO`) e indicación etiológica sin aislamiento. Detalle y fuentes en `docs/pertinencia.md` |
 | ⚠️ Verificar peso / dosis (solo si aplica) | Incoherencias de digitación: peso fuera de 0,4–250 kg, peso < 20 kg con ≥ 12 años o < 30 kg con ≥ 18 años, > 20 kg con menos de 12 meses, o más de 100 mg/kg por dosis |
 | 💡 Sugerencia PROA (solo si aplica) | Terapia empírica con un restringido más un acompañante de amplio espectro (`AMPLIO_ESPECTRO`: meropenem, imipenem, cefepime, piperacilina/tazobactam, ceftazidima, ceftriaxona): "Revaluar a las 48-72 h con el resultado de cultivos para desescalar" (intervención *time-out*, guía OPS/OMS 2024). `SUGERENCIA_EMPIRICO_SOLO = true` la extiende a toda terapia empírica |
 
@@ -160,6 +161,8 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 | `obtenerRangosDosis()`, `evaluarDosis()` | **No** | Lee la pestaña `RANGOS_DOSIS` (o el respaldo) y evalúa cada dosis |
 | `crearHojaRangosDosis()` | No (escribe en la hoja) | Crea la pestaña `RANGOS_DOSIS` con la propuesta inicial; no la toca si ya existe |
 | `reescribirHojaRangosDosis()` | No (escribe en la hoja) | Reemplaza la pestaña `RANGOS_DOSIS` por la tabla del código (pierde lo editado a mano) |
+| `evaluarPertinencia()`, `sindromePara()`, `obtenerPertinencia()` | **No** | Duración de referencia y reglas de espectro |
+| `crearHojaPertinencia()`, `reescribirHojaPertinencia()` | No (escriben en la hoja) | Crean o reemplazan la pestaña `PERTINENCIA_DURACION` |
 | `advertenciasCoherencia()`, `sugerenciaPROA()` | **No** | Avisos de digitación y sugerencia de revaluación a las 48-72 h |
 | `filtrarAntimicrobianosRestringidos(e)`, `debeAlertar()`, `acompanantesNoRestringidos(e)` | **No** | Separan los antimicrobianos de la solicitud y deciden si la alerta se envía (algún restringido con `dispara_alerta` ≠ NO) |
 | `construirMensajeDesdeEvento(e)` | **No** | Arma el texto del mensaje |
@@ -217,5 +220,6 @@ Programa de Optimización de Antimicrobianos (PROA), Resolución 4816 de 2008, R
 
 ## Ver también
 
+- `docs/pertinencia.md`: qué verifica el bloque de pertinencia, tabla de duración por síndrome con fuente y estado de verificación, reglas de espectro y límites.
 - `docs/antimicrobianos-restringidos.md`: fichas de las 13 moléculas (clase, AWaRe, dosis adulto/pediatría, ajuste renal, monitoreo, por qué está restringida) con las fuentes que sustentan cada rango de `RANGOS_DOSIS` y su uso en el HDV.
 - `CLAUDE.md` (contexto operativo para asistentes de IA) y `CHANGELOG.md` (historial de cambios).
