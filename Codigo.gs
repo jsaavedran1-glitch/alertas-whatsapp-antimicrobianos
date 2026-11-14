@@ -1280,6 +1280,21 @@ function eventoPruebaSinRestringidos() {
   return { namedValues: nv };
 }
 
+// Arma el evento a partir de una fila de la matriz (por defecto la ultima) y escribe en el registro el
+// mensaje que saldria, con seguimiento y pertinencia. No envia nada ni escribe en ninguna pestana.
+function probarUltimaSolicitud(filaOpcional) {
+  var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_RESPUESTAS);
+  var fila = filaOpcional || hoja.getLastRow(), columnas = hoja.getLastColumn();
+  var encabezados = hoja.getRange(1, 1, 1, columnas).getValues()[0];
+  var datos = hoja.getRange(fila, 1, 1, columnas).getDisplayValues()[0];
+  var nv = {};
+  encabezados.forEach(function(h, i) { if (h) nv[h] = [datos[i]]; });
+  var e = { namedValues: nv, range: { getRow: function() { return fila; } } };
+  var coincidencias = filtrarAntimicrobianosRestringidos(e);
+  Logger.log('Fila %s · restringidos: %s · dispara alerta: %s\n\n%s', fila, coincidencias.length, debeAlertar(coincidencias),
+    coincidencias.length ? construirMensajeDesdeEvento(e, coincidencias) : '(sin antimicrobiano restringido: no genera mensaje)');
+}
+
 function testCruceCIE10() {
   ['A419', 'N390', 'J189', 'K528', 'G06.0', 'J40', 'CODIGO_INEXISTENTE_XYZ'].forEach(function(dx) {
     Logger.log(dx + ' -> ' + formatearDiagnosticoCIE10(dx));
