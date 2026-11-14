@@ -46,6 +46,17 @@ var CONFIG = {
   MG_KG_IMPLAUSIBLE: 100,
 
   // ---- Pertinencia: duracion de referencia por sindrome y reglas de espectro ----
+  // Seguimiento por paciente: solicitudes previas de la misma historia clinica en la matriz.
+  SEGUIMIENTO_ACTIVO: true,
+  SEGUIMIENTO_DIAS: 30,
+  // Una orden continua el curso anterior del mismo antimicrobiano si empieza hasta N dias despues de su fin.
+  SEGUIMIENTO_TOLERANCIA_DIAS: 2,
+  // Registro de cada revision (indicadores PROA y auditoria del analisis).
+  REGISTRO_ACTIVO: true,
+  HOJA_REGISTRO: 'REGISTRO_REVISIONES',
+  // La duracion de los focos bacterianos no aplica a estos; si a los sindromes fungicos.
+  ANTIFUNGICOS: ['CASPOFUNGINA', 'ANFOTERICINA'],
+  SINDROMES_FUNGICOS: ['CANDIDEMIA', 'CRIPTOCOCOSIS', 'HISTOPLASMOSIS', 'ASPERGILOSIS', 'NEUTROPENIA'],
   PERTINENCIA_ACTIVA: true,
   HOJA_PERTINENCIA: 'PERTINENCIA_DURACION',
   // Duracion de referencia (dias totales de tratamiento) por sindrome. El diagnostico se ubica por
@@ -57,24 +68,24 @@ var CONFIG = {
   PERTINENCIA_RESPALDO: [
     ['ITU', 'N39,N10,N12,N30', 'INFECCION URINARIA,VIAS URINARIAS,SEPSIS URINARIA,UROSEPSIS,PIELONEFRITIS,IVU,ITU', 'Infección urinaria complicada / pielonefritis', 5, 7, 'hasta 10-14 d si hay absceso, obstrucción, prostatitis o respuesta lenta', 'IDSA 2025 ITU complicada; ACIN Infectio 2023'],
     ['BACTERIEMIA', 'A40,A41,A49,R57,R65', 'BACTEREMIA,BACTERIEMIA,SEPSIS,SEPTICEMIA,CHOQUE SEPTICO', 'Bacteriemia / sepsis', 7, 14, '7 d si hay control del foco y no es S. aureus ni Candida; S. aureus: mínimo 14 d desde el hemocultivo negativo (4-6 sem si es complicada)', 'BALANCE, NEJM 2025; Surviving Sepsis 2021'],
-    ['NEUMONIA', 'J12,J13,J14,J15,J16,J17,J18,J22', 'NEUMONIA,BRONCONEUMONIA', 'Neumonía', 5, 7, 'comunitaria: 5 d con estabilidad clínica; nosocomial o asociada a ventilador: 7 d', 'ACIN NAC 2022; ATS/IDSA 2019; IDSA/ATS 2016'],
-    ['EMPIEMA', 'J85,J86', 'EMPIEMA,ABSCESO PULMONAR', 'Empiema / absceso pulmonar', 14, 42, 'según drenaje y evolución radiológica', 'Referencia general (BTS 2023)'],
+    ['NEUMONIA', 'J12,J13,J14,J15,J16,J17,J18,J22', 'NEUMONIA,BRONCONEUMONIA,NAC', 'Neumonía', 5, 7, 'comunitaria: 5 d con estabilidad clínica; nosocomial o asociada a ventilador: 7 d', 'ACIN NAC 2022; ATS/IDSA 2019; IDSA/ATS 2016'],
+    ['EMPIEMA', 'J85,J86', 'EMPIEMA,ABSCESO PULMONAR', 'Empiema / absceso pulmonar', 14, 42, '2-3 semanas pueden bastar con drenaje y buena evolución (ensayo SLIM); más si la evolución es lenta', 'SLIM, ERJ Open Res 2023; BTS 2023'],
     ['INTRAABDOMINAL', 'K35,K36,K37,K57,K63,K65,K80,K81,K83', 'PERITONITIS,APENDICITIS,COLANGITIS,COLECISTITIS,INTRAABDOMINAL,DIVERTICULITIS', 'Infección intraabdominal', 4, 7, '4 d después de un control adecuado del foco; colangitis 4-7 d tras el drenaje', 'STOP-IT, NEJM 2015; SIS 2017; Tokyo 2018'],
     ['PIEL', 'L01,L02,L03,L08,A46', 'CELULITIS,ERISIPELA,PIEL Y TEJIDOS BLANDOS,TEJIDOS BLANDOS,ABSCESO CUTANEO', 'Infección de piel y tejidos blandos', 5, 7, 'extender solo si no hay mejoría; fascitis necrosante: hasta 48-72 h después del último desbridamiento', 'IDSA 2014 piel y tejidos blandos'],
-    ['PIE_DIABETICO', '', 'PIE DIABETICO', 'Pie diabético', 7, 14, 'partes blandas 1-2 sem; osteomielitis 6 sem (3 sem tras amputación con margen positivo)', 'IWGDF/IDSA 2023'],
+    ['PIE_DIABETICO', '', 'PIE DIABETICO', 'Pie diabético', 7, 14, 'partes blandas 1-2 semanas; osteomielitis 6 semanas sin resección y hasta 3 tras amputación menor con margen positivo', 'IWGDF/IDSA 2023'],
     ['OSTEOMIELITIS', 'M86,M46', 'OSTEOMIELITIS,ESPONDILODISCITIS,DISCITIS', 'Osteomielitis / espondilodiscitis', 28, 42, '6 semanas; valorar paso a vía oral', 'IDSA 2015 vertebral; OVIVA, NEJM 2019'],
-    ['ARTRITIS', 'M00', 'ARTRITIS SEPTICA', 'Artritis séptica', 14, 28, 'tras drenaje adecuado', 'Referencia general (Gjika, Ann Rheum Dis 2019)'],
-    ['PROTESIS', 'T84', 'PROTESIS ARTICULAR,PERIPROTESICA', 'Infección de prótesis articular', 42, 84, '12 semanas fue superior a 6 con retención del implante', 'DATIPO, NEJM 2021; IDSA 2013'],
-    ['ENDOCARDITIS', 'I33,I38,I39', 'ENDOCARDITIS', 'Endocarditis infecciosa', 14, 42, '2-6 semanas según germen y tipo de válvula', 'ESC 2023'],
+    ['ARTRITIS', 'M00', 'ARTRITIS SEPTICA', 'Artritis séptica', 14, 28, 'tras drenaje adecuado; las guías clásicas indican 4-6 semanas y menos de 4 se asoció a más recaídas en una cohorte', 'Gjika, Ann Rheum Dis 2019; referencia general'],
+    ['PROTESIS', 'T84', 'PROTESIS ARTICULAR,PERIPROTESICA', 'Infección de prótesis articular', 42, 84, '6 semanas no fueron no inferiores a 12 (18,1 % frente a 9,4 % de infección persistente)', 'DATIPO, NEJM 2021'],
+    ['ENDOCARDITIS', 'I33,I38,I39', 'ENDOCARDITIS', 'Endocarditis infecciosa', 14, 42, 'válvula nativa 2-6 semanas; válvula protésica 6 semanas o más, contadas desde el primer hemocultivo negativo', 'ESC 2023'],
     ['CATETER', 'T82', 'ASOCIADA A CATETER,INFECCION DE CATETER', 'Bacteriemia asociada a catéter', 5, 14, 'estafilococo coagulasa negativo 5-7 d con retiro del catéter; gramnegativos 7-14 d; S. aureus y Candida mínimo 14 d', 'IDSA 2009'],
     ['MENINGITIS', 'G00,G01,G03', 'MENINGITIS', 'Meningitis bacteriana', 7, 21, 'meningococo 5-7 d; neumococo 10-14 d; Listeria y bacilos gramnegativos 21 d', 'ESCMID 2016'],
     ['ABSCESO_CEREBRAL', 'G06,G07', 'ABSCESO CEREBRAL', 'Absceso cerebral', 42, 56, '6-8 semanas IV', 'ESCMID 2023'],
     ['CANDIDEMIA', 'B37', 'CANDIDEMIA,CANDIDIASIS INVASIVA,FUNGEMIA', 'Candidemia / candidiasis invasiva', 14, 21, '14 d contados desde el primer hemocultivo negativo, sin focos metastásicos', 'IDSA 2016; ACIN candidiasis'],
-    ['CRIPTOCOCOSIS', 'B45', 'CRIPTOCOC,CRYPTOCOC', 'Criptococosis (inducción)', 1, 14, 'inducción máximo 14 d; OMS 2022: dosis única de anfotericina B liposomal 10 mg/kg más flucitosina y fluconazol', 'OMS 2022; IDSA 2010'],
-    ['HISTOPLASMOSIS', 'B39', 'HISTOPLASM', 'Histoplasmosis (inducción con anfotericina)', 7, 14, '1-2 semanas y luego itraconazol', 'Referencia general (OPS 2020; IDSA 2007)'],
+    ['CRIPTOCOCOSIS', 'B45', 'CRIPTOCOC,CRYPTOCOC', 'Criptococosis (inducción)', 1, 14, 'OMS 2022: dosis única de anfotericina B liposomal 10 mg/kg más 14 d de flucitosina y fluconazol', 'OMS 2022'],
+    ['HISTOPLASMOSIS', 'B39', 'HISTOPLASM', 'Histoplasmosis (inducción con anfotericina)', 14, 14, 'anfotericina B liposomal 3 mg/kg por 2 semanas y luego itraconazol 12 meses', 'OPS/OMS 2020'],
     ['ASPERGILOSIS', 'B44', 'ASPERGIL', 'Aspergilosis invasiva', 42, 84, 'mínimo 6-12 semanas', 'IDSA 2016'],
-    ['NEUTROPENIA', 'D70', 'NEUTROPENIA FEBRIL', 'Neutropenia febril', '', '', 'sin foco: hasta 48-72 h afebril y recuperación de neutrófilos; con foco, la duración del foco', 'IDSA 2010; ECIL-4'],
-    ['ISO', 'T81', 'SITIO OPERATORIO,HERIDA QUIRURGICA', 'Infección del sitio operatorio', '', '', 'superficial: drenaje y 5-7 d si hay compromiso sistémico; órgano o espacio: según el foco', 'Referencia general (IDSA 2014)'],
+    ['NEUTROPENIA', 'D70', 'NEUTROPENIA FEBRIL', 'Neutropenia febril', '', '', 'sin foco: se puede suspender tras 72 h o más de tratamiento si lleva 48 h afebril y estable, sin esperar la recuperación de neutrófilos; con foco, la duración del foco', 'ECIL-4'],
+    ['ISO', 'T81', 'SITIO OPERATORIO,HERIDA QUIRURGICA,CONSECUTIVA A PROCEDIMIENTO', 'Infección del sitio operatorio', '', '', 'superficial: drenaje y 5-7 d si hay compromiso sistémico; órgano o espacio: según el foco', 'Referencia general (IDSA 2014)'],
     ['TUBERCULOSIS', 'A15,A16,A17,A18,A19', 'TUBERCULOSIS,TBC', 'Tuberculosis', '', '', 'esquema de meses: la duración no se evalúa aquí', 'Programa nacional de TB']
   ],
   // Reglas de espectro/indicacion. am: nombre contenido en el antimicrobiano; sindromes: claves de la tabla
@@ -354,10 +365,12 @@ function notificarNuevaRespuesta(e) {
   // Sin ANTHROPIC_API_KEY, con IA_PROA_MODO = NO o sin el archivo IA_PROA.gs sigue el flujo de siempre.
   if (coincidencias.length > 0 && typeof notificarConRevisionIa_ === 'function' && notificarConRevisionIa_(e, coincidencias)) return;
   if (!debeAlertar(coincidencias)) {
+    if (coincidencias.length > 0) registrarRevision(e, coincidencias, { enviado: false });
     return;
   }
   var mensaje = construirMensajeDesdeEvento(e, coincidencias);
-  enviarAlertaWhatsApp(mensaje);
+  var envio = enviarAlertaWhatsApp(mensaje);
+  registrarRevision(e, coincidencias, { enviado: !!(envio && envio.ok), destino: 'PRODUCCION' });
 }
 
 function nombreLimpio(valor) {
@@ -372,6 +385,39 @@ function extraerCodigoCIE10(diagnosticoCrudo) {
   var codigo = primerToken.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
   if (!/^[A-Z]\d{2}/.test(codigo)) return '';
   return codigo.slice(0, 4);
+}
+
+// Codigo CIE10 del diagnostico aunque no venga al principio: primer token, despues cualquier token con
+// forma de codigo que exista en la pestana CIE10 y, por ultimo, la descripcion exacta de la pestana.
+function codigoCIE10Resuelto(diagnosticoCrudo) {
+  var directo = extraerCodigoCIE10(diagnosticoCrudo);
+  if (directo) return directo;
+  var texto = normalizarTexto(diagnosticoCrudo);
+  if (!texto || texto === '-') return '';
+  var tokens = texto.split(/[^A-Z0-9]+/);
+  for (var i = 0; i < tokens.length; i++) {
+    if (/^[A-Z]\d{2}[0-9X]?$/.test(tokens[i]) && buscarDescripcionCIE10(tokens[i])) return tokens[i];
+  }
+  return codigoCIE10PorDescripcion(texto);
+}
+
+function codigoCIE10PorDescripcion(texto) {
+  if (texto.length < 8) return '';
+  var cache = null, clave = 'CIE10D:' + texto.slice(0, 200);
+  try { cache = CacheService.getScriptCache(); var enCache = cache.get(clave); if (enCache !== null) return enCache; } catch (err) { cache = null; }
+  var codigo = '';
+  try {
+    var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_CIE10);
+    var ultima = hoja ? hoja.getLastRow() : 0;
+    if (ultima >= 2) {
+      var celda = hoja.getRange(2, 2, ultima - 1, 1).createTextFinder(texto).matchEntireCell(true).matchCase(false).findNext();
+      if (celda) codigo = String(hoja.getRange(celda.getRow(), 1).getValue()).trim().toUpperCase();
+    }
+  } catch (err2) {
+    return '';
+  }
+  if (cache) { try { cache.put(clave, codigo, CONFIG.CACHE_CIE10_SEG); } catch (err3) {} }
+  return codigo;
 }
 
 function buscarEnColumnaA(hoja, codigo) {
@@ -414,7 +460,7 @@ function buscarDescripcionCIE10(codigo) {
 
 function formatearDiagnosticoCIE10(diagnosticoCrudo) {
   if (!diagnosticoCrudo || diagnosticoCrudo === '-') return diagnosticoCrudo || '-';
-  var codigo = extraerCodigoCIE10(diagnosticoCrudo);
+  var codigo = codigoCIE10Resuelto(diagnosticoCrudo);
   if (!codigo) return diagnosticoCrudo;
   var descripcion = buscarDescripcionCIE10(codigo);
   if (!descripcion) return diagnosticoCrudo;
@@ -488,7 +534,8 @@ function edadTexto(anios, meses, dias) {
   var a = numeroONulo(anios), m = numeroONulo(meses), d = numeroONulo(dias);
   var partes = [];
   if (a !== null && a > 0) partes.push(formatoNumero(a, 0) + (a === 1 ? ' año' : ' años'));
-  if (m !== null && m > 0) partes.push(formatoNumero(m, 0) + (m === 1 ? ' mes' : ' meses'));
+  // meses > 11 con anios registrados es un error de digitacion del formulario: no se muestran
+  if (m !== null && m > 0 && !(a !== null && a > 0 && m > 11)) partes.push(formatoNumero(m, 0) + (m === 1 ? ' mes' : ' meses'));
   if (partes.length === 0 && d !== null && d > 0) partes.push(formatoNumero(d, 0) + (d === 1 ? ' día' : ' días'));
   return partes.length ? partes.join(' ') : '-';
 }
@@ -650,7 +697,7 @@ function escribirPertinencia(hoja) {
 
 // Sindrome del diagnostico: por prefijo CIE10 (el mas largo) y, si no, por palabra clave (la mas larga).
 function sindromePara(diagnosticoCrudo, tabla) {
-  var codigo = extraerCodigoCIE10(diagnosticoCrudo);
+  var codigo = codigoCIE10Resuelto(diagnosticoCrudo);
   var mejor = null, largo = 0;
   if (codigo) {
     tabla.forEach(function(f) {
@@ -683,7 +730,12 @@ var ETIQUETA_NIVEL = ['acorde con la referencia', 'se sugiere verificar', 'se su
 
 // Veredicto de un antimicrobiano frente al aislamiento y el foco (CONFIG.INDICACIONES y REGLAS_ESPECTRO).
 // Devuelve { nivel: 0 pertinente | 1 verificar | 2 no pertinente, texto } o null si no hay criterio.
-function veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorganismo) {
+function esAntifungico(nombre) {
+  var n = String(nombre).toUpperCase();
+  return CONFIG.ANTIFUNGICOS.some(function(a) { return n.indexOf(a) > -1; });
+}
+
+function veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorganismo, contexto) {
   var nombre = String(am.nombre).toUpperCase();
   var micro = normalizarTexto(microorganismo);
   var nombres = esquemas.map(function(x) { return String(x.nombre).toUpperCase(); });
@@ -704,6 +756,10 @@ function veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorgan
   if (!ind) return null;
   if (tipoIndicacion === 'Profiláctico') return { nivel: 1, texto: ETIQUETA_NIVEL[1] + ' · antimicrobiano restringido usado en profilaxis; reservado para ' + ind.reserva };
   if (ind.con && nombres.some(function(n) { return n.indexOf(ind.con) > -1; })) return { nivel: 0, texto: ETIQUETA_NIVEL[0] + ' · combinación dentro de su indicación (' + ind.reserva + ')' };
+  var cultivos = normalizarTexto(contexto && contexto.cultivos);
+  if (esAntifungico(nombre) && /CANDIDA|LEVADURA/.test(micro) && /URO|ORINA/.test(cultivos) && !/HEMO|SANGRE/.test(cultivos)) {
+    return { nivel: 1, texto: ETIQUETA_NIVEL[1] + ' · Candida solo en urocultivo suele ser colonización; convendría confirmar infección, tomar hemocultivos y retirar o cambiar la sonda (IDSA 2016; CDC)' };
+  }
   if (!sinAislamiento(microorganismo)) {
     if ((new RegExp(ind.micro)).test(micro)) return { nivel: 0, texto: ETIQUETA_NIVEL[0] + ' · el aislamiento registrado está dentro de su indicación' };
     return { nivel: 1, texto: ETIQUETA_NIVEL[1] + ' · el aislamiento registrado no está entre los que justifican su uso; reservado para ' + ind.reserva };
@@ -722,7 +778,7 @@ function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, es
 
 // { lineas, nivel (-1 sin criterio, 0 pertinente, 1 verificar, 2 intervenir), espectroRojo (una regla de
 // espectro descarta algun antimicrobiano) }. IA_PROA.gs lo usa como referencia y como piso del veredicto.
-function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas) {
+function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas, contexto) {
   var vacio = { lineas: [], nivel: -1, espectroRojo: false, encabezadoDias: '', rojos: [] };
   if (!CONFIG.PERTINENCIA_ACTIVA) return vacio;
   var E = function(cp) { return String.fromCodePoint(cp); };
@@ -731,10 +787,14 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   var peor = -1, tratamiento = [], dias = [], espectroRojo = false, rojos = [];
   var neutro = E(0x26AA);
   var sinValorar = function(am, n) { dias.push(neutro + ' ' + am.nombre + ' ' + formatoNumero(n, 0) + ' d: ' + TEXTO_DIAS_SIN_VALORAR); };
+  // Con seguimiento (am.diasAcumulados), la duracion que se compara es la del curso completo.
+  var etiquetaDias = function(am, n) {
+    return am.nombre + ' ' + formatoNumero(n, 0) + ' d' + (am.diasAcumulados > n ? ' (' + formatoNumero(am.diasAcumulados, 0) + ' d acumulados desde ' + am.inicioCurso + ')' : '');
+  };
   var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
 
   esquemas.forEach(function(am) {
-    var v = veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorganismo);
+    var v = veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorganismo, contexto);
     if (v) { marcar(tratamiento, v.nivel, am.nombre + ': ' + v.texto); if (v.nivel === 2) { espectroRojo = true; rojos.push(am.nombre); } }
   });
   if (tipoIndicacion === 'Etiológico' && sinAislamiento(microorganismo)) {
@@ -757,11 +817,16 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
     conDias.forEach(function(am) {
       var n = numeroONulo(am.dias);
       if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
-      if (n > sindrome.max) {
+      if (esAntifungico(am.nombre) && CONFIG.SINDROMES_FUNGICOS.indexOf(sindrome.clave) === -1) {
+        dias.push(neutro + ' ' + etiquetaDias(am, n) + ': la referencia de este foco es bacteriana y no aplica al antifúngico');
+        return;
+      }
+      var total = am.diasAcumulados > n ? am.diasAcumulados : n;
+      if (total > sindrome.max) {
         // el doble de la referencia o mas: rojo
-        marcar(dias, n >= 2 * sindrome.max ? 2 : 1, am.nombre + ' ' + formatoNumero(n, 0) + ' d: supera la referencia; se sugiere revaluar la duración' + (sindrome.nota ? ' · ' + sindrome.nota : ''));
+        marcar(dias, total >= 2 * sindrome.max ? 2 : 1, etiquetaDias(am, n) + ': supera la referencia; se sugiere revaluar la duración' + (sindrome.nota ? ' · ' + sindrome.nota : ''));
       } else {
-        marcar(dias, 0, am.nombre + ' ' + formatoNumero(n, 0) + ' d: dentro de la referencia');
+        marcar(dias, 0, etiquetaDias(am, n) + ': dentro de la referencia');
       }
     });
   } else if (sindrome && sindrome.nota) {
@@ -780,6 +845,151 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
 /* =====================================================================
    Mensaje
    ===================================================================== */
+/* =====================================================================
+   Seguimiento por paciente y registro de revisiones
+   ===================================================================== */
+// Fecha de una celda de la matriz (Date) o del evento ("dd/mm/aaaa h:mm:ss"). null si no se entiende.
+function fechaDe(v) {
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  var m = String(v || '').match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null;
+  return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4] || 0), Number(m[5] || 0), Number(m[6] || 0));
+}
+
+function fechaCorta(d) {
+  return Utilities.formatDate(d, 'America/Bogota', 'dd/MM');
+}
+
+// Solicitudes previas de la misma historia clinica en los ultimos CONFIG.SEGUIMIENTO_DIAS dias.
+// Devuelve { previas, lineas, porAm: { nombre: { inicio, transcurridos, proyectado } } }. Se calcula una vez
+// por evento (queda en e._seguimiento). Solo lee la matriz; si algo falla, devuelve el seguimiento vacio.
+function seguimientoPaciente(e) {
+  if (e && e._seguimiento) return e._seguimiento;
+  var res = { previas: 0, lineas: [], porAm: {} };
+  if (e) e._seguimiento = res;
+  if (!CONFIG.SEGUIMIENTO_ACTIVO || !e) return res;
+  try {
+    var valores = e.namedValues || {};
+    var hc = String(campoDelEvento(valores, CAMPOS.HC) || '').replace(/\s+/g, '');
+    if (!hc || hc === '-' || /^0+$/.test(hc)) return res;
+    var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_RESPUESTAS);
+    if (!hoja) return res;
+    var ultima = hoja.getLastRow(), columnas = hoja.getLastColumn();
+    if (ultima < 2) return res;
+    var encabezados = hoja.getRange(1, 1, 1, columnas).getValues()[0].map(normalizarClave);
+    var col = function(nombre) { return encabezados.indexOf(normalizarClave(nombre)); };
+    var cHc = col(CAMPOS.HC);
+    if (cHc < 0) return res;
+    var ahora = fechaDe(campoDelEvento(valores, 'Marca temporal')) || new Date();
+    var filaActual = (e.range && e.range.getRow) ? e.range.getRow() : -1;
+    var dia = 24 * 3600 * 1000;
+    var desde = ahora.getTime() - CONFIG.SEGUIMIENTO_DIAS * dia;
+    var celdas = hoja.getRange(2, cHc + 1, ultima - 1, 1).createTextFinder(hc).matchEntireCell(true).findAll() || [];
+    var previas = [];
+    celdas.slice(-40).forEach(function(celda) {
+      var f = celda.getRow();
+      if (f === filaActual) return;
+      var fila = hoja.getRange(f, 1, 1, columnas).getValues()[0];
+      var fecha = fechaDe(fila[0]);
+      if (!fecha || fecha.getTime() >= ahora.getTime() - 1000 || fecha.getTime() < desde) return;
+      SLOTS.forEach(function(slot) {
+        var cn = col(slot.nombre);
+        var nombre = cn < 0 ? '' : nombreLimpio(fila[cn]);
+        if (!nombre || nombre === '-') return;
+        var leer = function(clave) { var c = col(slot[clave]); return c < 0 ? '' : String(fila[c] === null || fila[c] === undefined ? '' : fila[c]).trim(); };
+        previas.push({ fecha: fecha, nombre: nombre, dias: numeroONulo(leer('dias')), dosis: leer('dosis'), frecuencia: leer('frecuencia') });
+      });
+    });
+    if (previas.length === 0) return res;
+    previas.sort(function(a, b) { return b.fecha.getTime() - a.fecha.getTime(); });
+    var solicitudes = {};
+    previas.forEach(function(p) { solicitudes[p.fecha.getTime()] = true; });
+    res.previas = Object.keys(solicitudes).length;
+
+    var E = function(cp) { return String.fromCodePoint(cp); };
+    var actuales = leerSlots(e);
+    var detalle = [];
+    actuales.forEach(function(am) {
+      var mismas = previas.filter(function(p) { return p.nombre === am.nombre; });
+      if (mismas.length === 0) return;
+      var horas = (ahora.getTime() - mismas[0].fecha.getTime()) / 3600000;
+      if (horas < 12) {
+        detalle.push('   ' + E(0x26A0) + E(0xFE0F) + ' ' + am.nombre + ': también solicitado hace ' + (horas < 1 ? 'menos de 1 h' : formatoNumero(Math.round(horas), 0) + ' h') +
+          ' (' + (mismas[0].dosis || '-') + ' mg cada ' + (mismas[0].frecuencia || '-') + ' h' + (mismas[0].dias ? ', ' + formatoNumero(mismas[0].dias, 0) + ' d' : '') + '); posible solicitud repetida');
+      }
+      // Curso continuo: cada orden anterior que termina (con tolerancia) cuando empieza la siguiente.
+      var inicio = ahora.getTime();
+      for (var i = 0; i < mismas.length; i++) {
+        var fin = mismas[i].fecha.getTime() + ((mismas[i].dias || 1) + CONFIG.SEGUIMIENTO_TOLERANCIA_DIAS) * dia;
+        if (fin >= inicio) inicio = mismas[i].fecha.getTime(); else break;
+      }
+      var transcurridos = Math.round((ahora.getTime() - inicio) / dia);
+      var n = numeroONulo(am.dias);
+      var proyectado = transcurridos + ((n !== null && n > 0) ? n : 0);
+      res.porAm[am.nombre] = { inicio: fechaCorta(new Date(inicio)), transcurridos: transcurridos, proyectado: proyectado };
+      if (transcurridos >= 1) {
+        detalle.push('   ' + am.nombre + ': en curso desde ' + fechaCorta(new Date(inicio)) + ' (' + formatoNumero(transcurridos, 0) + ' d)' +
+          ((n !== null && n > 0) ? '; con esta orden completaría ' + formatoNumero(proyectado, 0) + ' d' : ''));
+      }
+    });
+    var nombresActuales = actuales.map(function(am) { return am.nombre; });
+    var otros = [], vistos = {};
+    previas.forEach(function(p) {
+      if (nombresActuales.indexOf(p.nombre) > -1 || vistos[p.nombre]) return;
+      vistos[p.nombre] = true;
+      otros.push(p.nombre + ' (' + fechaCorta(p.fecha) + (p.dias ? ', ' + formatoNumero(p.dias, 0) + ' d' : '') + ')');
+    });
+    if (otros.length) detalle.push('   Otros antimicrobianos previos: ' + otros.slice(0, 4).join('; '));
+    res.lineas = [E(0x1F501) + ' Seguimiento: ' + res.previas + (res.previas === 1 ? ' solicitud previa' : ' solicitudes previas') + ' en ' +
+      CONFIG.SEGUIMIENTO_DIAS + ' días (última ' + fechaCorta(previas[0].fecha) + ')'].concat(detalle);
+  } catch (err) {
+    Logger.log('Seguimiento por paciente no disponible: ' + err);
+  }
+  return res;
+}
+
+var ENCABEZADOS_REGISTRO = ['Fecha de registro', 'Marca temporal de la solicitud', 'Historia clínica', 'Servicio', 'Especialidad', 'Diagnóstico',
+  'Microorganismo', 'Tipo de indicación', 'Antimicrobianos restringidos', 'Acompañantes', 'Semáforo tablas', 'Semáforo final', 'Fuente del análisis',
+  'Detalle', 'Solicitudes previas (30 d)', 'Enviado al grupo', 'Destino', 'Modelo', 'Tokens de entrada', 'Tokens de salida', 'Costo aproximado USD'];
+
+// Una fila por solicitud con antimicrobiano restringido en la pestana CONFIG.HOJA_REGISTRO (la crea si no
+// existe). datos: { tablas, revision, detalle, enviado, destino, costo }. Nunca interrumpe el flujo.
+function registrarRevision(e, coincidencias, datos) {
+  if (!CONFIG.REGISTRO_ACTIVO) return;
+  try {
+    datos = datos || {};
+    var valores = (e && e.namedValues) ? e.namedValues : {};
+    var c = function(nombre) { return campoDelEvento(valores, nombre) || ''; };
+    var libro = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    var hoja = libro.getSheetByName(CONFIG.HOJA_REGISTRO);
+    if (!hoja) { hoja = libro.insertSheet(CONFIG.HOJA_REGISTRO); hoja.appendRow(ENCABEZADOS_REGISTRO); }
+    var semaforo = ['VERDE', 'AMARILLO', 'ROJO'];
+    var tablas = datos.tablas || analisisPertinenciaDesdeEvento(e, coincidencias);
+    var rev = datos.revision || null;
+    var nivelFinal = rev ? ['pertinente', 'verificar', 'intervenir'].indexOf(rev.veredicto) : tablas.nivel;
+    hoja.appendRow([new Date(), c('Marca temporal'), c(CAMPOS.HC), c(CAMPOS.SERVICIO), c(CAMPOS.ESPECIALIDAD),
+      formatearDiagnosticoCIE10(c(CAMPOS.DIAGNOSTICO)), c(CAMPOS.MICROORGANISMO), tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION)),
+      coincidencias.map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
+      acompanantesNoRestringidos(e).map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
+      tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], rev ? 'IA' : 'TABLAS',
+      String(datos.detalle || tablas.lineas.join(' | ')).replace(/[*_]/g, '').slice(0, 1500), seguimientoPaciente(e).previas,
+      datos.enviado ? 'SI' : 'NO', datos.destino || '', rev ? rev.modelo : '', rev ? rev.entrada : '', rev ? rev.salida : '', datos.costo || '']);
+  } catch (err) {
+    Logger.log('No se pudo registrar la revision: ' + err);
+  }
+}
+
+// Aviso de dosis que el rango general no detecta. '' si no aplica.
+function avisoDosisEspecifico(am, pesoKg, esquemas) {
+  var nombre = String(am.nombre).toUpperCase();
+  var dosis = numeroONulo(am.dosis), dias = numeroONulo(am.dias);
+  if (nombre.indexOf('CASPOFUNGINA') > -1 && dosis === 70 && dias !== null && dias > 1 && (pesoKg === null || pesoKg <= 80) &&
+      !esquemas.some(function(x) { return String(x.nombre).toUpperCase().indexOf('RIFAMPICINA') > -1; })) {
+    return '70 mg es la dosis de carga del día 1; el mantenimiento habitual es 50 mg/día (70 mg/día si pesa más de 80 kg o recibe rifampicina; ficha técnica): verificar';
+  }
+  return '';
+}
+
 // Lineas de pertinencia (duracion de referencia, profilaxis, espectro) de una solicitud.
 function pertinenciaDesdeEvento(e, coincidenciasOpt) {
   var coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
@@ -790,8 +1000,14 @@ function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var valores = (e && e.namedValues) ? e.namedValues : {};
   var coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
   var micro = campoDelEvento(valores, CAMPOS.MICROORGANISMO);
+  var esquemas = coincidencias.concat(acompanantesNoRestringidos(e));
+  var seg = seguimientoPaciente(e);
+  esquemas.forEach(function(am) {
+    var curso = seg.porAm[am.nombre];
+    if (curso && curso.transcurridos >= 1) { am.diasAcumulados = curso.proyectado; am.inicioCurso = curso.inicio; }
+  });
   return analisisPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
-    micro === '-' ? '' : micro, coincidencias.concat(acompanantesNoRestringidos(e)));
+    micro === '-' ? '' : micro, esquemas, { cultivos: campoDelEvento(valores, CAMPOS.CULTIVOS) });
 }
 
 // Lineas de encabezado destacado (CONFIG.ENCABEZADOS_DESTACADOS) segun los antimicrobianos de la solicitud.
@@ -875,12 +1091,18 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, sinSugerencia) {
     if (ev.revisar) {
       lineas.push('   ' + emojiAdvertencia + ' Dosis fuera del rango de referencia (' + ev.referencia + '): revisar');
     }
+    var avisoDosis = avisoDosisEspecifico(am, pesoKg, coincidencias.concat(acompanantes));
+    if (avisoDosis) lineas.push('   ' + emojiAdvertencia + ' ' + avisoDosis);
   });
 
   acompanantes.forEach(function(am) {
     am.mgKg = (pesoKg !== null && numeroONulo(am.dosis) !== null) ? numeroONulo(am.dosis) / pesoKg : null;
     lineas.push('', emojiMas + ' Acompañante: ' + am.nombre + ' · ' + lineaEsquema(am) + ' · ' + diasTexto(am.dias));
   });
+
+  var seguimiento = seguimientoPaciente(e).lineas;
+  if (seguimiento.length) lineas.push('');
+  seguimiento.forEach(function(l) { lineas.push(l); });
 
   // Con sinSugerencia (flujo de dos mensajes, IA_PROA.gs) la pertinencia va en el mensaje de revision.
   var pertinencia = sinSugerencia ? [] : pertinenciaDesdeEvento(e, coincidencias);

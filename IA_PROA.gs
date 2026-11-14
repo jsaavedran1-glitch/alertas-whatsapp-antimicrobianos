@@ -7,8 +7,8 @@
 //   2. segundos despues, la revision como RESPUESTA CITADA al mensaje 1 (quotedMessageId de Green-API):
 //      la misma estructura del analisis de las tablas: veredicto global, una linea por antimicrobiano
 //      sobre el tratamiento y una sobre los dias, con la duracion de referencia y su fuente.
-// El modelo recibe como referencia: las fichas de antimicrobianos y de microorganismos del repositorio
-// (docs/), la tabla de duracion por sindrome (PERTINENCIA_DURACION) y el analisis de las tablas de
+// El modelo recibe como referencia: las fichas de docs/ que aplican al caso (antimicrobianos de la
+// solicitud y microorganismo aislado), la tabla de duracion por sindrome (PERTINENCIA_DURACION) y el analisis de las tablas de
 // Codigo.gs para ese caso. Si una regla de espectro de las tablas descarta un antimicrobiano, el veredicto
 // no puede quedar por debajo de "intervenir". Si la API falla, sale el analisis de las tablas.
 // IA_HALLAZGOS_ACTIVOS = false: no se llama a la API y siempre sale el analisis de las tablas.
@@ -116,34 +116,41 @@ function notificarConRevisionIa_(e, coincidencias) {
   var cfg = iaConfigProa_();
   if (!cfg.activa) return false;
   var alerta = debeAlertar(coincidencias);
-  var revision;
+  var tablas = analisisPertinenciaDesdeEvento(e, coincidencias);
+  // Sin alerta propia (vancomicina o linezolid solos): solo se analiza y se envia si las tablas lo dejan
+  // en rojo. Asi no se llama al modelo en las solicitudes que casi nunca generan mensaje.
+  if (!alerta && !(IA_ALERTA_SI_ALTA_SIN_DISPARO && tablas.nivel === 2)) {
+    registrarRevision(e, coincidencias, { tablas: tablas, enviado: false });
+    return true;
+  }
+  var revision, base, envio;
 
   if (cfg.modo === "PRODUCCION") {
-    if (alerta) {
-      var base = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, true));
-      revision = revisarCasoConIa_(e, coincidencias, cfg);
-      responderConRevision_(e, coincidencias, revision, base, null);
-    } else {
-      revision = revisarCasoConIa_(e, coincidencias, cfg);
-      if (hayHallazgoAlto_(revision)) {
-        var baseSin = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, true));
-        responderConRevision_(e, coincidencias, revision, baseSin, null);
-      }
-    }
+    base = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, true));
+    revision = revisarCasoConIa_(e, coincidencias, cfg);
+    responderConRevision_(e, coincidencias, revision, base, null);
+    registrarRevisionIa_(e, coincidencias, tablas, revision, cfg, !!(base && base.ok), "PRODUCCION");
     return true;
   }
 
   // PRUEBA: produccion igual que hoy; PRUEBA BOT recibe la copia base + la revision citada.
-  if (alerta) enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias));
+  if (alerta) envio = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias));
   revision = revisarCasoConIa_(e, coincidencias, cfg);
-  if (alerta || hayHallazgoAlto_(revision)) {
-    var respuesta = mensajeRevision_(e, coincidencias, revision);
-    if (respuesta) {
-      var basePrueba = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, true), { chatId: cfg.chatPrueba });
-      responderConRevision_(e, coincidencias, revision, basePrueba, cfg.chatPrueba);
-    }
+  if (mensajeRevision_(e, coincidencias, revision)) {
+    base = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, true), { chatId: cfg.chatPrueba });
+    responderConRevision_(e, coincidencias, revision, base, cfg.chatPrueba);
   }
+  registrarRevisionIa_(e, coincidencias, tablas, revision, cfg, !!(envio && envio.ok), alerta ? "PRODUCCION (tablas) + PRUEBA BOT" : "PRUEBA BOT");
   return true;
+}
+
+function registrarRevisionIa_(e, coincidencias, tablas, revision, cfg, enviado, destino) {
+  var p = revision ? IA_PRECIOS_MTOK[cfg.modelo] : null;
+  registrarRevision(e, coincidencias, {
+    tablas: tablas, revision: revision, enviado: enviado, destino: destino,
+    detalle: revision ? mensajeRevision_(e, coincidencias, revision) : "",
+    costo: p ? Number(((revision.entrada * p[0] + revision.salida * p[1]) / 1e6).toFixed(4)) : ""
+  });
 }
 
 function responderConRevision_(e, coincidencias, revision, base, chatId) {
@@ -198,7 +205,7 @@ function mensajeRevision_(e, coincidencias, revision) {
 function revisarCasoConIa_(e, coincidencias, cfg) {
   if (!IA_HALLAZGOS_ACTIVOS) return null;
   try {
-    var referencia = referenciaProa_();
+    var referencia = referenciaProa_(e);
     if (!referencia) {
       Logger.log("Revision IA omitida: no se pudieron leer las fichas (%s).", IA_DOCS_URL);
       return null;
@@ -315,6 +322,11 @@ function textoCasoIa_(e, coincidencias) {
       " \u00b7 dosis " + am.dosis + " mg \u00b7 via " + am.via + " \u00b7 cada " + am.frecuencia + " h \u00b7 " + am.dias + " dias" +
       (ev.revisar ? " \u00b7 el bot ya marco la dosis fuera de rango" : ""));
   });
+  var seguimiento = seguimientoPaciente(e).lineas;
+  if (seguimiento.length) {
+    lineas.push("", "Solicitudes previas del mismo paciente (la duraci\u00f3n se valora sobre el curso completo):");
+    seguimiento.forEach(function(l) { lineas.push(l.replace(/^\s+/, "- ")); });
+  }
   return lineas.join("\n");
 }
 
@@ -328,12 +340,47 @@ function tablaDuracionIa_() {
     "\n- Profilaxis quirúrgica: máximo 24 h (48 h en cirugía cardiaca) · fuente: OMS 2018; CDC 2017";
 }
 
-// Fichas del repositorio (antimicrobianos y microorganismos), en cache 6 h. null si falta alguna.
-function referenciaProa_() {
+// Que fichas de microorganismos (numero de seccion de docs/microorganismos.md) aplican a cada aislamiento.
+var IA_FICHAS_MICRO = [["KLEBS|KLEPS|KLES", 1], ["COLI", 2], ["PSEUDOMON", 3], ["ENTEROBACTER|CITROBACTER", 4], ["SERRATIA", 5],
+  ["ACINETO", 6], ["AUREUS|SAMR|SARM|MRSA", 7], ["EPIDERMIDIS|HOMINIS|HAEMOLYTICUS|COAGULASA", 8], ["ENTEROCOC", 9], ["AURIS", 10],
+  ["LEVADURA|CANDIDA", 11], ["HISTOPLASM", 12], ["TUBERC|MYCOBACT|MICOBACT", 13], ["SALMONELLA", 14], ["PANTOEA", 15], ["GRAM", 16]];
+// Nombre de la matriz -> palabra del titulo de la ficha en docs/antimicrobianos-restringidos.md.
+var IA_FICHAS_AM = [["VANCOMICINA", "Vancomicina"], ["LINEZOLID", "Linezolid"], ["DAPTOMICINA", "Daptomicina"], ["CASPOFUNGINA", "Caspofungina"],
+  ["LIPOSOMAL", "liposomal"], ["ANFOTERICINA", "Anfotericina"], ["ERTAPENEM", "Ertapenem"], ["AZTREONAM", "Aztreonam"], ["AVIBACTAM", "avibactam"],
+  ["TYGECICLINA", "Tigeciclina"], ["TIGECICLINA", "Tigeciclina"], ["DORIPENEM", "Doripenem"], ["RIFAMPICINA", "Rifampicina"], ["POLIMIXINA", "Polimixina"]];
+
+// Secciones "### N. Titulo" de un documento que cumplen el filtro; el texto anterior a la primera ficha
+// (resumen y como leerlas) va siempre. Si ninguna cumple, va el documento completo o solo ese texto inicial.
+function fichasDelCaso_(texto, incluir, soloCabezaSiNinguna) {
+  var partes = texto.split(/\n(?=### )/);
+  var cabeza = partes.shift();
+  var elegidas = partes.filter(function(seccion) {
+    var titulo = seccion.split("\n")[0];
+    return incluir(titulo, Number((titulo.match(/^### (\d+)\./) || [])[1]));
+  }).map(function(seccion) { return seccion.split(/\n(?=## )/)[0]; });
+  cabeza = cabeza.split(/\n(?=## Fichas)/)[0];
+  if (elegidas.length === 0) return soloCabezaSiNinguna ? cabeza : texto;
+  return cabeza + "\n\n## Fichas del caso\n\n" + elegidas.join("\n\n");
+}
+
+// Fichas del repositorio que aplican al caso (antimicrobianos de la solicitud y microorganismo aislado),
+// leidas de GitHub con cache de 6 h. null si falta algun documento. Sin evento, los documentos completos.
+function referenciaProa_(e) {
+  var nombres = e ? leerSlots(e).map(function(am) { return String(am.nombre).toUpperCase(); }) : null;
+  var micro = e ? normalizarTexto(campoDelEvento(e.namedValues || {}, CAMPOS.MICROORGANISMO)) : "";
+  var filtros = {
+    "antimicrobianos-restringidos.md": function(titulo) {
+      return IA_FICHAS_AM.some(function(par) { return titulo.indexOf(par[1]) > -1 && nombres.some(function(n) { return n.indexOf(par[0]) > -1; }); });
+    },
+    "microorganismos.md": function(titulo, numero) {
+      return IA_FICHAS_MICRO.some(function(par) { return par[1] === numero && (new RegExp(par[0])).test(micro); });
+    }
+  };
   var partes = [];
   for (var i = 0; i < IA_DOCS.length; i++) {
     var texto = documentoProa_(IA_DOCS[i]);
     if (!texto) return null;
+    if (nombres && filtros[IA_DOCS[i]]) texto = fichasDelCaso_(texto, filtros[IA_DOCS[i]], IA_DOCS[i] === "microorganismos.md");
     partes.push("=== " + IA_DOCS[i] + " (referencia) ===\n\n" + texto);
   }
   return partes.join("\n\n");

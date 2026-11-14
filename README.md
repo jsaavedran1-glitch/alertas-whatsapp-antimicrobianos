@@ -221,6 +221,7 @@ Programa de Optimización de Antimicrobianos (PROA), Resolución 4816 de 2008, R
 ## Ver también
 
 - `docs/microorganismos.md`: fichas de los microorganismos aislados en las solicitudes (resistencia, tratamiento según mecanismo, restringidos que se justifican); referencia de la revisión por IA.
+- Pestaña `REGISTRO_REVISIONES` de la matriz: una fila por solicitud con restringido (semáforo, fuente del análisis, enviado o no, costo); sirve para indicadores PROA.
 - `docs/pertinencia.md`: qué verifica el bloque de pertinencia, tabla de duración por síndrome con fuente y estado de verificación, reglas de espectro y límites.
 - `docs/antimicrobianos-restringidos.md`: fichas de las 13 moléculas (clase, AWaRe, dosis adulto/pediatría, ajuste renal, monitoreo, por qué está restringida) con las fuentes que sustentan cada rango de `RANGOS_DOSIS` y su uso en el HDV.
 - `CLAUDE.md` (contexto operativo para asistentes de IA) y `CHANGELOG.md` (historial de cambios).

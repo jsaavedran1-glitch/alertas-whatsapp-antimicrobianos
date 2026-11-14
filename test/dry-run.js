@@ -39,6 +39,8 @@ var lecturasCie = 0;
 function hojaDeFilas(filas, conTextFinder) {
   return {
     getLastRow: function () { return filas.length; },
+    appendRow: function (fila) { filas.push(fila); },
+    _filas: filas,
     getLastColumn: function () { return filas[0] ? filas[0].length : 0; },
     getRange: function (f, c, nf, nc) {
       nf = nf || 1; nc = nc || 1;
@@ -48,6 +50,11 @@ function hojaDeFilas(filas, conTextFinder) {
         getValue: function () { return sub[0][0]; },
         createTextFinder: function (texto) {
           return { matchEntireCell: function () { return this; }, matchCase: function () { return this; },
+            findAll: function () {
+              var r = [];
+              sub.forEach(function (fila, i) { if (String(fila[0]).toUpperCase() === String(texto).toUpperCase()) { (function (n) { r.push({ getRow: function () { return n; } }); })(f + i); } });
+              return r;
+            },
             findNext: function () {
               lecturasCie++;
               for (var i = 0; i < sub.length; i++) {
@@ -69,7 +76,8 @@ var HOJAS = {
   'CIE10': hojaDeFilas([[' ', 'DESCRIPCION']].concat(codigosCie.map(function (c) { return [c, CIE10[c]]; }))),
   'RANGOS_DOSIS': null // no existe: debe usarse el respaldo del codigo
 };
-global.SpreadsheetApp = { openById: function () { return { getSheetByName: function (n) { return HOJAS[n] || null; } }; } };
+global.SpreadsheetApp = { openById: function () { return { getSheetByName: function (n) { return HOJAS[n] || null; },
+  insertSheet: function (n) { HOJAS[n] = hojaDeFilas([]); return HOJAS[n]; } }; } };
 var cache = {};
 global.CacheService = { getScriptCache: function () { return { get: function (k) { return k in cache ? cache[k] : null; }, put: function (k, v) { cache[k] = v; } }; } };
 global.Utilities = { formatDate: function (d) { return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear(); } };
@@ -379,13 +387,111 @@ prueba('mensaje: campos ausentes salen como "-" y nunca como undefined', functio
   incluye(t, '⚠️ Sin interconsulta a Infectología');
 });
 
+// ---- Seguimiento, registro, huecos de las tablas y calidad de datos ----------
+function filaMatriz(fecha, hc, ams) {
+  var fila = ENCABEZADOS_REALES.map(function () { return ''; });
+  var poner = function (enc, v) { fila[ENCABEZADOS_REALES.indexOf(enc)] = v; };
+  poner('Marca temporal', fecha); poner('Número de Historia Clínica', hc);
+  ams.forEach(function (am, i) {
+    var sl = SLOTS[i];
+    poner(sl.nombre, am[0] + ' - UT-1'); poner(sl.dosis, am[1]); poner(sl.frecuencia, am[2]); poner(sl.dias, am[3]);
+  });
+  return fila;
+}
+function eventoSeguimiento(fecha, hc, dx, ams) {
+  var nv = eventoBase(); nv['Marca temporal'] = [fecha]; nv[CAMPOS.HC] = [hc]; nv[CAMPOS.DIAGNOSTICO] = [dx];
+  nv[CAMPOS.EDAD_ANIOS] = ['60']; nv[CAMPOS.PESO_KG] = ['70']; nv[CAMPOS.MICROORGANISMO] = ['Ninguno']; nv[CAMPOS.CULTIVOS] = ['NINGUNO'];
+  nv[CAMPOS.TIPO_INDICACION] = ['Tratamiento Empírico (En presencia o sospecha de infección sin germen documentado - sin antibiograma))'];
+  ams.forEach(function (am, i) {
+    var sl = SLOTS[i];
+    nv[sl.nombre] = [am[0] + ' - UT-1']; nv[sl.dosis] = [am[1]]; nv[sl.via] = ['Intravenoso']; nv[sl.frecuencia] = [am[2]]; nv[sl.dias] = [am[3]];
+  });
+  return { namedValues: nv };
+}
+
+prueba('seguimiento: curso acumulado, solicitud repetida, otros previos y dias valorados sobre el curso completo', function () {
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  filas.push(filaMatriz('01/11/2026 08:00:00', '123456', [['ERTAPENEM', '1000', '24', '7'], ['VANCOMICINA', '1000', '12', '5']]));
+  filas.push(filaMatriz('08/11/2026 08:00:00', '123456', [['ERTAPENEM', '1000', '24', '7']]));
+  filas.push(filaMatriz('14/11/2026 06:00:00', '123456', [['ERTAPENEM', '500', '24', '3']]));
+  filas.push(filaMatriz('10/11/2026 08:00:00', '999000', [['ERTAPENEM', '1000', '24', '7']]));   // otro paciente
+  filas.push(filaMatriz('01/08/2026 08:00:00', '123456', [['DAPTOMICINA', '500', '24', '7']]));    // fuera de la ventana
+  filas.push(filaMatriz('14/11/2026 08:00:00', '123456', [['ERTAPENEM', '1000', '24', '7']]));    // la solicitud actual
+  var e = eventoSeguimiento('14/11/2026 08:00:00', '123456', 'N390', [['ERTAPENEM', '1000', '24', '7']]);
+  var seg = seguimientoPaciente(e);
+  assert.strictEqual(seg.previas, 3);
+  var t = seg.lineas.join('\n');
+  incluye(t, '🔁 Seguimiento: 3 solicitudes previas en 30 días (última 14/11/2026)');
+  incluye(t, 'ERTAPENEM: también solicitado hace 2 h (500 mg cada 24 h, 3 d); posible solicitud repetida');
+  incluye(t, 'ERTAPENEM: en curso desde 01/11/2026 (13 d); con esta orden completaría 20 d');
+  incluye(t, 'Otros antimicrobianos previos: VANCOMICINA (01/11/2026, 5 d)');
+  noIncluye(t, 'DAPTOMICINA');
+  var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
+  incluye(msg, '🔁 Seguimiento: 3 solicitudes previas');
+  // 7 d ordenados estarian dentro de 5-7 d, pero el curso completo (20 d) supera el doble
+  incluye(msg, '🔴 ERTAPENEM 7 d (20 d acumulados desde 01/11/2026): supera la referencia; se sugiere revaluar la duración');
+  incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), 'Solicitudes previas del mismo paciente');
+  noIncluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '123456');
+  // paciente sin historia: sin seguimiento
+  var e2 = eventoSeguimiento('14/11/2026 09:00:00', '555', 'N390', [['ERTAPENEM', '1000', '24', '7']]);
+  assert.strictEqual(seguimientoPaciente(e2).lineas.length, 0);
+  incluye(construirMensajeDesdeEvento(e2), '🟢 ERTAPENEM 7 d: dentro de la referencia');
+});
+
+prueba('registro: una fila por revision en REGISTRO_REVISIONES', function () {
+  delete HOJAS['REGISTRO_REVISIONES'];
+  var e = eventoSeguimiento('14/11/2026 08:00:00', '123456', 'N390', [['ERTAPENEM', '1000', '24', '7']]);
+  var co = filtrarAntimicrobianosRestringidos(e);
+  registrarRevision(e, co, { enviado: true, destino: 'PRODUCCION' });
+  var filas = HOJAS['REGISTRO_REVISIONES']._filas;
+  assert.strictEqual(filas.length, 2); assert.deepStrictEqual(filas[0], ENCABEZADOS_REGISTRO); assert.strictEqual(filas[1].length, ENCABEZADOS_REGISTRO.length);
+  var r = {}; ENCABEZADOS_REGISTRO.forEach(function (h, i) { r[h] = filas[1][i]; });
+  assert.strictEqual(r['Semáforo tablas'], 'ROJO'); assert.strictEqual(r['Fuente del análisis'], 'TABLAS'); assert.strictEqual(r['Enviado al grupo'], 'SI');
+  assert.strictEqual(r['Antimicrobianos restringidos'], 'ERTAPENEM 7 d'); assert.strictEqual(r['Solicitudes previas (30 d)'], 3);
+  incluye(r['Diagnóstico'], 'N390 - INFECCION DE VIAS URINARIAS');
+});
+
+prueba('tablas: Candida solo en orina, antifungico en foco bacteriano y caspofungina 70 mg de mantenimiento', function () {
+  var ams = [{ nombre: 'CASPOFUNGINA 50, 70', dias: '7', dosis: '70' }];
+  var l = analisisPertinencia('N390', 'Etiológico', 'CANDIDA AURIS', ams, { cultivos: 'UROCULTIVO' });
+  assert.strictEqual(l.nivel, 1);
+  incluye(l.lineas.join('\n'), '🟡 CASPOFUNGINA 50, 70: se sugiere verificar · Candida solo en urocultivo suele ser colonización');
+  incluye(l.lineas.join('\n'), '⚪ CASPOFUNGINA 50, 70 7 d: la referencia de este foco es bacteriana y no aplica al antifúngico');
+  noIncluye(l.lineas.join('\n'), 'dentro de la referencia');
+  l = analisisPertinencia('N390', 'Etiológico', 'CANDIDA AURIS', ams, { cultivos: 'HEMOCULTIVO, UROCULTIVO' }).lineas.join('\n');
+  incluye(l, '🟢 CASPOFUNGINA 50, 70: acorde con la referencia');
+  l = analisisPertinencia('B377', 'Etiológico', 'Candida auris', [{ nombre: 'CASPOFUNGINA 50, 70', dias: '14' }], { cultivos: 'HEMOCULTIVO' }).lineas.join('\n');
+  incluye(l, '🟢 CASPOFUNGINA 50, 70 14 d: dentro de la referencia');
+  assert.ok(/dosis de carga del día 1/.test(avisoDosisEspecifico(ams[0], 70, ams)));
+  assert.strictEqual(avisoDosisEspecifico(ams[0], 95, ams), '');                                      // > 80 kg
+  assert.strictEqual(avisoDosisEspecifico({ nombre: 'CASPOFUNGINA 50, 70', dias: '1', dosis: '70' }, 70, ams), '');   // solo la carga
+  assert.strictEqual(avisoDosisEspecifico({ nombre: 'CASPOFUNGINA 50, 70', dias: '7', dosis: '50' }, 70, ams), '');
+});
+
+prueba('calidad de datos: CIE10 en cualquier parte del texto o por descripcion, y edad con meses imposibles', function () {
+  assert.strictEqual(codigoCIE10Resuelto('ORQUITIS SIN ABSCESO N390'), 'N390');
+  assert.strictEqual(codigoCIE10Resuelto('n390 infeccion urinaria'), 'N390');
+  assert.strictEqual(codigoCIE10Resuelto('Infección de vías urinarias, sitio no especificado'), 'N390');   // descripcion exacta de la pestana
+  assert.strictEqual(codigoCIE10Resuelto('CA PAPILAR DE OVARIO + FISTULA'), '');
+  assert.strictEqual(codigoCIE10Resuelto('PACIENTE CON Z999 INEXISTENTE'), '');                            // token que no esta en la pestana
+  incluye(formatearDiagnosticoCIE10('SEPSIS DE ORIGEN URINARIO A419'), 'A419 - SEPSIS, NO ESPECIFICADA');
+  assert.strictEqual(edadTexto('58', '695', '21170'), '58 años');
+  assert.strictEqual(edadTexto('0', '4', '0'), '4 meses');
+  assert.strictEqual(edadTexto('2', '6', ''), '2 años 6 meses');
+});
+
+var envios = [];
 // UrlFetchApp simulado para IA_PROA.gs: sirve las fichas reales de docs/ y una respuesta fija de la API.
 function conApiSimulada(respuestaApi, fn) {
-  var real = global.UrlFetchApp, llamadas = [];
+  var real = global.UrlFetchApp, llamadas = []; envios = [];
   global.UrlFetchApp = { fetch: function (url, op) {
     if (url.indexOf('raw.githubusercontent.com') > -1) {
       var doc = fs.readFileSync(path.join(__dirname, '..', 'docs', url.split('/').pop()), 'utf8');
       return { getResponseCode: function () { return 200; }, getContentText: function () { return doc; } };
+    }
+    if (url.indexOf('greenapi.test') > -1) {
+      envios.push(JSON.parse(op.payload));
+      return { getResponseCode: function () { return 200; }, getContentText: function () { return JSON.stringify({ idMessage: 'MSG' + envios.length }); } };
     }
     assert.ok(/^https:\/\/api\.anthropic\.com\/v1\/messages$/.test(url), 'solo la API de mensajes: ' + url);
     llamadas.push({ cuerpo: JSON.parse(op.payload), encabezados: op.headers });
@@ -469,6 +575,43 @@ prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caid
   var r = mensajeRevision_(e, co, null);
   incluye(r, '⚪ ERTAPENEM 7 d: la duración no se valora mientras se revalúa el tratamiento'); noIncluye(r, 'dentro de la referencia');
   incluye(r, '🔴 *Pertinencia PROA: se sugiere revaluar*'); incluye(r, 'ERTAPENEM no tiene actividad frente a Pseudomonas'); noIncluye(r, 'asistido por IA');
+});
+
+prueba('IA: solo las fichas del caso, sin llamada al modelo en vancomicina sola, y registro del flujo', function () {
+  var e = eventoPruebaIaErtapenemPseudomonas();
+  conApiSimulada(respuestaIa({}), function () {
+    var ref = referenciaProa_(e);
+    incluye(ref, '### 7. Ertapenem'); incluye(ref, '### 3. *Pseudomonas aeruginosa*');
+    noIncluye(ref, '### 1. Vancomicina'); noIncluye(ref, '### 10. *Candida auris*'); noIncluye(ref, '## Hallazgos para el comité');
+    var sinGermen = referenciaProa_(eventoPruebaIaCeftazidimaComunidad());
+    incluye(sinGermen, '### 9. Ceftazidima/avibactam'); noIncluye(sinGermen, '### 1. *Klebsiella');
+    assert.ok(ref.length < 0.5 * referenciaProa_(null).length, 'la referencia del caso es menos de la mitad');
+  });
+  var propsReal = global.PropertiesService, utilReal = global.Utilities.sleep;
+  var P = { ANTHROPIC_API_KEY: 'CLAVE-DE-PRUEBA', GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test' };
+  global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
+  global.Utilities.sleep = function () {};
+  delete HOJAS['REGISTRO_REVISIONES'];
+  try {
+    // vancomicina sola, tablas en amarillo: ni modelo ni mensajes, pero queda registrada
+    conApiSimulada(respuestaIa({}), function (llamadas) {
+      var v = eventoPruebaVancomicinaSola();
+      assert.strictEqual(notificarConRevisionIa_(v, filtrarAntimicrobianosRestringidos(v)), true);
+      assert.strictEqual(llamadas.length, 0); assert.strictEqual(envios.length, 0);
+    });
+    // caso con alerta en modo PRUEBA: produccion recibe el mensaje de tablas; PRUEBA BOT, base + revision citada
+    conApiSimulada(respuestaIa({ analisis: 'a', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'no cubre Pseudomonas' }], dias: [], datos_faltantes: [] }), function (llamadas) {
+      notificarNuevaRespuesta(e);
+      assert.strictEqual(llamadas.length, 1); assert.strictEqual(envios.length, 3);
+      assert.strictEqual(envios[0].chatId, '111@g.us'); assert.strictEqual(envios[1].chatId, IA_CHAT_PRUEBA);
+      assert.strictEqual(envios[2].chatId, IA_CHAT_PRUEBA); assert.strictEqual(envios[2].quotedMessageId, 'MSG2');
+    });
+    var filas = HOJAS['REGISTRO_REVISIONES']._filas, col = function (h) { return ENCABEZADOS_REGISTRO.indexOf(h); };
+    assert.strictEqual(filas.length, 3);
+    assert.strictEqual(filas[1][col('Enviado al grupo')], 'NO'); assert.strictEqual(filas[1][col('Fuente del análisis')], 'TABLAS');
+    assert.strictEqual(filas[2][col('Fuente del análisis')], 'IA'); assert.strictEqual(filas[2][col('Semáforo final')], 'ROJO');
+    assert.strictEqual(filas[2][col('Modelo')], 'claude-sonnet-5-5'); assert.ok(filas[2][col('Costo aproximado USD')] > 0);
+  } finally { global.PropertiesService = propsReal; global.Utilities.sleep = utilReal; }
 });
 
 prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {

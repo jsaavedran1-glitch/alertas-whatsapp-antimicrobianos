@@ -2,6 +2,18 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.11.0] - 2026-11-14
+
+### Agregado
+- **Seguimiento por paciente** (`seguimientoPaciente()`): lee la matriz por historia clínica (30 días) y agrega al mensaje las solicitudes previas, el curso en marcha de cada antimicrobiano ("en curso desde 01/11 (13 d); con esta orden completaría 20 d"), posibles solicitudes repetidas (mismo antimicrobiano en menos de 12 h) y otros antimicrobianos previos. La duración se valora sobre el curso completo.
+- **Registro de revisiones** en la pestaña `REGISTRO_REVISIONES` (`registrarRevision()`): una fila por solicitud con restringido, con semáforo de las tablas, semáforo final, fuente (tablas o IA), detalle, enviado o no, modelo, tokens y costo.
+- Tablas: *Candida* solo en urocultivo, antifúngico en foco bacteriano y caspofungina 70 mg de mantenimiento (ver `docs/pertinencia.md`).
+- Calidad de datos: el código CIE10 se toma de cualquier parte del texto o de la descripción exacta de la pestaña `CIE10`; meses mayores de 11 junto a años no se muestran; palabras clave nuevas (`NAC`, `CONSECUTIVA A PROCEDIMIENTO`).
+
+### Cambiado
+- Validación de la tabla de duración contra guías: pie diabético (IWGDF/IDSA 2023), endocarditis (ESC 2023), prótesis articular (DATIPO), criptococosis (OMS 2022), histoplasmosis (OPS/OMS 2020: 14 d), aspergilosis (IDSA 2016), neutropenia febril (ECIL-4), piel (IDSA 2014) y empiema (SLIM). Artritis séptica queda sin verificar. Requiere `reescribirHojaPertinencia()`.
+- Uso del modelo: en vancomicina o linezolid solos solo se llama al modelo (y se envía) si las tablas dejan el caso en rojo; al modelo se le envían solo las fichas de los antimicrobianos y del microorganismo del caso.
+
 ## [1.10.3] - 2026-11-14
 
 ### Cambiado
