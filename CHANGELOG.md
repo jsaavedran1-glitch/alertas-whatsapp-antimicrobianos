@@ -2,6 +2,15 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.7.0] - 2026-11-14
+
+### Cambiado
+- **El análisis del mensaje de revisión (respuesta citada) pasa a ser la pertinencia de las tablas**: duración de referencia por síndrome con su fuente, días que la superan, profilaxis de más de 24 h y reglas de espectro. `IA_HALLAZGOS_ACTIVOS = false` en `IA_PROA.gs`: ya no se llama a la API del modelo (sin costo por caso). Con `true` se agregan además los hallazgos del modelo, salvo los de duración.
+- En el flujo de dos mensajes el bloque de pertinencia sale solo en la revisión; en el de un mensaje sigue en el mensaje base.
+
+### Agregado al repositorio
+- `IA_PROA.gs` y los cambios de `Codigo.gs` que solo estaban en el proyecto de Apps Script (encabezado destacado de ceftazidima/avibactam, `enviarAlertaWhatsApp(mensaje, opciones)`, ajuste renal sin valor de depuración), fusionados con la v1.6.0.
+
 ## [1.6.0] - 2026-11-14
 
 ### Agregado

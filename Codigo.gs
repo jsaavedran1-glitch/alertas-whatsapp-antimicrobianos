@@ -93,7 +93,11 @@ var CONFIG = {
     { am: 'LINEZOLID', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|PSEUDOMONA|ACINETOBACTER|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|GRAM ?NEGATIV|KPC|BLEE', soloSiUnico: true, mensaje: 'LINEZOLID no tiene actividad frente a gramnegativos: verificar cobertura' },
     { am: 'DAPTOMICINA', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|PSEUDOMONA|ACINETOBACTER|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|GRAM ?NEGATIV|KPC|BLEE', soloSiUnico: true, mensaje: 'DAPTOMICINA no tiene actividad frente a gramnegativos: verificar cobertura' },
     { am: 'RIFAMPICINA', soloSiUnico: true, exceptoSindromes: ['TUBERCULOSIS'], mensaje: 'RIFAMPICINA no debe usarse en monoterapia: genera resistencia rápidamente' }
-  ]
+  ],
+  // Encabezado destacado arriba del mensaje cuando la solicitud trae alguno de estos antimicrobianos
+  // (decision del referente PROA, 2026-11-07). Green-API no permite mencionar a todo el grupo (@todos),
+  // asi que el aviso es visual. Cada par: [texto que debe contener el nombre, texto del encabezado].
+  ENCABEZADOS_DESTACADOS: [['AVIBACTAM', 'CEFTAZIDIMA/AVIBACTAM']]
 };
 
 /* =====================================================================
@@ -330,6 +334,9 @@ function rangoTexto(min, max) {
    ===================================================================== */
 function notificarNuevaRespuesta(e) {
   var coincidencias = filtrarAntimicrobianosRestringidos(e);
+  // IA_PROA.gs: con la revision por IA activa, el caso sale en dos mensajes (base + revision citada).
+  // Sin ANTHROPIC_API_KEY, con IA_PROA_MODO = NO o sin el archivo IA_PROA.gs sigue el flujo de siempre.
+  if (coincidencias.length > 0 && typeof notificarConRevisionIa_ === 'function' && notificarConRevisionIa_(e, coincidencias)) return;
   if (!debeAlertar(coincidencias)) {
     return;
   }
@@ -707,7 +714,25 @@ function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, es
 /* =====================================================================
    Mensaje
    ===================================================================== */
-function construirMensajeDesdeEvento(e, coincidenciasOpt) {
+// Lineas de pertinencia (duracion de referencia, profilaxis, espectro) de una solicitud.
+function pertinenciaDesdeEvento(e, coincidenciasOpt) {
+  var valores = (e && e.namedValues) ? e.namedValues : {};
+  var coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
+  var micro = campoDelEvento(valores, CAMPOS.MICROORGANISMO);
+  return evaluarPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
+    micro === '-' ? '' : micro, coincidencias.concat(acompanantesNoRestringidos(e)));
+}
+
+// Lineas de encabezado destacado (CONFIG.ENCABEZADOS_DESTACADOS) segun los antimicrobianos de la solicitud.
+function encabezadosDestacados(esquemas) {
+  var alerta = String.fromCodePoint(0x1F6A8);
+  return (CONFIG.ENCABEZADOS_DESTACADOS || []).filter(function(par) {
+    return esquemas.some(function(am) { return String(am.nombre || '').toUpperCase().indexOf(par[0]) > -1; });
+  }).map(function(par) { return '*' + alerta + par[1] + alerta + '*'; });
+}
+
+// sinSugerencia (IA_PROA.gs): sin la linea de sugerencia PROA, que va en el mensaje de revision.
+function construirMensajeDesdeEvento(e, coincidenciasOpt, sinSugerencia) {
   var valores = (e && e.namedValues) ? e.namedValues : {};
   function campo(clave) {
     var v = campoDelEvento(valores, CAMPOS[clave]);
@@ -744,6 +769,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
     emojiIndicacion + ' Indicación: ' + tipoIndicacion +
       ' · Cultivos: ' + campo('CULTIVOS') + ' · Origen: ' + campo('ORIGEN')
   ];
+  var destacados = encabezadosDestacados(coincidencias.concat(acompanantes));
+  if (destacados.length) lineas = destacados.concat([''], lineas);
   if (indicacion === 'CAMBIO') {
     lineas.push(emojiCambio + ' Cambio de antimicrobiano: ' + capitalizar(campo('RAZON_CAMBIO')));
   }
@@ -755,8 +782,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
   if (esSi(campo('AJUSTE_RENAL')) || esSi(campo('FALLA_HEPATICA'))) {
     var extras = [];
     if (esSi(campo('AJUSTE_RENAL'))) {
-      var dep = numeroONulo(campo('DEP_CREATININA'));
-      var texto = 'Ajuste renal: Sí' + ((dep !== null && dep > 0) ? ' (DepCr ' + formatoNumero(dep, 2) + ')' : ' (DepCr no registrada)');
+      // Sin el valor de depuracion (DepCr): decision del referente PROA, 2026-11-07.
+      var texto = 'Ajuste renal: Sí';
       var sinAjuste = coincidencias.filter(function(am) {
         var regla = reglaDosisPara(am.nombre, reglas);
         return regla && regla.ajusteRenal === 'NO';
@@ -784,12 +811,13 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
     lineas.push('', emojiMas + ' Acompañante: ' + am.nombre + ' · ' + lineaEsquema(am) + ' · ' + diasTexto(am.dias));
   });
 
-  var pertinencia = evaluarPertinencia(campo('DIAGNOSTICO'), tipoIndicacion, campo('MICROORGANISMO') === '-' ? '' : campo('MICROORGANISMO'), coincidencias.concat(acompanantes));
+  // Con sinSugerencia (flujo de dos mensajes, IA_PROA.gs) la pertinencia va en el mensaje de revision.
+  var pertinencia = sinSugerencia ? [] : pertinenciaDesdeEvento(e, coincidencias);
   if (pertinencia.length) lineas.push('');
   pertinencia.forEach(function(l) { lineas.push(l); });
 
   var avisos = advertenciasCoherencia(pesoKg, campo('EDAD_ANIOS'), campo('EDAD_MESES'), coincidencias.concat(acompanantes));
-  var sugerencia = sugerenciaPROA(tipoIndicacion, coincidencias, acompanantes);
+  var sugerencia = sinSugerencia ? '' : sugerenciaPROA(tipoIndicacion, coincidencias, acompanantes);
   if (avisos.length || sugerencia) lineas.push('');
   avisos.forEach(function(av) { lineas.push(emojiAdvertencia + ' ' + av); });
   if (sugerencia) lineas.push(emojiIdea + ' ' + sugerencia);
@@ -800,31 +828,43 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
 /* =====================================================================
    Envio (solo al grupo configurado)
    ===================================================================== */
-function enviarAlertaWhatsApp(mensaje) {
+// opciones (IA_PROA.gs): chatId (otro grupo, p. ej. PRUEBA BOT), quotedMessageId (responde citando un
+// mensaje del mismo chat) y sinFirma (sin la firma de arriba ni el pie). Devuelve { ok, idMessage }.
+function enviarAlertaWhatsApp(mensaje, opciones) {
+  opciones = opciones || {};
   var props = PropertiesService.getScriptProperties();
   var idInstance = props.getProperty('GREENAPI_ID_INSTANCE');
   var apiToken = props.getProperty('GREENAPI_API_TOKEN');
-  var chatId = props.getProperty('GREENAPI_GROUP_CHATID');
+  var chatId = opciones.chatId || props.getProperty('GREENAPI_GROUP_CHATID');
   if (!idInstance || !apiToken || !chatId) {
     Logger.log('Faltan credenciales de Green-API en Propiedades del script.');
-    return;
+    return { ok: false };
+  }
+  if (!/@g\.us$/.test(chatId)) {
+    Logger.log('El destino no es un grupo (@g.us); envio bloqueado.');
+    return { ok: false };
   }
   var firmaBot = props.getProperty('GREENAPI_BOT_LABEL') || 'Bot PROA Antimicrobianos HDV';
   var pieBot = '_Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado por el QF Juan Pablo Saavedra_';
-  var mensajeFirmado = '*' + firmaBot + '*' + '\n\n' + mensaje + '\n\n' + pieBot;
+  var mensajeFirmado = opciones.sinFirma ? mensaje : '*' + firmaBot + '*' + '\n\n' + mensaje + '\n\n' + pieBot;
   var url = props.getProperty('GREENAPI_API_URL') + '/waInstance' + idInstance + '/sendMessage/' + apiToken;
   var payload = { chatId: chatId, message: mensajeFirmado };
+  if (opciones.quotedMessageId) payload.quotedMessageId = opciones.quotedMessageId;
   var options = { method: 'post', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true };
   try {
     var response = UrlFetchApp.fetch(url, options);
     var codigoRespuesta = response.getResponseCode();
     if (codigoRespuesta < 200 || codigoRespuesta >= 300) {
       Logger.log('Green-API respondio con error HTTP ' + codigoRespuesta + ': ' + response.getContentText());
-    } else {
-      Logger.log(response.getContentText());
+      return { ok: false, codigo: codigoRespuesta };
     }
+    Logger.log(response.getContentText());
+    var idMessage = '';
+    try { idMessage = JSON.parse(response.getContentText()).idMessage || ''; } catch (errJson) {}
+    return { ok: true, idMessage: idMessage };
   } catch (err) {
     Logger.log('Error al enviar alerta por WhatsApp (Green-API): ' + err);
+    return { ok: false };
   }
 }
 
@@ -972,4 +1012,12 @@ function testConstruccionMensaje() {
 // SI envia un mensaje real al grupo configurado. Confirmar antes GREENAPI_GROUP_CHATID (PRUEBA BOT).
 function enviarEjemploAlGrupo() {
   notificarNuevaRespuesta(eventoPruebaDaptomicina());
+}
+
+// Envia SOLO a PRUEBA BOT (chatId fijo; no usa GREENAPI_GROUP_CHATID) el mensaje base del caso de
+// ceftazidima/avibactam, para ver el encabezado destacado tal como llega a WhatsApp.
+function enviarPruebaCeftazidimaAPruebaBot() {
+  var e = eventoPruebaCeftazidimaAvibactam();
+  var r = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e)), { chatId: '120363412506101174@g.us' });
+  Logger.log(JSON.stringify(r));
 }

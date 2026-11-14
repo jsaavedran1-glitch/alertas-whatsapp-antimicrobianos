@@ -78,6 +78,8 @@ global.UrlFetchApp = { fetch: function () { throw new Error('UrlFetchApp no debe
 global.PropertiesService = { getScriptProperties: function () { return { getProperty: function () { return null; } }; } };
 
 (0, eval)(src);
+var srcIa = fs.readFileSync(path.join(__dirname, '..', 'IA_PROA.gs'), 'utf8');
+(0, eval)(srcIa);
 
 var fallos = 0;
 function prueba(desc, fn) {
@@ -207,7 +209,7 @@ prueba('mensaje: ceftazidima/avibactam 750 mg, cambio, ajuste renal, sin interco
   incluye(t, 'Indicación: Empírico · Cultivos: UROCULTIVO · Origen: IAAS');
   incluye(t, '🔄 Cambio de antimicrobiano: Por antibiograma');
   incluye(t, '⚠️ Sin interconsulta a Infectología');
-  incluye(t, '💧 Ajuste renal: Sí (DepCr 18)');
+  incluye(t, '💧 Ajuste renal: Sí');
   noIncluye(t, 'no requiere ajuste renal');
   incluye(t, 'Dosis: 750 mg (10,7 mg/kg) · Intravenoso · cada 12 horas');
   incluye(t, '⚠️ Dosis fuera del rango de referencia (940-2500 mg/dosis o 30-65 mg/kg/dosis): revisar');
@@ -275,7 +277,7 @@ prueba('coherencia: peso implausible, peso vs edad, dosis/kg absurda; ajuste ren
   noIncluye(construirMensajeDesdeEvento(ok, filtrarAntimicrobianosRestringidos(ok)), 'Verificar');
   // ajuste renal marcado Si con caspofungina (no requiere ajuste renal)
   nv = eventoPruebaPediatrico().namedValues; nv[CAMPOS.AJUSTE_RENAL] = ['Sí']; nv[CAMPOS.DEP_CREATININA] = ['25'];
-  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💧 Ajuste renal: Sí (DepCr 25) · CASPOFUNGINA 50, 70 no requiere ajuste renal');
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💧 Ajuste renal: Sí · CASPOFUNGINA 50, 70 no requiere ajuste renal');
   var v = eventoPruebaCeftazidimaAvibactam(); // requiere ajuste renal: sin coletilla
   noIncluye(construirMensajeDesdeEvento(v, filtrarAntimicrobianosRestringidos(v)), 'no requiere ajuste renal');
 });
@@ -364,6 +366,22 @@ prueba('mensaje: campos ausentes salen como "-" y nunca como undefined', functio
   incluye(t, 'Dosis: - · - · -');
   incluye(t, 'Días ordenados: -');
   incluye(t, '⚠️ Sin interconsulta a Infectología');
+});
+
+prueba('revision (IA_PROA.gs): el analisis es la pertinencia de las tablas y no se llama a la API', function () {
+  var e = eventoPruebaCeftazidimaAvibactam();
+  var co = filtrarAntimicrobianosRestringidos(e);
+  assert.strictEqual(revisarCasoConIa_(e, co, { clave: 'x', modelo: 'm' }), null);
+  var base = construirMensajeDesdeEvento(e, co, true);
+  noIncluye(base, 'Duración de referencia'); noIncluye(base, 'Sugerencia PROA');
+  var r = mensajeRevision_(e, co, null);
+  incluye(r, '🔎 *Revisión PROA · Ceftazidima / avibactam*');
+  incluye(r, '📏 Duración de referencia · Infección urinaria complicada / pielonefritis: 5-7 días (IDSA 2025 ITU complicada; ACIN Infectio 2023)');
+  incluye(r, '⚠️ Superan la referencia: CEFTAZIDIMA / AVIBACTAM 14 d · hasta 10-14 d si hay absceso, obstrucción, prostatitis o respuesta lenta');
+  noIncluye(r, 'asistida por IA');
+  // flujo de un solo mensaje: la pertinencia sigue en el mensaje base
+  incluye(construirMensajeDesdeEvento(e, co), 'Duración de referencia');
+  assert.ok(srcIa.indexOf('sk-ant') === -1);
 });
 
 prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {
