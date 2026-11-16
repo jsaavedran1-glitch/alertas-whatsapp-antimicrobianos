@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.28.1] - 2026-11-16
+
+### Cambiado
+- `probarUltimaSolicitud()` y `probarUltimoProlongado()` escriben en el registro de ejecución, para cada mensaje, si se enviaría y cuándo (`▶ CASO PROA: se enviaría al grupo al llegar la solicitud`, `▶ REVISIÓN DE DURACIÓN: se enviaría al día siguiente, a las 7:00`, o `no se enviaría (motivo)`). La primera línea dice `PRUEBA (no se envió nada al grupo)`. Desaparece el separador "mensaje aparte", que se confundía con un segundo mensaje.
+
 ## [1.28.0] - 2026-11-16
 
 ### Cambiado (decisión del referente: "si el atb además de estar en el listado de restringidos presenta más de los 14 días; para los otros, solamente la revisión de tto")

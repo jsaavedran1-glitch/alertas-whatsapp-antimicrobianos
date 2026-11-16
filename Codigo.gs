@@ -1803,21 +1803,26 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
   }
   var coincidencias = filtrarAntimicrobianosRestringidos(e);
   var revision = revisionProlongado(e, coincidencias);
-  var mensajes = [];
-  if (generaCasoProa(e, coincidencias)) mensajes.push(construirMensajeDesdeEvento(e, coincidencias));
-  else if (debeAlertar(coincidencias)) mensajes.push('(Caso PROA: no se envía, ' + formatoNumero(diasCasoProa(e, coincidencias), 0) +
-    ' d con esta orden; sale desde más de ' + CONFIG.CASO_DIAS_MINIMOS + ' d)');
+  // Cada bloque dice que pasaria con ese mensaje; las lineas con ▶ son solo de esta prueba, nunca van al grupo.
+  var bloques = [];
+  if (generaCasoProa(e, coincidencias)) {
+    bloques.push('▶ CASO PROA: se enviaría al grupo al llegar la solicitud\n\n' + construirMensajeDesdeEvento(e, coincidencias));
+  } else if (debeAlertar(coincidencias)) {
+    bloques.push('▶ CASO PROA: no se enviaría (' + formatoNumero(diasCasoProa(e, coincidencias), 0) + ' d con esta orden; sale desde más de ' +
+      CONFIG.CASO_DIAS_MINIMOS + ' d)');
+  }
   if (revision) {
     var accion = accionProlongado(revision, e, coincidencias);
-    // el mensaje solo se muestra si de verdad saldria
-    mensajes.push('(Revisión de duración: ' + TEXTO_ACCION_PROLONGADO[accion] + ')' +
-      (accion === 'RESUMEN' || accion === 'ENVIAR' ? '\n' + revision.mensaje : ''));
+    if (accion === 'RESUMEN') bloques.push('▶ REVISIÓN DE DURACIÓN: se enviaría al día siguiente, a las 7:00\n\n' + revision.mensaje);
+    else if (accion === 'ENVIAR') bloques.push('▶ REVISIÓN DE DURACIÓN: se enviaría al grupo al llegar la solicitud\n\n' + revision.mensaje);
+    else bloques.push('▶ REVISIÓN DE DURACIÓN: ' + TEXTO_ACCION_PROLONGADO[accion].replace(/^no se envía: /, 'no se enviaría (') + ')');
   }
   var p = tratamientoProlongado(e);
-  Logger.log('Fila %s · restringidos: %s · caso PROA: %s · revisión de duración: %s\n\n%s', fila, coincidencias.length,
-    generaCasoProa(e, coincidencias) ? 'sí' : 'no', p ? 'sí (' + p.solicitudes + ' prescripciones seguidas, ' + p.dias + ' d)' :
+  Logger.log('PRUEBA (no se envió nada al grupo) · fila %s · restringidos: %s · caso PROA: %s · revisión de duración: %s\n\n%s', fila,
+    coincidencias.length, generaCasoProa(e, coincidencias) ? 'sí' : 'no',
+    p ? 'sí (' + p.solicitudes + ' prescripciones seguidas, ' + p.dias + ' d)' :
       'no (necesita ' + CONFIG.PROLONGADO_MIN_SOLICITUDES + ' prescripciones seguidas y más de ' + CONFIG.PROLONGADO_DIAS + ' d)',
-    mensajes.length ? mensajes.join('\n\n----- mensaje aparte -----\n\n') : '(no genera mensaje)');
+    bloques.length ? bloques.join('\n\n') : '▶ No generaría ningún mensaje.');
 }
 
 function testCruceCIE10() {
