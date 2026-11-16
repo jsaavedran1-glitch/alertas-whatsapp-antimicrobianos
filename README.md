@@ -158,7 +158,7 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 
 | Función | ¿Envía algo? | Uso |
 |---|---|---|
-| `notificarNuevaRespuesta(e)` | Sí, si hay restringido | La llama el activador |
+| `notificarNuevaRespuesta(e)` | Sí, si hay restringido o tratamiento prolongado | La llama el activador |
 | `obtenerAntimicrobianosRestringidos()` | **No** | Lee la pestaña de restringidos (o el respaldo) |
 | `obtenerRangosDosis()`, `evaluarDosis()` | **No** | Lee la pestaña `RANGOS_DOSIS` (o el respaldo) y evalúa cada dosis |
 | `crearHojaRangosDosis()` | No (escribe en la hoja) | Crea la pestaña `RANGOS_DOSIS` con la propuesta inicial; no la toca si ya existe |
@@ -168,6 +168,8 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 | `advertenciasCoherencia()`, `sugerenciaPROA()` | **No** | Avisos de digitación y sugerencia de revaluación a las 48-72 h |
 | `filtrarAntimicrobianosRestringidos(e)`, `debeAlertar()`, `acompanantesNoRestringidos(e)` | **No** | Separan los antimicrobianos de la solicitud y deciden si la alerta se envía (algún restringido con `dispara_alerta` ≠ NO) |
 | `construirMensajeDesdeEvento(e)` | **No** | Arma el texto del mensaje |
+| `tratamientoProlongado(e)` | **No** | Días de antimicrobiano continuo ya recibidos si superan `PROLONGADO_DIAS` (14) |
+| `probarUltimaSolicitud(fila)`, `probarUltimoProlongado()` | **No** | Escriben en el registro de ejecución el mensaje de una fila real (o de la última que alerta / la última con más de 14 d continuos) |
 | `formatearDiagnosticoCIE10()`, `buscarDescripcionCIE10()` | **No** | Cruce del diagnóstico con la pestaña `CIE10` (TextFinder + caché) |
 | `verificarEncabezados()` | **No** | Comprueba que todas las preguntas usadas existan en la fila 1 de la hoja |
 | `enviarAlertaWhatsApp(mensaje)` | Sí | Envío a Green-API con firma y pie |

@@ -11,6 +11,7 @@ Todas las fechas en hora de Colombia (America/Bogota).
 - `CONFIG.PROLONGADO_ACTIVO` (true), `PROLONGADO_DIAS` (14) y `PROLONGADO_SOLO_CAMBIO` (false: revisa también las renovaciones del mismo fármaco; true: solo cuando se formula uno que el paciente no venía recibiendo).
 - `REGISTRO_REVISIONES` agrega la columna **Días de tratamiento continuo** (la 22); si la pestaña tiene el encabezado anterior, se amplía sola.
 - Estimación con la matriz real (01/11–15/11): 22 de 359 solicitudes (11 pacientes), la mitad sin restringido; unas 1-2 revisiones al día.
+- `probarUltimoProlongado()`: escribe en el registro de ejecución el mensaje de la última solicitud con más de 14 d continuos (busca en las últimas 100 filas). **No envía nada** ni llama al modelo. `probarUltimaSolicitud(fila)` ahora también muestra el mensaje de una fila sin restringido si es un tratamiento prolongado.
 
 ### Corregido
 - `💡 Sugerencia PROA` decía "terapia empírica combinada (CEFEPIME)" con un solo antimicrobiano: "combinada" solo con dos o más.

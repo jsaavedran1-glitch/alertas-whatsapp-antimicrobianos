@@ -1438,7 +1438,13 @@ function eventoPruebaSinRestringidos() {
 // Escribe en el registro el mensaje que saldria para una fila real de la matriz, con seguimiento y
 // pertinencia. Sin argumento, busca hacia atras la ultima solicitud que dispara alerta (hasta 300 filas).
 // No envia nada ni escribe en ninguna pestana.
-function probarUltimaSolicitud(filaOpcional) {
+function probarUltimaSolicitud(filaOpcional) { probarSolicitud_(filaOpcional, false); }
+
+// Igual, pero busca la ultima solicitud con mas de CONFIG.PROLONGADO_DIAS de tratamiento continuo
+// (hasta 100 filas: cada una consulta la historia del paciente). No envia nada.
+function probarUltimoProlongado() { probarSolicitud_(null, true); }
+
+function probarSolicitud_(filaOpcional, buscarProlongado) {
   var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_RESPUESTAS);
   var ultima = hoja.getLastRow(), columnas = hoja.getLastColumn();
   var encabezados = hoja.getRange(1, 1, 1, columnas).getValues()[0];
@@ -1451,17 +1457,25 @@ function probarUltimaSolicitud(filaOpcional) {
   if (fila) {
     e = eventoDeFila(fila, hoja.getRange(fila, 1, 1, columnas).getDisplayValues()[0]);
   } else {
-    var desde = Math.max(2, ultima - 299);
+    var n = buscarProlongado ? 100 : 300;
+    var desde = Math.max(2, ultima - n + 1);
     var bloque = hoja.getRange(desde, 1, ultima - desde + 1, columnas).getDisplayValues();
     for (var i = bloque.length - 1; i >= 0 && !e; i--) {
       var candidato = eventoDeFila(desde + i, bloque[i]);
-      if (debeAlertar(filtrarAntimicrobianosRestringidos(candidato))) { e = candidato; fila = desde + i; }
+      var dispara = buscarProlongado ? !!tratamientoProlongado(candidato) : debeAlertar(filtrarAntimicrobianosRestringidos(candidato));
+      if (dispara) { e = candidato; fila = desde + i; }
     }
-    if (!e) { Logger.log('Ninguna de las ultimas 300 solicitudes dispara alerta.'); return; }
+    if (!e) {
+      Logger.log('Ninguna de las ultimas %s solicitudes %s.', n,
+        buscarProlongado ? 'supera ' + CONFIG.PROLONGADO_DIAS + ' d de tratamiento continuo' : 'dispara alerta');
+      return;
+    }
   }
   var coincidencias = filtrarAntimicrobianosRestringidos(e);
-  Logger.log('Fila %s · restringidos: %s · dispara alerta: %s\n\n%s', fila, coincidencias.length, debeAlertar(coincidencias),
-    coincidencias.length ? construirMensajeDesdeEvento(e, coincidencias) : '(sin antimicrobiano restringido: no genera mensaje)');
+  var prolongado = tratamientoProlongado(e);
+  Logger.log('Fila %s · restringidos: %s · dispara alerta: %s · tratamiento continuo: %s\n\n%s', fila, coincidencias.length,
+    debeAlertar(coincidencias), prolongado ? prolongado.dias + ' d' : 'no supera ' + CONFIG.PROLONGADO_DIAS + ' d',
+    (coincidencias.length || prolongado) ? construirMensajeDesdeEvento(e, coincidencias) : '(sin restringido ni tratamiento prolongado: no genera mensaje)');
 }
 
 function testCruceCIE10() {

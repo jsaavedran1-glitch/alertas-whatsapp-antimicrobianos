@@ -47,6 +47,7 @@ function hojaDeFilas(filas, conTextFinder) {
       var sub = filas.slice(f - 1, f - 1 + nf).map(function (r) { return r.slice(c - 1, c - 1 + nc); });
       return {
         getValues: function () { return sub; },
+        getDisplayValues: function () { return sub.map(function (r) { return r.map(function (v) { return v === undefined || v === null ? '' : String(v); }); }); },
         setValues: function (vals) {
           vals.forEach(function (fila, i) {
             while (filas.length < f + i) filas.push([]);
@@ -542,6 +543,24 @@ prueba('tratamiento prolongado: mas de 14 d continuos al formular un medicamento
   registrarRevision(e, [], { enviado: true });
   var reg = HOJAS['REGISTRO_REVISIONES']._filas;
   assert.deepStrictEqual(reg[0], ENCABEZADOS_REGISTRO); assert.strictEqual(reg[1][ENCABEZADOS_REGISTRO.indexOf('Días de tratamiento continuo')], 16);
+});
+
+prueba('probarUltimoProlongado: muestra la ultima solicitud con mas de 14 d sin enviar nada', function () {
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  filas.push(filaMatriz('01/11/2026 10:00:00', '888001', [['CEFEPIME', '2000', '8', '7']]));
+  var registro = [], logReal = Logger.log;
+  Logger.log = function (fmt) {   // como Apps Script: sustituye cada %s por el argumento siguiente
+    var args = Array.prototype.slice.call(arguments, 1);
+    registro.push(String(fmt).replace(/%s/g, function () { return String(args.shift()); }));
+  };
+  try {
+    conApiSimulada(respuestaIa({}), function (llamadas) {
+      probarUltimoProlongado();
+      assert.strictEqual(envios.length, 0); assert.strictEqual(llamadas.length, 0);
+    });
+  } finally { Logger.log = logReal; filas.pop(); }
+  var texto = registro.join('\n');
+  incluye(texto, 'tratamiento continuo: 16 d'); incluye(texto, '*⏳ REVISIÓN PROA · Tratamiento prolongado*');
 });
 
 prueba('registro: una fila por revision en REGISTRO_REVISIONES', function () {
