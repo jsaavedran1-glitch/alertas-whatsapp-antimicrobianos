@@ -8,6 +8,15 @@ Todas las fechas en hora de Colombia (America/Bogota).
 - Cada solicitud de la lista muestra **su patología** (`1. PIPERACILINA / TAZOBACTAM · 16/10-24/10 · 8 d · Bacteriemia / sepsis`). En la matriz real, 16 de 24 revisiones cambiaban de diagnóstico dentro del mismo tratamiento.
 - El total se compara con **la patología de mayor duración del tratamiento**, no solo con el diagnóstico de la orden actual, y se nombran las demás: `📏 Bacteriemia / sepsis: 7-14 d (...); la más larga de sus patologías (también Neumonía 5-7 d)`. Así una osteomielitis previa (42 d) no queda juzgada como celulitis (5-7 d). Con los datos de 01/11–15/11: verde/amarillo/rojo pasa de 0/12/12 a 1/8/15.
 
+### Cambiado (contra el spam en el grupo, decisión del referente)
+- **Resumen diario único:** la revisión ya no se envía al llegar la solicitud. Queda **PENDIENTE** en `REGISTRO_REVISIONES` y `enviarResumenProlongados()` la envía a las 7:00 en **un solo mensaje** con todos los pacientes del día, los rojos primero (`*⏳ REVISIÓN PROA · Tratamientos prolongados · 16/11*`). El activador se crea una vez con `crearTriggerResumenProlongados()`. Si el envío falla, quedan pendientes para el día siguiente.
+- **Sin verdes:** si el total está dentro de la referencia de sus patologías, no se envía (`PROLONGADO_ENVIAR_VERDES = false`).
+- **Sin repetir:** un paciente sale como máximo una vez cada 7 días (`PROLONGADO_REPETIR_DIAS`), según las revisiones enviadas o pendientes del registro.
+- **Formato compacto:** por paciente, una línea con HC, edad, servicio, cama y CIE10; otra con solicitudes, días y veredicto; las solicitudes numeradas con fechas, días y patología (solo cuando cambia), y la referencia. La sugerencia va una sola vez al final.
+- Las que no se envían también quedan en el registro, con el motivo en `Destino`.
+- `probarResumenProlongados()` muestra el resumen pendiente sin enviarlo. Con `PROLONGADO_RESUMEN_DIARIO = false` la revisión sale de inmediato con el mismo formato.
+- Reproducción con la matriz real (01/11–15/11): de 24 revisiones, 18 entran al resumen, 5 no se repiten y 1 es verde; el grupo recibe **11 resúmenes** (1-2 pacientes cada uno, máximo 1.533 caracteres) en lugar de 24 mensajes.
+
 ## [1.19.0] - 2026-11-16
 
 ### Cambiado (criterio del referente para la revisión por tratamiento prolongado)

@@ -60,6 +60,12 @@ var CONFIG = {
   PROLONGADO_DIAS: 10,
   PROLONGADO_MIN_SOLICITUDES: 3,
   PROLONGADO_SOLO_CAMBIO: false,
+  // Contra el spam (decision del referente, 2026-11-16): sin verdes, un paciente como maximo cada 7 dias y
+  // todo en un resumen diario a las 7:00 (activador de crearTriggerResumenProlongados).
+  PROLONGADO_ENVIAR_VERDES: false,
+  PROLONGADO_REPETIR_DIAS: 7,
+  PROLONGADO_RESUMEN_DIARIO: true,
+  PROLONGADO_RESUMEN_HORA: 7,
   // Registro de cada revision (indicadores PROA y auditoria del analisis).
   REGISTRO_ACTIVO: true,
   HOJA_REGISTRO: 'REGISTRO_REVISIONES',
@@ -388,15 +394,18 @@ function notificarCaso_(e, coincidencias) {
   registrarRevision(e, coincidencias, { enviado: !!(envio && envio.ok), destino: 'PRODUCCION' });
 }
 
-// Revision por tratamiento prolongado: va siempre al grupo de produccion, sin modelo (son datos de la matriz
-// y la tabla de duracion). Un error aqui no afecta al caso PROA, que ya salio.
+// Revision por tratamiento prolongado, sin modelo (son datos de la matriz y la tabla de duracion). Con
+// CONFIG.PROLONGADO_RESUMEN_DIARIO queda pendiente en REGISTRO_REVISIONES y sale en el resumen diario
+// (enviarResumenProlongados); si no, se envia de inmediato. Un error aqui no afecta al caso PROA.
 function notificarTratamientoProlongado(e, coincidencias) {
   try {
     var revision = revisionProlongado(e, coincidencias);
     if (!revision) return;
-    var envio = enviarAlertaWhatsApp(revision.mensaje, { sinFirma: true });
-    registrarRevision(e, coincidencias, { enviado: !!(envio && envio.ok), destino: 'PRODUCCION', fuente: 'TRATAMIENTO PROLONGADO',
-      nivelFinal: revision.nivel, detalle: revision.detalle });
+    var accion = accionProlongado(revision, e), envio = null;
+    if (accion === 'ENVIAR') envio = enviarAlertaWhatsApp(revision.mensaje, { sinFirma: true });
+    registrarRevision(e, coincidencias, { fuente: FUENTE_PROLONGADO, nivelFinal: revision.nivel, detalle: revision.bloque.join('\n'),
+      estadoEnvio: accion === 'RESUMEN' ? 'PENDIENTE' : (envio && envio.ok ? 'SI' : 'NO'),
+      destino: accion === 'ENVIAR' ? 'PRODUCCION' : (accion === 'RESUMEN' ? 'RESUMEN DIARIO' : TEXTO_ACCION_PROLONGADO[accion]) });
   } catch (err) {
     Logger.log('Revision por tratamiento prolongado no disponible: ' + err);
   }
@@ -857,7 +866,7 @@ function duracionFrenteReferencia(diagnosticos, tipoIndicacion, antifungico, tot
   var sin = { encabezado: '', nivel: -1, texto: '' };
   if (!CONFIG.PERTINENCIA_ACTIVA) return sin;
   if (tipoIndicacion === 'Profiláctico') {
-    return { encabezado: TEXTO_PROFILAXIS, nivel: total > 1 ? 2 : 0, texto: total > 1 ? 'supera las 24 h de la profilaxis; revaluar' : 'dentro de la referencia' };
+    return { encabezado: TEXTO_PROFILAXIS, nivel: total > 1 ? 2 : 0, texto: total > 1 ? 'supera las 24 h de la profilaxis' : 'dentro de la referencia' };
   }
   var tabla = obtenerPertinencia(), vistos = {}, sindromes = [];
   [].concat(diagnosticos).forEach(function(dx) {
@@ -876,9 +885,10 @@ function duracionFrenteReferencia(diagnosticos, tipoIndicacion, antifungico, tot
   }
   var elegido = conMax.reduce(function(a, b) { return b.max > a.max ? b : a; });
   var otras = conMax.filter(function(s) { return s !== elegido; }).map(function(s) { return s.sindrome + ' ' + rangoDuracion(s) + ' d'; });
-  var v = valorarDuracion(elegido, total);
-  return { encabezado: encabezadoDuracion(elegido) + (otras.length ? '; la más larga de sus patologías (también ' + otras.join(', ') + ')' : ''),
-    nivel: v.nivel, texto: v.texto };
+  var nivel = valorarDuracion(elegido, total).nivel;
+  return { encabezado: elegido.sindrome + ' ' + rangoDuracion(elegido) + ' d (' + elegido.fuente + ')' +
+    (otras.length ? ', la más larga (también ' + otras.join(', ') + ')' : ''),
+    nivel: nivel, texto: ['dentro de la referencia', 'supera la referencia', 'duplica la referencia'][nivel] };
 }
 
 function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas, contexto) {
@@ -1155,49 +1165,156 @@ function tratamientoProlongado(e) {
   return mejor;
 }
 
-// Revision por tratamiento prolongado, mensaje aparte del caso PROA: { mensaje, nivel, detalle } o null.
-// Lista las solicitudes del tratamiento continuo con sus fechas y compara el total con la referencia del foco.
+// Revision por tratamiento prolongado de una solicitud: { hc, nivel, bloque, mensaje } o null.
+// bloque: lineas sin formato del paciente para el resumen diario (la primera identifica al paciente);
+// mensaje: el mismo bloque como mensaje de un solo paciente. Una revision por paciente y dia.
 function revisionProlongado(e, coincidenciasOpt) {
   var p = tratamientoProlongado(e);
-  if (!p || p.episodio.mismoDia) return null;   // una revision por paciente y dia
+  if (!p || p.episodio.mismoDia) return null;
   var valores = (e && e.namedValues) ? e.namedValues : {};
   var campo = function(clave) { return campoDelEvento(valores, CAMPOS[clave]) || '-'; };
   var E = function(cp) { return String.fromCodePoint(cp); };
-  var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
   var dia = 24 * 3600 * 1000;
   var pesoKg = pesoKgDesde(campo('PESO_KG'), campo('PESO_G'));
   var fechaSolicitud = fechaDe(campoDelEvento(valores, 'Marca temporal')) || new Date();
+  var dxActual = campoDelEvento(valores, CAMPOS.DIAGNOSTICO);
   var actuales = leerSlots(e).filter(function(am) { return esAntifungico(am.nombre) === p.antifungico; });
-  actuales.forEach(function(am) { am.mgKg = (pesoKg !== null && numeroONulo(am.dosis) !== null) ? numeroONulo(am.dosis) / pesoKg : null; });
-  var tipo = p.antifungico ? 'antifúngico' : 'antibiótico';
 
-  var lista = p.episodio.solicitudes.map(function(x, i) {
-    return (i + 1) + '. ' + x.nombres.join(' + ') + ' · ' + fechaCorta(new Date(x.inicio)) + '-' + fechaCorta(new Date(x.fin)) +
-      ' · ' + formatoNumero(x.dias, 0) + ' d' + patologiaCorta(x.dx);
+  var dur = duracionFrenteReferencia(p.episodio.solicitudes.map(function(x) { return x.dx; }).concat([dxActual]),
+    tipoIndicacionTexto(campo('TIPO_INDICACION')), p.antifungico, p.proyectado);
+  var nivel = dur.nivel >= 0 ? dur.nivel : 1;   // sin referencia para sus patologias, se sugiere verificar
+
+  var cama = campo('CAMA'), servicio = campo('SERVICIO');
+  var codigo = extraerCodigoCIE10(dxActual) || String(dxActual || '-').trim().slice(0, 30);
+  var bloque = ['HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
+    (servicio !== '-' ? ' · ' + servicio : '') + (cama !== '-' ? ' · Cama ' + cama : '') + ' · ' + codigo];
+  bloque.push(p.solicitudes + ' solicitudes · ' + formatoNumero(p.dias, 0) + ' d' +
+    (p.proyectado > p.dias ? ', con esta orden ' + formatoNumero(p.proyectado, 0) + ' d' : '') + ' · ' + ETIQUETA_NIVEL[nivel]);
+  // la patologia se escribe en la primera solicitud y cuando cambia
+  var anterior = null;
+  var patologia = function(dx) { var t = patologiaCorta(dx); if (t === anterior) return ''; anterior = t; return t; };
+  p.episodio.solicitudes.forEach(function(x, i) {
+    bloque.push((i + 1) + '. ' + x.nombres.join(' + ') + ' ' + fechaCorta(new Date(x.inicio)) + '-' + fechaCorta(new Date(x.fin)) +
+      ' · ' + formatoNumero(x.dias, 0) + ' d' + patologia(x.dx));
   });
   var diasOrden = p.proyectado - p.dias;
-  lista.push(p.solicitudes + '. ' + actuales.map(function(am) { return am.nombre + ' ' + esquemaCorto(am); }).join(' + ') +
-    ' · ' + fechaCorta(fechaSolicitud) + (diasOrden > 0 ? '-' + fechaCorta(new Date(fechaSolicitud.getTime() + diasOrden * dia)) +
-    ' · ' + formatoNumero(diasOrden, 0) + ' d' : '') + patologiaCorta(campoDelEvento(valores, CAMPOS.DIAGNOSTICO)) + ' (esta orden)');
+  bloque.push(p.solicitudes + '. ' + actuales.map(function(am) {
+    var d = numeroONulo(am.dosis);
+    return am.nombre + ' ' + (d !== null ? formatoNumero(d, 2) + ' mg' : am.dosis) + ' ' + viaCorta(am.via) + ' ' + frecuenciaCorta(am.frecuencia);
+  }).join(' + ') + ' ' + fechaCorta(fechaSolicitud) + (diasOrden > 0 ? '-' + fechaCorta(new Date(fechaSolicitud.getTime() + diasOrden * dia)) +
+    ' · ' + formatoNumero(diasOrden, 0) + ' d' : '') + patologia(dxActual) + ' (esta orden)');
+  bloque.push(E(0x1F4CF) + ' ' + (dur.encabezado
+    ? dur.encabezado + (dur.nivel >= 0 ? ': ' + formatoNumero(p.proyectado, 0) + ' d ' + dur.texto : '')
+    : (dur.texto ? capitalizar(dur.texto) : 'Sin duración de referencia en las tablas para estas patologías')));
+  return { hc: String(campo('HC')).replace(/\s+/g, ''), nivel: nivel, bloque: bloque, mensaje: mensajeProlongados([{ nivel: nivel, bloque: bloque }]) };
+}
 
-  var diagnosticos = p.episodio.solicitudes.map(function(x) { return x.dx; }).concat([campoDelEvento(valores, CAMPOS.DIAGNOSTICO)]);
-  var dur = duracionFrenteReferencia(diagnosticos, tipoIndicacionTexto(campo('TIPO_INDICACION')), p.antifungico, p.proyectado);
-  // sin referencia para el foco, se sugiere verificar
-  var nivel = dur.nivel >= 0 ? dur.nivel : 1;
-  var duracion = [E(0x1F4CF) + ' ' + (dur.encabezado || 'Sin duración de referencia en las tablas para este diagnóstico')];
-  if (dur.nivel >= 0) duracion.push(color[dur.nivel] + ' ' + formatoNumero(p.proyectado, 0) + ' d continuos con esta orden: ' + dur.texto);
-  else if (dur.texto) duracion.push(E(0x26AA) + ' ' + dur.texto);
+// Mensaje con uno o varios pacientes (resumen diario), los rojos primero. items: [{ nivel, bloque }].
+function mensajeProlongados(items, fechaTexto) {
+  var E = function(cp) { return String.fromCodePoint(cp); };
+  var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
+  var varios = items.length > 1;
+  var lineas = ['*' + E(0x23F3) + ' REVISIÓN PROA · ' + (varios ? 'Tratamientos prolongados' : 'Tratamiento prolongado') +
+    (fechaTexto ? ' · ' + fechaTexto : '') + '*',
+    '_' + (varios ? items.length + ' pacientes' : '1 paciente') + ' con ' + CONFIG.PROLONGADO_MIN_SOLICITUDES + ' o más solicitudes seguidas y más de ' +
+    CONFIG.PROLONGADO_DIAS + ' d de antimicrobiano_'];
+  items.slice().sort(function(a, b) { return b.nivel - a.nivel; }).forEach(function(it) {
+    var nivel = (it.nivel >= 0 && it.nivel <= 2) ? it.nivel : 1;
+    lineas.push('', color[nivel] + ' *' + it.bloque[0] + '*');
+    it.bloque.slice(1).forEach(function(l) { lineas.push(l); });
+  });
+  lineas.push('', E(0x1F4A1) + ' Sugerencia PROA: confirmar con el médico tratante el motivo para continuar y la fecha de suspensión.');
+  return lineas.join('\n');
+}
 
-  var lineas = ['*' + E(0x23F3) + ' REVISIÓN PROA · Tratamiento prolongado*', color[nivel] + ' *' + capitalizar(ETIQUETA_NIVEL[nivel]) + '*',
-    E(0x23F3) + ' *' + p.solicitudes + ' solicitudes seguidas: lleva ' + formatoNumero(p.dias, 0) + ' d de ' + tipo +
-      (p.proyectado > p.dias ? ' y con esta orden serían ' + formatoNumero(p.proyectado, 0) + ' d' : '') + '*', ''];
-  lineasPaciente(campo, pesoKg).forEach(function(l) { lineas.push(l); });
-  lineas.push('', E(0x1F501) + ' Tratamiento continuo:');
-  lista.forEach(function(l) { lineas.push('   ' + l); });
-  lineas.push('');
-  duracion.forEach(function(l) { lineas.push(l); });
-  lineas.push('', E(0x1F4A1) + ' Sugerencia PROA: confirmar con el médico tratante el motivo para continuar (foco, cultivos, respuesta clínica) y la fecha de suspensión.');
-  return { mensaje: lineas.join('\n'), nivel: nivel, detalle: lista.concat(duracion).join(' | ') };
+// Que se hace con la revision: 'RESUMEN' (queda pendiente para el resumen diario), 'ENVIAR' (sin resumen
+// diario), 'VERDE' (dentro de la referencia: no se envia) o 'REPETIDO' (el paciente ya tuvo revision en los
+// ultimos CONFIG.PROLONGADO_REPETIR_DIAS dias).
+function accionProlongado(revision, e) {
+  if (revision.nivel === 0 && !CONFIG.PROLONGADO_ENVIAR_VERDES) return 'VERDE';
+  if (prolongadoRevisadoReciente(revision.hc, fechaDe(campoDelEvento(e.namedValues || {}, 'Marca temporal')) || new Date())) return 'REPETIDO';
+  return CONFIG.PROLONGADO_RESUMEN_DIARIO ? 'RESUMEN' : 'ENVIAR';
+}
+
+var TEXTO_ACCION_PROLONGADO = {
+  RESUMEN: 'queda pendiente para el resumen diario',
+  ENVIAR: 'se envía al grupo',
+  VERDE: 'no se envía: dentro de la referencia de sus patologías',
+  REPETIDO: 'no se envía: el paciente ya tuvo revisión en los últimos días'
+};
+
+// true si la historia clinica ya tuvo una revision por tratamiento prolongado enviada o pendiente en los
+// ultimos CONFIG.PROLONGADO_REPETIR_DIAS dias (segun la marca temporal de la solicitud, en REGISTRO_REVISIONES).
+function prolongadoRevisadoReciente(hc, fecha) {
+  var dias = CONFIG.PROLONGADO_REPETIR_DIAS;
+  if (!dias || !hc) return false;
+  var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_REGISTRO);
+  if (!hoja || hoja.getLastRow() < 2) return false;
+  var col = function(n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+  var celdas = hoja.getRange(2, col('Historia clínica') + 1, hoja.getLastRow() - 1, 1).createTextFinder(hc).matchEntireCell(true).findAll() || [];
+  return celdas.some(function(celda) {
+    var fila = hoja.getRange(celda.getRow(), 1, 1, ENCABEZADOS_REGISTRO.length).getValues()[0];
+    var f = fechaDe(fila[col('Marca temporal de la solicitud')]);
+    var estado = String(fila[col('Enviado al grupo')]);
+    return fila[col('Fuente del análisis')] === FUENTE_PROLONGADO && (estado === 'SI' || estado === 'PENDIENTE') &&
+      f && Math.abs(fecha.getTime() - f.getTime()) < dias * 24 * 3600 * 1000;
+  });
+}
+
+var FUENTE_PROLONGADO = 'TRATAMIENTO PROLONGADO';
+
+// Activador diario (crearTriggerResumenProlongados): envia en un solo mensaje las revisiones pendientes y
+// las marca como enviadas. Si el envio falla, quedan pendientes para el dia siguiente.
+function enviarResumenProlongados() {
+  var r = resumenProlongadosPendiente_();
+  if (!r) return;
+  var ok = r.mensajes.every(function(m) { var envio = enviarAlertaWhatsApp(m, { sinFirma: true }); return !!(envio && envio.ok); });
+  if (!ok) { Logger.log('El resumen de tratamientos prolongados no se pudo enviar; queda pendiente.'); return; }
+  var col = function(n) { return ENCABEZADOS_REGISTRO.indexOf(n) + 1; };
+  r.pendientes.forEach(function(p) {
+    r.hoja.getRange(p.fila, col('Enviado al grupo')).setValue('SI');
+    r.hoja.getRange(p.fila, col('Destino')).setValue('RESUMEN DIARIO ' + r.fecha);
+  });
+}
+
+// Igual que enviarResumenProlongados(), pero solo escribe en el registro de ejecucion lo que se enviaria.
+function probarResumenProlongados() {
+  var r = resumenProlongadosPendiente_();
+  Logger.log(r ? r.pendientes.length + ' paciente(s) pendiente(s):\n\n' + r.mensajes.join('\n\n----- mensaje siguiente -----\n\n')
+    : 'No hay revisiones por tratamiento prolongado pendientes.');
+}
+
+function resumenProlongadosPendiente_() {
+  var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_REGISTRO);
+  if (!hoja || hoja.getLastRow() < 2) return null;
+  var col = function(n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+  var datos = hoja.getRange(2, 1, hoja.getLastRow() - 1, ENCABEZADOS_REGISTRO.length).getValues();
+  var semaforo = ['VERDE', 'AMARILLO', 'ROJO'], pendientes = [];
+  datos.forEach(function(fila, i) {
+    if (fila[col('Fuente del análisis')] !== FUENTE_PROLONGADO || String(fila[col('Enviado al grupo')]) !== 'PENDIENTE') return;
+    pendientes.push({ fila: i + 2, nivel: semaforo.indexOf(String(fila[col('Semáforo final')])), bloque: String(fila[col('Detalle')]).split('\n') });
+  });
+  if (!pendientes.length) return null;
+  var fecha = Utilities.formatDate(new Date(), 'America/Bogota', 'dd/MM');
+  // Green-API acepta hasta 20.000 caracteres por mensaje: con muchos pacientes se parte en varios.
+  var mensajes = [], grupo = [], largo = 0;
+  pendientes.slice().sort(function(a, b) { return b.nivel - a.nivel; }).forEach(function(p) {
+    var n = p.bloque.join('\n').length + 10;
+    if (grupo.length && largo + n > 12000) { mensajes.push(mensajeProlongados(grupo, fecha)); grupo = []; largo = 0; }
+    grupo.push(p); largo += n;
+  });
+  mensajes.push(mensajeProlongados(grupo, fecha));
+  return { hoja: hoja, pendientes: pendientes, mensajes: mensajes, fecha: fecha };
+}
+
+// Crea (o recrea) el activador diario del resumen, a la hora CONFIG.PROLONGADO_RESUMEN_HORA (hora de Colombia).
+// Solo toca los activadores de este proyecto que llaman a enviarResumenProlongados.
+function crearTriggerResumenProlongados() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'enviarResumenProlongados') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('enviarResumenProlongados').timeBased().atHour(CONFIG.PROLONGADO_RESUMEN_HORA).everyDays(1)
+    .inTimezone('America/Bogota').create();
 }
 
 var ENCABEZADOS_REGISTRO = ['Fecha de registro', 'Marca temporal de la solicitud', 'Historia clínica', 'Servicio', 'Especialidad', 'Diagnóstico',
@@ -1229,8 +1346,9 @@ function registrarRevision(e, coincidencias, datos) {
       coincidencias.map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
       acompanantesNoRestringidos(e).map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
       tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], datos.fuente || (rev ? 'IA' : 'TABLAS'),
-      String(datos.detalle || tablas.lineas.join(' | ')).replace(/[*_]/g, '').slice(0, 1500), seg.previas,
-      datos.enviado ? 'SI' : 'NO', datos.destino || '', rev ? rev.modelo : '', rev ? rev.entrada : '', rev ? rev.salida : '', datos.costo || '',
+      // el bloque de la revision por tratamiento prolongado es el texto que saldra en el resumen: no se recorta
+      String(datos.detalle || tablas.lineas.join(' | ')).replace(/[*_]/g, '').slice(0, datos.fuente === FUENTE_PROLONGADO ? 8000 : 1500), seg.previas,
+      datos.estadoEnvio || (datos.enviado ? 'SI' : 'NO'), datos.destino || '', rev ? rev.modelo : '', rev ? rev.entrada : '', rev ? rev.salida : '', datos.costo || '',
       diasContinuos]);
   } catch (err) {
     Logger.log('No se pudo registrar la revision: ' + err);
@@ -1616,7 +1734,7 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
   var revision = revisionProlongado(e, coincidencias);
   var mensajes = [];
   if (debeAlertar(coincidencias)) mensajes.push(construirMensajeDesdeEvento(e, coincidencias));
-  if (revision) mensajes.push(revision.mensaje);
+  if (revision) mensajes.push('(Revisión por tratamiento prolongado: ' + TEXTO_ACCION_PROLONGADO[accionProlongado(revision, e)] + ')\n' + revision.mensaje);
   var p = tratamientoProlongado(e);
   Logger.log('Fila %s · restringidos: %s · dispara alerta: %s · tratamiento prolongado: %s\n\n%s', fila, coincidencias.length,
     debeAlertar(coincidencias), p ? 'sí (' + p.solicitudes + ' solicitudes seguidas, ' + p.dias + ' d)' :
