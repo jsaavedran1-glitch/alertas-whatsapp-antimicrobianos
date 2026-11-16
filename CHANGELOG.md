@@ -2,6 +2,24 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.22.0] - 2026-11-16
+
+### Cambiado (pedido del referente: orden de las prescripciones y días en negrita)
+- El caso PROA muestra el tratamiento continuo como **lista numerada en orden de prescripción**, igual que la revisión por tratamiento prolongado (`lineasPrescripciones()`, compartida por los dos mensajes):
+  ```
+  🔁 Antibiótico continuo, en orden de prescripción:
+  1. ERTAPENEM 17/09-08/10 · *21 d* · L008
+  2. MEROPENEM 08/10-17/10 · *9 d* · Bacteriemia / sepsis
+  3. MEROPENEM 17/10-22/10 · *5 d* · Osteomielitis / espondilodiscitis
+  4. ERTAPENEM 22/10-15/11 · *24 d* · Infección de piel y tejidos blandos
+  5. ERTAPENEM 15/11-22/11 · *7 d* (esta orden)
+  Total: *66 d* de antibiótico continuo
+  ```
+- **Días en negrita** en la lista, en la línea 💊 de cada antimicrobiano, en la línea de días de la pertinencia (`ERTAPENEM · *66 d* de antibiótico continuo`) y en la referencia de la revisión. El desglose `(21 + 14 + 24 + 7)` sale de esa línea porque ya está en la lista.
+- La lista es por prescripción (una por día; las renovaciones seguidas del mismo esquema y patología van juntas, `2-3.`), con la patología cuando cambia. Desaparecen los tramos por marca temporal.
+- Al modelo le llega la misma lista, sin asteriscos.
+- El caso PROA de la fila 7638 pasa de 16 a 22 líneas (unos 1.200 caracteres).
+
 ## [1.21.1] - 2026-11-16
 
 ### Corregido (prueba con la fila 7638 en el proyecto en vivo)

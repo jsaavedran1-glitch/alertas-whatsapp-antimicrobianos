@@ -318,7 +318,7 @@ function textoCasoIa_(e, coincidencias) {
     lineas.push("", "HISTORIA DEL PACIENTE: solicitudes previas de antimicrobianos, de la m\u00e1s antigua a la m\u00e1s reciente (fecha de la orden: esquema \u00b7 diagn\u00f3stico \u00b7 aislamiento \u00b7 tipo de indicaci\u00f3n \u00b7 inicio o cambio \u00b7 servicio):");
     seg.historia.forEach(function(l) { lineas.push("- " + l); });
     lineas.push("", "C\u00e1lculo del bot sobre esa historia (d\u00edas de tratamiento continuo; \u00fasalo tal cual, no sumes por tu cuenta):");
-    seg.lineas.forEach(function(l) { lineas.push("- " + l.replace(/^[\s\u{1F501}]+/u, "")); });
+    seg.lineas.forEach(function(l) { lineas.push("- " + l.replace(/^[\s\u{1F501}]+/u, "").replace(/\*/g, "")); });
   } else {
     lineas.push("", "HISTORIA DEL PACIENTE: sin solicitudes previas en la matriz en los \u00faltimos " + CONFIG.SEGUIMIENTO_DIAS + " d\u00edas.");
   }
@@ -413,7 +413,7 @@ function itemsIa_(lista, esquemas) {
     esquemas.forEach(function(q) { var c = clave(q.nombre); if (!am && (c === nombre || c.indexOf(nombre) > -1 || nombre.indexOf(c) > -1)) am = q; });
     if (!am) return;
     var n = numeroONulo(am.dias);
-    var dias = (am.diasAcumulados > n) ? textoDiasContinuos(am, n) : ((n !== null && n > 0) ? formatoNumero(n, 0) + " d" : "");
+    var dias = (am.diasAcumulados > n) ? textoDiasContinuos(am) : ((n !== null && n > 0) ? formatoNumero(n, 0) + " d" : "");
     salida.push({ nombre: am.nombre, nivel: nivel, motivo: fraseIa_(x.motivo).replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ ])/, function(c) { return c.toLowerCase(); }), dias: dias });
   });
   return salida;
