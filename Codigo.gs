@@ -954,6 +954,26 @@ function lineasPrescripciones(episodio, ultima, negrita) {
   return lineas;
 }
 
+// Dias por antimicrobiano en el tratamiento continuo, contando esta orden (pedido del referente):
+// "Por antimicrobiano: ERTAPENEM *52 d* (con esta orden) · MEROPENEM *14 d*". Cada antimicrobiano suma los dias de
+// las prescripciones en que estuvo (en una combinacion, cada uno cuenta sus dias: dias de terapia, DOT), asi que la
+// suma puede pasar el total de dias de antibiotico continuo. Primero los de esta orden; luego de mayor a menor.
+function lineaPorAntimicrobiano(episodio, actuales, negrita) {
+  var b = function(t) { return negrita ? '*' + t + '*' : t; };
+  var suma = {}, orden = [], esta = {};
+  var agregar = function(nombre, d) { if (!(nombre in suma)) { suma[nombre] = 0; orden.push(nombre); } suma[nombre] += d; };
+  episodio.solicitudes.forEach(function(x) { x.nombres.forEach(function(nm) { agregar(nm, x.dias); }); });
+  actuales.forEach(function(am) {
+    var n = numeroONulo(am.dias);
+    agregar(am.nombre, (n !== null && n > 0) ? n : 0);
+    esta[am.nombre] = true;
+  });
+  orden.sort(function(a, c) { return ((esta[c] ? 1 : 0) - (esta[a] ? 1 : 0)) || (suma[c] - suma[a]); });
+  return 'Por antimicrobiano: ' + orden.map(function(nm) {
+    return nm + ' ' + b(formatoNumero(suma[nm], 0) + ' d') + (esta[nm] ? ' (con esta orden)' : '');
+  }).join(' · ');
+}
+
 // Referencia de duracion del caso: la del diagnostico actual o, si el tratamiento continuo de algun
 // antibacteriano paso por otras patologias (am.diagnosticosCurso), la de mayor duracion. Es la misma regla
 // de la revision por tratamiento prolongado, para que los dos mensajes digan lo mismo.
@@ -1196,6 +1216,7 @@ function seguimientoPaciente(e) {
         var bloque = [(antifungico ? 'Antifúngico' : 'Antibiótico') + ' continuo, en orden de prescripción:'].concat(
           lineasPrescripciones(episodio, { texto: delTipo.map(function(am) { return am.nombre; }).join(' + '), inicio: ahora.getTime(),
             dias: maxDias, dx: campoDelEvento(valores, CAMPOS.DIAGNOSTICO) }, true));
+        bloque.push(lineaPorAntimicrobiano(episodio, delTipo, true));
         bloque.push('Total: *' + formatoNumero(transcurridosEpisodio + maxDias, 0) + ' d* de ' + (antifungico ? 'antifúngico' : 'antibiótico') + ' continuo');
         continuos.push(bloque);
       }
@@ -1273,6 +1294,7 @@ function revisionProlongado(e, coincidenciasOpt) {
     var d = numeroONulo(am.dosis);
     return am.nombre + ' ' + (d !== null ? formatoNumero(d, 2) + ' mg' : am.dosis) + ' ' + viaCorta(am.via) + ' ' + frecuenciaCorta(am.frecuencia);
   }).join(' + '), inicio: fechaSolicitud.getTime(), dias: diasOrden, dx: dxActual }, false).forEach(function(l) { bloque.push(l); });
+  bloque.push(lineaPorAntimicrobiano(p.episodio, actuales, false));
   bloque.push(E(0x1F4CF) + ' ' + (dur.encabezado
     ? dur.encabezado + (dur.nivel >= 0 ? ': ' + formatoNumero(p.proyectado, 0) + ' d ' + dur.texto : '')
     : (dur.texto ? capitalizar(dur.texto) : 'Sin duración de referencia en las tablas para estas patologías')));
@@ -1294,7 +1316,7 @@ function mensajeProlongado(item) {
   // dias en negrita: los de la linea de resumen y los de cada prescripcion
   item.bloque.slice(1).forEach(function(l, i) {
     if (l.indexOf(E(0x1F4CF)) === 0) return;   // la referencia (📏) queda solo en el registro
-    if (i === 0) l = l.replace(/(\d+ d)\b/g, '*$1*');
+    if (i === 0 || l.indexOf('Por antimicrobiano:') === 0) l = l.replace(/(\d+ d)\b/g, '*$1*');
     else if (/^\d+(-\d+)?\. /.test(l)) l = l.replace(/ · (\d+ d)\b/, ' · *$1*');
     lineas.push(l);
   });

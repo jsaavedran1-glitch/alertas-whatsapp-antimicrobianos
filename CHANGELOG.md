@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.29.0] - 2026-11-16
+
+### Agregado (pedido del referente: sumar los días de cada antimicrobiano)
+- Debajo de la lista de prescripciones, en el caso PROA y en la revisión de duración: `Por antimicrobiano: ERTAPENEM *52 d* (con esta orden) · MEROPENEM *14 d*` (`lineaPorAntimicrobiano()`). Cada antimicrobiano suma los días de las prescripciones en que estuvo más los de esta orden; primero los de esta orden y luego de mayor a menor.
+- Son días de terapia por molécula (DOT): en una combinación cada uno cuenta sus días, así que la suma puede pasar el total de días de antibiótico continuo (que es la duración de la terapia, LOT).
+- Revisiones con la matriz real: de 516 a 741 caracteres, máximo 11 líneas.
+
 ## [1.28.1] - 2026-11-16
 
 ### Cambiado

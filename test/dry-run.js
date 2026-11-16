@@ -437,7 +437,7 @@ prueba('seguimiento: curso acumulado, solicitud repetida, otros previos y dias v
   incluye(t, '🔁 Antibiótico continuo, en orden de prescripción:');
   incluye(t, 'ERTAPENEM: también solicitado hace 2 h (500 mg cada 24 h, 3 d); posible solicitud repetida');
   incluye(t, '1. ERTAPENEM + VANCOMICINA 01/11/2026-08/11/2026 · *7 d*\n2. ERTAPENEM 08/11/2026-14/11/2026 · *6 d*\n' +
-    '3. ERTAPENEM 14/11/2026-21/11/2026 · *7 d* · Infección urinaria complicada / pielonefritis (esta orden)\nTotal: *20 d* de antibiótico continuo');
+    '3. ERTAPENEM 14/11/2026-21/11/2026 · *7 d* · Infección urinaria complicada / pielonefritis (esta orden)\nPor antimicrobiano: ERTAPENEM *20 d* (con esta orden) · VANCOMICINA *7 d*\nTotal: *20 d* de antibiótico continuo');
   incluye(t, 'ERTAPENEM: también solicitado hace 2 h');
   noIncluye(t, 'DAPTOMICINA');
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
@@ -461,7 +461,7 @@ prueba('seguimiento: tratamiento continuo con cambio de antimicrobiano y renovac
   e.namedValues[CAMPOS.TIPO_INDICACION] = ['Tratamiento Etiológico (En presencia de aislamiento conocido)'];
   var seg = seguimientoPaciente(e), t = seg.lineas.join('\n');
   incluye(t, '1. MEROPENEM 17/10/2026-22/10/2026 · *5 d*\n2. ERTAPENEM 22/10/2026-15/11/2026 · *24 d*\n' +
-    '3. ERTAPENEM 15/11/2026-22/11/2026 · *7 d* · Infección de piel y tejidos blandos (esta orden)\nTotal: *36 d* de antibiótico continuo');
+    '3. ERTAPENEM 15/11/2026-22/11/2026 · *7 d* · Infección de piel y tejidos blandos (esta orden)\nPor antimicrobiano: ERTAPENEM *31 d* (con esta orden) · MEROPENEM *5 d*\nTotal: *36 d* de antibiótico continuo');
   noIncluye(t, 'Otros previos');
   assert.strictEqual(seg.historia.length, 2); incluye(seg.historia[0], '17/10/2026: MEROPENEM 1000 mg cada 8 h por 7 d');
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
@@ -486,7 +486,7 @@ prueba('seguimiento: dias calendario que cuadran con las fechas y sin tramos de 
   var t = seguimientoPaciente(e).lineas.join('\n');
   incluye(t, '🔁 Antibiótico continuo, en orden de prescripción:\n1. ERTAPENEM 17/09/2026-08/10/2026 · *21 d*\n2. MEROPENEM 08/10/2026-22/10/2026 · *14 d*\n' +
     '3. ERTAPENEM 22/10/2026-15/11/2026 · *24 d*\n4. ERTAPENEM 15/11/2026-22/11/2026 · *7 d* · Infección de piel y tejidos blandos (esta orden)\n' +
-    'Total: *66 d* de antibiótico continuo');   // 21 + 14 + 24 + 7
+    'Por antimicrobiano: ERTAPENEM *52 d* (con esta orden) · MEROPENEM *14 d*\nTotal: *66 d* de antibiótico continuo');   // 21 + 14 + 24 + 7; ertapenem 21 + 24 + 7
   noIncluye(t, ' 0 d');
   var m = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(m, '🔴 ERTAPENEM · *66 d* de antibiótico continuo: supera la referencia');
@@ -508,8 +508,9 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   assert.deepStrictEqual(r.bloque.slice(0, 5), ['HC 888001 · 60 años · J189', '3 prescripciones seguidas · lleva 16 d, con esta orden 23 d · se sugiere revaluar',
     '1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · 7 d', '2. MEROPENEM 23/10/2026-01/11/2026 · 9 d',
     '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d · Neumonía (esta orden)']);
-  incluye(r.bloque[5], '📏 Neumonía 5-7 d ('); incluye(r.bloque[5], '): 23 d duplica la referencia');
-  assert.strictEqual(r.bloque.length, 6);
+  assert.strictEqual(r.bloque[5], 'Por antimicrobiano: CEFEPIME 7 d (con esta orden) · MEROPENEM 9 d · PIPERACILINA / TAZOBACTAM 7 d');
+  incluye(r.bloque[6], '📏 Neumonía 5-7 d ('); incluye(r.bloque[6], '): 23 d duplica la referencia');
+  assert.strictEqual(r.bloque.length, 7);
   // filas pendientes guardadas por la version anterior ("5 solicitudes · ...") se muestran con el titulo nuevo
   incluye(mensajeProlongado({ nivel: 2, bloque: ['HC 1 · 60 años · N390', '5 solicitudes · lleva 21 d, con esta orden 35 d · se sugiere revaluar'] }),
     '*📆 REVISIÓN DE DURACIÓN DE TTO · 35 d de antibiótico*\n🔴 *HC 1 · 60 años · N390*\n5 solicitudes · lleva *21 d*, con esta orden *35 d*');
@@ -520,9 +521,10 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   incluye(r.mensaje, '\n1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · *7 d*\n2. MEROPENEM 23/10/2026-01/11/2026 · *9 d*\n');
   // sin la referencia (📏) ni la sugerencia (💡) en el mensaje; la referencia queda en el bloque del registro
   noIncluye(r.mensaje, '📏'); noIncluye(r.mensaje, '💡'); incluye(r.bloque.join('\n'), '23 d duplica la referencia');
-  assert.ok(/ · \*7 d\* · Neumonía \(esta orden\)$/.test(r.mensaje), r.mensaje);
+  assert.ok(/ · \*7 d\* · Neumonía \(esta orden\)\nPor antimicrobiano: /.test(r.mensaje), r.mensaje);
   noIncluye(r.mensaje, '\n\n'); noIncluye(r.mensaje, 'CASO PROA'); noIncluye(r.mensaje, '48-72 h');
-  assert.strictEqual(r.mensaje.split('\n').length, 6);
+  assert.strictEqual(r.mensaje.split('\n').length, 7);
+  assert.ok(/\nPor antimicrobiano: CEFEPIME \*7 d\* \(con esta orden\) · MEROPENEM \*9 d\* · PIPERACILINA \/ TAZOBACTAM \*7 d\*$/.test(r.mensaje), r.mensaje);
   // un solo antimicrobiano de amplio espectro no es "terapia combinada"
   noIncluye(sugerenciaPROA('Empírico', [], [{ nombre: 'CEFEPIME' }]), 'combinada');
 
@@ -534,7 +536,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   assert.strictEqual(r6.nivel, 1);
   incluye(r6.bloque.join('\n'), '1. PIPERACILINA / TAZOBACTAM 16/10/2026-24/10/2026 · 8 d · Bacteriemia / sepsis\n2. CEFEPIME 24/10/2026-01/11/2026 · 8 d · Neumonía\n' +
     '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d (esta orden)');   // la patologia solo cuando cambia
-  incluye(r6.bloque[5], '📏 Bacteriemia / sepsis 7-14 d ('); incluye(r6.bloque[5], ', la más larga de sus patologías: 23 d supera la referencia');
+  incluye(r6.bloque[6], '📏 Bacteriemia / sepsis 7-14 d ('); incluye(r6.bloque[6], ', la más larga de sus patologías: 23 d supera la referencia');
   filas.push(conDx('10/10/2026 08:00:00', '888007', [['CEFAZOLINA', '2000', '8', '14']], 'M861 - OSTEOMIELITIS'));
   filas.push(conDx('24/10/2026 08:00:00', '888007', [['CEFAZOLINA', '2000', '8', '7']], 'L039 - CELULITIS'));
   var e7 = eventoSeguimiento('01/11/2026 10:00:00', '888007', 'L031', [['CEFAZOLINA', '2000', '8', '7']]);
