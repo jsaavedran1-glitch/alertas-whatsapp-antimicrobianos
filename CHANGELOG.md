@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.14.0] - 2026-11-16
+
+### Corregido (caso real del 2026-11-15: ertapenem por 7 d tras 24 d de ertapenem y 5 d de meropenem, que salió como "se sugiere verificar")
+- **Seguimiento:** la duración se cuenta sobre el **tratamiento continuo del paciente aunque cambie de antimicrobiano** (meropenem → ertapenem), no solo sobre el mismo fármaco. La tolerancia entre órdenes pasa de 2 a 3 días (las renovaciones llegan tarde) y la ventana de 30 a 60 días. Si hubo un curso previo del mismo antimicrobiano que no es continuo, también se muestra.
+- **Aislamiento:** "betalactamasa de amplio espectro / de espectro extendido" se reconoce como BLEE (`normalizarAislamiento()`); ertapenem se acepta en piel y tejidos blandos (indicación de ficha).
+- **Revisión por IA:** el modelo recibe la historia completa del paciente (fecha, esquema, diagnóstico, aislamiento, tipo de indicación, razón de cambio y servicio de cada solicitud previa) y el cálculo de días continuos del bot, con la instrucción de reconstruir la línea de tiempo antes de opinar. El mensaje abre con una frase que interpreta esa historia (`🧭`).
+
 ## [1.13.0] - 2026-11-14
 
 ### Cambiado (revisión contra el texto de las guías y fichas técnicas)

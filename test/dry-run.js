@@ -423,7 +423,7 @@ prueba('seguimiento: curso acumulado, solicitud repetida, otros previos y dias v
   var seg = seguimientoPaciente(e);
   assert.strictEqual(seg.previas, 3);
   var t = seg.lineas.join('\n');
-  incluye(t, '🔁 Seguimiento: 3 solicitudes previas en 30 días (última 14/11/2026)');
+  incluye(t, '🔁 Seguimiento: 3 solicitudes previas en 60 días (última 14/11/2026)');
   incluye(t, 'ERTAPENEM: también solicitado hace 2 h (500 mg cada 24 h, 3 d); posible solicitud repetida');
   incluye(t, 'ERTAPENEM: en curso desde 01/11/2026 (13 d); con esta orden completaría 20 d');
   incluye(t, 'Otros antimicrobianos previos: VANCOMICINA (01/11/2026, 5 d)');
@@ -431,13 +431,39 @@ prueba('seguimiento: curso acumulado, solicitud repetida, otros previos y dias v
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(msg, '🔁 Seguimiento: 3 solicitudes previas');
   // 7 d ordenados estarian dentro de 5-7 d, pero el curso completo (20 d) supera el doble
-  incluye(msg, '🔴 ERTAPENEM 7 d (20 d acumulados desde 01/11/2026): supera la referencia; se sugiere revaluar la duración');
-  incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), 'Solicitudes previas del mismo paciente');
+  incluye(msg, '🔴 ERTAPENEM 7 d (20 d de tratamiento continuo desde 01/11/2026): supera la referencia; se sugiere revaluar la duración');
+  incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), 'HISTORIA DEL PACIENTE: solicitudes previas');
+  incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '- 08/11/2026: ERTAPENEM 1000 mg cada 24 h por 7 d');
   noIncluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '123456');
   // paciente sin historia: sin seguimiento
   var e2 = eventoSeguimiento('14/11/2026 09:00:00', '555', 'N390', [['ERTAPENEM', '1000', '24', '7']]);
   assert.strictEqual(seguimientoPaciente(e2).lineas.length, 0);
   incluye(construirMensajeDesdeEvento(e2), '🟢 ERTAPENEM 7 d: dentro de la referencia');
+});
+
+prueba('seguimiento: tratamiento continuo con cambio de antimicrobiano y renovacion tardia (caso real del 2026-11-15)', function () {
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  filas.push(filaMatriz('17/10/2026 10:00:00', '777001', [['MEROPENEM', '1000', '8', '7']]));
+  filas.push(filaMatriz('22/10/2026 19:47:19', '777001', [['ERTAPENEM', '1000', '24', '21']]));   // termina el 12/11
+  var e = eventoSeguimiento('15/11/2026 17:10:18', '777001', 'L031', [['ERTAPENEM', '1000', '24', '7']]);   // renovacion 3 dias despues
+  e.namedValues[CAMPOS.MICROORGANISMO] = ['BETALACTAMASA DE AMPLIO ESPECTRO']; e.namedValues[CAMPOS.CULTIVOS] = ['SECRECIÓN'];
+  e.namedValues[CAMPOS.TIPO_INDICACION] = ['Tratamiento Etiológico (En presencia de aislamiento conocido)'];
+  var seg = seguimientoPaciente(e), t = seg.lineas.join('\n');
+  incluye(t, 'ERTAPENEM: en curso desde 22/10/2026 (24 d); con esta orden completaría 31 d');
+  incluye(t, 'Tratamiento antibiótico continuo desde 17/10/2026 (MEROPENEM → ERTAPENEM): 29 d; con esta orden completaría 36 d');
+  noIncluye(t, 'Otros antimicrobianos previos');
+  assert.strictEqual(seg.historia.length, 2); incluye(seg.historia[0], '17/10/2026: MEROPENEM 1000 mg cada 8 h por 7 d');
+  var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
+  incluye(msg, '🟢 ERTAPENEM: acorde con la referencia · el aislamiento registrado está dentro de su indicación');   // BLEE escrita en palabras
+  incluye(msg, '🔴 ERTAPENEM 7 d (36 d de tratamiento continuo desde 17/10/2026): supera la referencia; se sugiere revaluar la duración');
+  var caso = textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e));
+  incluye(caso, '- 22/10/2026: ERTAPENEM 1000 mg cada 24 h por 21 d'); incluye(caso, 'Cálculo del bot sobre esa historia'); noIncluye(caso, '777001');
+  // un curso antiguo, ya terminado hace mas de la tolerancia, no se suma
+  filas.push(filaMatriz('01/10/2026 08:00:00', '777002', [['ERTAPENEM', '1000', '24', '7']]));
+  var e2 = eventoSeguimiento('15/11/2026 09:00:00', '777002', 'N390', [['ERTAPENEM', '1000', '24', '7']]);
+  incluye(seguimientoPaciente(e2).lineas.join('\n'), 'ERTAPENEM: curso previo el 01/10/2026 (7 d)');
+  incluye(construirMensajeDesdeEvento(e2), '🟢 ERTAPENEM 7 d: dentro de la referencia');
+  assert.strictEqual(normalizarAislamiento('E. coli productora de betalactamasas de espectro extendido'), 'E. COLI PRODUCTORA DE BLEE');
 });
 
 prueba('registro: una fila por revision en REGISTRO_REVISIONES', function () {
@@ -542,7 +568,8 @@ prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y la
     var verde = mensajeRevision_(e, co, { veredicto: 'pertinente', tratamiento: [{ nombre: 'CEFTAZIDIMA / AVIBACTAM', nivel: 0, motivo: '' }], dias: [], encabezadoDias: '' });
     assert.strictEqual(verde.split('\n').slice(1).join('|'), '🟢 *Acorde con la referencia*|🟢 Tratamiento y días sin observaciones|_Análisis asistido por IA_');
     incluye(c.system, 'médico infectólogo'); incluye(c.system, 'químico farmacéutico clínico'); assert.strictEqual(c.output_config.effort, 'high');
-    assert.deepStrictEqual(c.output_config.format.schema.required, ['analisis', 'tratamiento', 'dias', 'datos_faltantes']);
+    assert.deepStrictEqual(c.output_config.format.schema.required, ['analisis', 'historia', 'tratamiento', 'dias', 'datos_faltantes']);
+    incluye(c.system, 'La HISTORIA DEL PACIENTE es parte central del análisis'); incluye(caso, 'HISTORIA DEL PACIENTE: sin solicitudes previas');
     assert.ok(r.split('\n').length <= 7, 'respuesta concisa');
   });
   // frases largas se recortan
@@ -581,6 +608,25 @@ prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caid
   var r = mensajeRevision_(e, co, null);
   incluye(r, '⚪ ERTAPENEM 7 d: la duración no se valora mientras se revalúa el tratamiento'); noIncluye(r, 'dentro de la referencia');
   incluye(r, '🔴 *Pertinencia PROA: se sugiere revaluar*'); incluye(r, 'ERTAPENEM no tiene actividad frente a Pseudomonas'); noIncluye(r, 'asistido por IA');
+});
+
+prueba('IA: la historia del paciente va al modelo y su interpretacion abre el mensaje', function () {
+  var e = eventoSeguimiento('15/11/2026 17:10:18', '777001', 'L031', [['ERTAPENEM', '1000', '24', '7']]);
+  e.namedValues[CAMPOS.MICROORGANISMO] = ['BETALACTAMASA DE AMPLIO ESPECTRO'];
+  var co = filtrarAntimicrobianosRestringidos(e);
+  conApiSimulada(respuestaIa({ analisis: 'a', historia: 'Carbapenémico continuo desde el 17/10: meropenem 5 d y luego ertapenem 24 d; esta orden lo lleva a 36 d',
+    tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: '' }],
+    dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'muy por encima de la referencia; confirmar foco no controlado antes de prolongar' }], datos_faltantes: [] }), function (llamadas) {
+    var rev = revisarCasoConIa_(e, co, { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO });
+    incluye(llamadas[0].cuerpo.messages[0].content, 'Tratamiento antibiótico continuo desde 17/10/2026 (MEROPENEM → ERTAPENEM)');
+    assert.strictEqual(mensajeRevision_(e, co, rev), ['🔎 *Revisión PROA · Ertapenem*',
+      '🔴 *Se sugiere revaluar*',
+      '🧭 Carbapenémico continuo desde el 17/10: meropenem 5 d y luego ertapenem 24 d; esta orden lo lleva a 36 d',
+      '🔴 Ertapenem 7 d: muy por encima de la referencia; confirmar foco no controlado antes de prolongar',
+      '🟢 Lo demás, sin observaciones',
+      '📏 Infección de piel y tejidos blandos: 5-7 d (IDSA 2014 piel y tejidos blandos)',
+      '_Análisis asistido por IA_'].join('\n'));
+  });
 });
 
 prueba('IA: solo las fichas del caso, sin llamada al modelo en vancomicina sola, y registro del flujo', function () {

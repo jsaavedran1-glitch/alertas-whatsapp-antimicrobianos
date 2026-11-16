@@ -51,7 +51,9 @@ var IA_REGLAS = [
   "Analizas cada solicitud de antimicrobiano restringido del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia, con dos miradas a la vez: la de un médico infectólogo (¿es la infección que se dice, el germen es patógeno o colonizante, el esquema cubre el foco y el aislado, hay una opción de menor espectro, cuánto debe durar?) y la de un químico farmacéutico clínico (¿el fármaco llega al sitio de infección, la vía y la combinación tienen sentido, hay duplicidad o interacción de riesgo, el paciente tiene condiciones que cambian la elección, se justifica un medicamento de reserva y de alto costo?).",
   "Decides si el tratamiento y los días ordenados son pertinentes. Tu respuesta la lee el grupo de WhatsApp del PROA para decidir si interviene, así que debe ser corta y accionable; el análisis completo va antes, no en el mensaje.",
   "",
-  "Antes de decidir, repasa TODOS los datos del caso, uno por uno, y qué implica cada uno: edad, sexo y peso; servicio (UCI, urgencias, hospitalización) y especialidad; diagnóstico y foco; microorganismo y mecanismo de resistencia escrito; si se tomaron cultivos y cuáles; tipo de indicación (empírica, etiológica, profiláctica); inicio o cambio y la razón del cambio; origen (IAAS o comunidad) e infección nosocomial; interconsulta a Infectología; ajuste renal y falla hepática marcados; cada antimicrobiano del esquema, restringido o acompañante, con su vía, frecuencia y días; y el análisis de las tablas del bot. Busca incoherencias entre ellos (p. ej. indicación etiológica sin germen, cambio por antibiograma sin cultivo, reserva en infección de la comunidad sin factores de riesgo). Escribe ese repaso en el campo analisis (queda en el registro, no va al grupo) y solo después fija el veredicto: un factor aislado no basta si otro lo explica.",
+  "Antes de decidir, repasa TODOS los datos del caso, uno por uno, y qué implica cada uno: la historia de solicitudes previas del paciente; edad, sexo y peso; servicio (UCI, urgencias, hospitalización) y especialidad; diagnóstico y foco; microorganismo y mecanismo de resistencia escrito; si se tomaron cultivos y cuáles; tipo de indicación (empírica, etiológica, profiláctica); inicio o cambio y la razón del cambio; origen (IAAS o comunidad) e infección nosocomial; interconsulta a Infectología; ajuste renal y falla hepática marcados; cada antimicrobiano del esquema, restringido o acompañante, con su vía, frecuencia y días; y el análisis de las tablas del bot. Busca incoherencias entre ellos (p. ej. indicación etiológica sin germen, cambio por antibiograma sin cultivo, reserva en infección de la comunidad sin factores de riesgo). Escribe ese repaso en el campo analisis (queda en el registro, no va al grupo) y solo después fija el veredicto: un factor aislado no basta si otro lo explica.",
+  "",
+  "La HISTORIA DEL PACIENTE es parte central del análisis, no un dato accesorio. Reconstruye la línea de tiempo antes de opinar: qué recibió, desde cuándo, cuándo terminaba cada orden (fecha más días ordenados) y qué cambió en la solicitud actual. Identifica de qué se trata: continuación o renovación del mismo antimicrobiano, cambio dentro de la misma clase (p. ej. meropenem a ertapenem: reduce el espectro, deja de cubrir Pseudomonas), escalamiento, desescalamiento, o un episodio nuevo tras días sin tratamiento. Contrasta la razón de cambio registrada con lo que muestran los datos (cultivo, aislamiento, tipo de indicación): si un tratamiento previo no está funcionando, ampliar o mantener el mismo espectro no lo resuelve y conviene pensar en control del foco, nuevos cultivos o interconsulta. Valora la exposición total: los días de tratamiento continuo que calcula el bot son los que se comparan con la duración de referencia del foco, aunque el antimicrobiano haya cambiado; y varios cursos de la misma clase en pocas semanas son un hallazgo por sí mismos. Cuando la historia explique o cuestione la solicitud actual, dilo en el motivo en una frase (p. ej. \"lleva 24 d de ertapenem tras 5 d de meropenem; confirmar foco no controlado antes de prolongar\").",
   "",
   "Referencias, en este orden: las fichas de antimicrobianos y de microorganismos del PROA, la tabla de duración por síndrome y el análisis de las tablas del bot para este caso, que van abajo. Lo que no esté en ellas puedes sustentarlo en guías reconocidas (IDSA, ESCMID, ACIN, OMS/OPS, CDC) solo si estás seguro; si no, dílo como algo por verificar. No inventes cifras ni citas.",
   "",
@@ -67,7 +69,8 @@ var IA_REGLAS = [
   "Si el tratamiento de un antimicrobiano queda en no_pertinente, no valores sus días: el bot los muestra como no valorados.",
   "",
   "Formato de la respuesta: en tratamiento, una entrada por cada antimicrobiano restringido de la solicitud, y por cada acompañante solo si tiene un hallazgo; en dias, una entrada por cada antimicrobiano con días ordenados, si hay duración de referencia para el foco. antimicrobiano es el nombre tal como viene en la solicitud.",
-  "motivo es lo que leerá el grupo en WhatsApp: una sola frase directa de máximo 90 caracteres, en español corriente con tildes, que diga qué se observa y qué convendría hacer (\"no cubre Pseudomonas; valorar un antipseudomónico según antibiograma\", \"sin germen ni foco que lo sustente; confirmar la indicación\", \"14 d duplican la referencia; valorar suspender al día 7\"). Sin el nombre del antimicrobiano, sin citas ni fuentes y, en dias, sin repetir los días ordenados ni las cifras de la referencia (el bot ya escribe \"14 d:\" antes del motivo y la referencia debajo; basta \"duplica la referencia; confirmar absceso, obstrucción o respuesta lenta\"), sin siglas poco comunes, sin preámbulos, sin repetir los datos del caso y sin markdown. En las entradas de nivel pertinente el motivo puede ir vacío: el bot las resume. El mensaje es un apoyo para quien prescribe y para el QF, no un dictamen: tono de sugerencia, nunca una orden ni un juicio sobre el médico. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
+  "historia es la primera línea que leerá el grupo cuando el paciente tiene solicitudes previas: una frase de máximo 120 caracteres que diga qué muestra la línea de tiempo y qué significa para esta solicitud (\"Carbapenémico continuo desde el 17/10: meropenem 5 d y luego ertapenem 24 d; esta orden lo lleva a 36 d\"). Sin solicitudes previas, va vacía.",
+  "motivo es lo que leerá el grupo en WhatsApp: una sola frase directa de máximo 100 caracteres, en español corriente con tildes, que diga qué se observa y qué convendría hacer (\"no cubre Pseudomonas; valorar un antipseudomónico según antibiograma\", \"sin germen ni foco que lo sustente; confirmar la indicación\", \"14 d duplican la referencia; valorar suspender al día 7\"). Sin el nombre del antimicrobiano, sin citas ni fuentes y, en dias, sin repetir los días ordenados ni las cifras de la referencia (el bot ya escribe \"14 d:\" antes del motivo y la referencia debajo; basta \"duplica la referencia; confirmar absceso, obstrucción o respuesta lenta\"), sin siglas poco comunes, sin preámbulos, sin repetir los datos del caso y sin markdown. En las entradas de nivel pertinente el motivo puede ir vacío: el bot las resume. El mensaje es un apoyo para quien prescribe y para el QF, no un dictamen: tono de sugerencia, nunca una orden ni un juicio sobre el médico. No repitas la sugerencia de revaluar a las 48-72 h con cultivos: el bot ya la da."
 ].join("\n");
 
 var IA_ITEM = {
@@ -86,11 +89,12 @@ var IA_ESQUEMA = {
   additionalProperties: false,
   properties: {
     analisis: { type: "string", description: "Repaso de todos los factores del caso y que implica cada uno, antes del veredicto. Maximo 1200 caracteres. No va al mensaje." },
+    historia: { type: "string", description: "Una frase de maximo 120 caracteres que interpreta la historia del paciente frente a la solicitud actual. Vacia si no hay solicitudes previas." },
     tratamiento: { type: "array", items: IA_ITEM },
     dias: { type: "array", items: IA_ITEM },
     datos_faltantes: { type: "array", items: { type: "string" } }
   },
-  required: ["analisis", "tratamiento", "dias", "datos_faltantes"]
+  required: ["analisis", "historia", "tratamiento", "dias", "datos_faltantes"]
 };
 
 // =====================================================================
@@ -185,6 +189,7 @@ function mensajeRevision_(e, coincidencias, revision) {
     var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
     var titulos = ["Acorde con la referencia", "Se sugiere verificar", "Se sugiere revaluar"];
     cuerpo.push(color[IA_NIVELES.indexOf(revision.veredicto)] + " *" + titulos[IA_NIVELES.indexOf(revision.veredicto)] + "*");
+    if (revision.historia) cuerpo.push(E(0x1F9ED) + " " + revision.historia);
     var observaciones = 0, verdes = 0, diasObservados = false;
     revision.tratamiento.forEach(function(t) {
       if (t.nivel === 0) { verdes++; return; }
@@ -267,6 +272,7 @@ function revisarCasoConIa_(e, coincidencias, cfg) {
     if (tablas.espectroRojo) nivel = 2;
     var revision = {
       veredicto: IA_NIVELES[nivel],
+      historia: seguimientoPaciente(e).historia.length ? fraseIa_(salida.historia) : "",
       tratamiento: tratamiento,
       dias: diasIa,
       encabezadoDias: tablas.encabezadoDias,
@@ -336,10 +342,14 @@ function textoCasoIa_(e, coincidencias) {
       " \u00b7 dosis " + am.dosis + " mg \u00b7 via " + am.via + " \u00b7 cada " + am.frecuencia + " h \u00b7 " + am.dias + " dias" +
       (ev.revisar ? " \u00b7 el bot ya marco la dosis fuera de rango" : ""));
   });
-  var seguimiento = seguimientoPaciente(e).lineas;
-  if (seguimiento.length) {
-    lineas.push("", "Solicitudes previas del mismo paciente (la duraci\u00f3n se valora sobre el curso completo):");
-    seguimiento.forEach(function(l) { lineas.push(l.replace(/^\s+/, "- ")); });
+  var seg = seguimientoPaciente(e);
+  if (seg.historia.length) {
+    lineas.push("", "HISTORIA DEL PACIENTE: solicitudes previas de antimicrobianos, de la m\u00e1s antigua a la m\u00e1s reciente (fecha de la orden: esquema \u00b7 diagn\u00f3stico \u00b7 aislamiento \u00b7 tipo de indicaci\u00f3n \u00b7 inicio o cambio \u00b7 servicio):");
+    seg.historia.forEach(function(l) { lineas.push("- " + l); });
+    lineas.push("", "C\u00e1lculo del bot sobre esa historia (d\u00edas de tratamiento continuo; \u00fasalo tal cual, no sumes por tu cuenta):");
+    seg.lineas.slice(1).forEach(function(l) { lineas.push(l.replace(/^\s+/, "- ")); });
+  } else {
+    lineas.push("", "HISTORIA DEL PACIENTE: sin solicitudes previas en la matriz en los \u00faltimos " + CONFIG.SEGUIMIENTO_DIAS + " d\u00edas.");
   }
   return lineas.join("\n");
 }
@@ -381,7 +391,7 @@ function fichasDelCaso_(texto, incluir, soloCabezaSiNinguna) {
 // leidas de GitHub con cache de 6 h. null si falta algun documento. Sin evento, los documentos completos.
 function referenciaProa_(e) {
   var nombres = e ? leerSlots(e).map(function(am) { return String(am.nombre).toUpperCase(); }) : null;
-  var micro = e ? normalizarTexto(campoDelEvento(e.namedValues || {}, CAMPOS.MICROORGANISMO)) : "";
+  var micro = e ? normalizarAislamiento(campoDelEvento(e.namedValues || {}, CAMPOS.MICROORGANISMO)) : "";
   var filtros = {
     "antimicrobianos-restringidos.md": function(titulo) {
       return IA_FICHAS_AM.some(function(par) { return titulo.indexOf(par[1]) > -1 && nombres.some(function(n) { return n.indexOf(par[0]) > -1; }); });

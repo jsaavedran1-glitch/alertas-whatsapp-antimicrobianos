@@ -48,9 +48,10 @@ var CONFIG = {
   // ---- Pertinencia: duracion de referencia por sindrome y reglas de espectro ----
   // Seguimiento por paciente: solicitudes previas de la misma historia clinica en la matriz.
   SEGUIMIENTO_ACTIVO: true,
-  SEGUIMIENTO_DIAS: 30,
-  // Una orden continua el curso anterior del mismo antimicrobiano si empieza hasta N dias despues de su fin.
-  SEGUIMIENTO_TOLERANCIA_DIAS: 2,
+  SEGUIMIENTO_DIAS: 60,
+  // Una orden continua el tratamiento anterior si empieza hasta N dias despues de su fin (las renovaciones
+  // suelen llegar tarde: con 2 dias se perdio un curso de ertapenem de 24 dias, caso del 2026-11-15).
+  SEGUIMIENTO_TOLERANCIA_DIAS: 3,
   // Registro de cada revision (indicadores PROA y auditoria del analisis).
   REGISTRO_ACTIVO: true,
   HOJA_REGISTRO: 'REGISTRO_REVISIONES',
@@ -113,7 +114,7 @@ var CONFIG = {
     { am: 'DAPTOMICINA', micro: 'STAPH|ESTAF|SAMR|SARM|MRSA|ENTEROCOC|GRAM ?POSITIV|VRE|ERV', sindromes: ['BACTERIEMIA', 'ENDOCARDITIS', 'PIEL', 'CATETER'], reserva: 'bacteriemia, endocarditis o piel por SARM o enterococo resistente' },
     { am: 'CASPOFUNGINA', micro: 'CANDIDA|ASPERG', sindromes: ['CANDIDEMIA', 'NEUTROPENIA', 'ASPERGILOSIS'], reserva: 'candidiasis invasiva, neutropenia febril o aspergilosis refractaria' },
     { am: 'ANFOTERICINA', micro: 'CANDIDA|CRYPTOCOC|CRIPTOCOC|HISTOPLASM|MUCOR|RHIZOPUS|LEISHMAN|ASPERG', sindromes: ['CRIPTOCOCOSIS', 'HISTOPLASMOSIS', 'CANDIDEMIA', 'NEUTROPENIA', 'ASPERGILOSIS'], reserva: 'micosis invasiva grave (criptococosis, histoplasmosis, mucormicosis, candidiasis) o leishmaniasis visceral' },
-    { am: 'ERTAPENEM', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|BLEE|ESBL', sindromes: ['INTRAABDOMINAL', 'ITU', 'PIE_DIABETICO'], reserva: 'infección intraabdominal, urinaria o de pie diabético por enterobacterias BLEE' },
+    { am: 'ERTAPENEM', micro: 'E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|BLEE|ESBL', sindromes: ['INTRAABDOMINAL', 'ITU', 'PIE_DIABETICO', 'PIEL'], reserva: 'infección intraabdominal, urinaria, de piel o de pie diabético por enterobacterias BLEE' },
     { am: 'AZTREONAM', micro: 'NDM|METALO|MBL|PSEUDOMONA|E\\.? ?COLI|ESCHERICHIA|ECHERICHIA|KLEBS|KLEPS|ENTEROBACTER|PROTEUS|SERRATIA|CITROBACTER|BLEE|ESBL', sindromes: [], con: 'AVIBACTAM', reserva: 'gramnegativos en alergia grave a betalactámicos o, con ceftazidima/avibactam, metalo-betalactamasas' },
     { am: 'CEFTAZIDIMA / AVIBACTAM', micro: 'KPC|OXA|CARBAPENEM|SERINO|PSEUDOMONA', sindromes: [], reserva: 'enterobacterias con carbapenemasa (KPC, OXA-48) o Pseudomonas multirresistente documentadas' },
     { am: 'TYGECICLINA', micro: 'ACINETOBACTER|KPC|CARBAPENEM|SAMR|SARM|MRSA|VRE|ERV|BLEE', sindromes: ['INTRAABDOMINAL', 'PIEL'], reserva: 'infección intraabdominal o de piel por multirresistentes' },
@@ -718,6 +719,13 @@ function sindromePara(diagnosticoCrudo, tabla) {
   return mejor;
 }
 
+// Aislamiento en mayusculas y sin tildes, con el mecanismo de resistencia escrito en palabras llevado a su sigla.
+function normalizarAislamiento(microorganismo) {
+  return normalizarTexto(microorganismo)
+    .replace(/BETA ?-?LACTAMASAS? DE (AMPLIO ESPECTRO|ESPECTRO EXTENDIDO|ESPECTRO AMPLIADO|ESPECTRO AMPLIO)/g, 'BLEE')
+    .replace(/PRODUCTORA? DE CARBAPENEMASAS?/g, 'CARBAPENEMASA');
+}
+
 function sinAislamiento(microorganismo) {
   var m = normalizarTexto(microorganismo).replace(/[^A-Z0-9 ]/g, '').trim();
   return m === '' || m === '0' || m === 'NO' || m === 'NA' || m === 'N A' || /^NIN/.test(m) || /^NEGATIV/.test(m) || /^SIN /.test(m);
@@ -737,7 +745,7 @@ function esAntifungico(nombre) {
 
 function veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorganismo, contexto) {
   var nombre = String(am.nombre).toUpperCase();
-  var micro = normalizarTexto(microorganismo);
+  var micro = normalizarAislamiento(microorganismo);
   var nombres = esquemas.map(function(x) { return String(x.nombre).toUpperCase(); });
   var fallo = null;
   CONFIG.REGLAS_ESPECTRO.forEach(function(r) {
@@ -790,7 +798,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   var sinValorar = function(am, n) { dias.push(neutro + ' ' + am.nombre + ' ' + formatoNumero(n, 0) + ' d: ' + TEXTO_DIAS_SIN_VALORAR); };
   // Con seguimiento (am.diasAcumulados), la duracion que se compara es la del curso completo.
   var etiquetaDias = function(am, n) {
-    return am.nombre + ' ' + formatoNumero(n, 0) + ' d' + (am.diasAcumulados > n ? ' (' + formatoNumero(am.diasAcumulados, 0) + ' d acumulados desde ' + am.inicioCurso + ')' : '');
+    return am.nombre + ' ' + formatoNumero(n, 0) + ' d' + (am.diasAcumulados > n ? ' (' + formatoNumero(am.diasAcumulados, 0) + ' d de tratamiento continuo desde ' + am.inicioCurso + ')' : '');
   };
   var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
 
@@ -866,11 +874,13 @@ function fechaCorta(d) {
 }
 
 // Solicitudes previas de la misma historia clinica en los ultimos CONFIG.SEGUIMIENTO_DIAS dias.
-// Devuelve { previas, lineas, porAm: { nombre: { inicio, transcurridos, proyectado } } }. Se calcula una vez
-// por evento (queda en e._seguimiento). Solo lee la matriz; si algo falla, devuelve el seguimiento vacio.
+// Devuelve { previas, lineas (para el mensaje), historia (cronologia completa, para el modelo),
+// porAm: { nombre: { inicio, transcurridos, proyectado } } }. La duracion se cuenta sobre el tratamiento
+// continuo del paciente, aunque haya cambiado de antimicrobiano (antibacterianos y antifungicos por separado).
+// Se calcula una vez por evento (queda en e._seguimiento). Solo lee la matriz; si falla, devuelve vacio.
 function seguimientoPaciente(e) {
   if (e && e._seguimiento) return e._seguimiento;
-  var res = { previas: 0, lineas: [], porAm: {} };
+  var res = { previas: 0, lineas: [], historia: [], porAm: {} };
   if (e) e._seguimiento = res;
   if (!CONFIG.SEGUIMIENTO_ACTIVO || !e) return res;
   try {
@@ -890,57 +900,97 @@ function seguimientoPaciente(e) {
     var dia = 24 * 3600 * 1000;
     var desde = ahora.getTime() - CONFIG.SEGUIMIENTO_DIAS * dia;
     var celdas = hoja.getRange(2, cHc + 1, ultima - 1, 1).createTextFinder(hc).matchEntireCell(true).findAll() || [];
-    var previas = [];
+    var previas = [], solicitudes = [];
     celdas.slice(-40).forEach(function(celda) {
       var f = celda.getRow();
       if (f === filaActual) return;
       var fila = hoja.getRange(f, 1, 1, columnas).getValues()[0];
       var fecha = fechaDe(fila[0]);
       if (!fecha || fecha.getTime() >= ahora.getTime() - 1000 || fecha.getTime() < desde) return;
+      var dato = function(nombre) { var c = col(nombre); return c < 0 ? '' : String(fila[c] === null || fila[c] === undefined ? '' : fila[c]).trim(); };
+      var items = [];
       SLOTS.forEach(function(slot) {
-        var cn = col(slot.nombre);
-        var nombre = cn < 0 ? '' : nombreLimpio(fila[cn]);
+        var nombre = nombreLimpio(dato(slot.nombre));
         if (!nombre || nombre === '-') return;
-        var leer = function(clave) { var c = col(slot[clave]); return c < 0 ? '' : String(fila[c] === null || fila[c] === undefined ? '' : fila[c]).trim(); };
-        previas.push({ fecha: fecha, nombre: nombre, dias: numeroONulo(leer('dias')), dosis: leer('dosis'), frecuencia: leer('frecuencia') });
+        var p = { fecha: fecha, nombre: nombre, dias: numeroONulo(dato(slot.dias)), dosis: dato(slot.dosis), frecuencia: dato(slot.frecuencia) };
+        previas.push(p);
+        items.push(nombre + ' ' + (p.dosis || '-') + ' mg cada ' + (p.frecuencia || '-') + ' h por ' + (p.dias !== null ? formatoNumero(p.dias, 0) + ' d' : '-'));
       });
+      if (items.length === 0) return;
+      var razon = dato(CAMPOS.RAZON_CAMBIO);
+      solicitudes.push({ fecha: fecha, texto: fechaCorta(fecha) + ': ' + items.join(' + ') + ' · diagnóstico ' + (dato(CAMPOS.DIAGNOSTICO) || '-') +
+        ' · aislamiento ' + (dato(CAMPOS.MICROORGANISMO) || '-') + ' · ' + tipoIndicacionTexto(dato(CAMPOS.TIPO_INDICACION)) +
+        ' · ' + (dato(CAMPOS.INDICACION) || '-') + (razon ? ' (razón registrada: ' + razon + ')' : '') + ' · ' + (dato(CAMPOS.SERVICIO) || '-') });
     });
     if (previas.length === 0) return res;
     previas.sort(function(a, b) { return b.fecha.getTime() - a.fecha.getTime(); });
-    var solicitudes = {};
-    previas.forEach(function(p) { solicitudes[p.fecha.getTime()] = true; });
-    res.previas = Object.keys(solicitudes).length;
+    solicitudes.sort(function(a, b) { return a.fecha.getTime() - b.fecha.getTime(); });
+    res.previas = solicitudes.length;
+    res.historia = solicitudes.map(function(x) { return x.texto; });
+
+    // Inicio del tratamiento continuo: se retrocede mientras alguna orden anterior termine (con tolerancia)
+    // despues del inicio conocido.
+    var tolerancia = CONFIG.SEGUIMIENTO_TOLERANCIA_DIAS * dia;
+    var inicioContinuo = function(lista) {
+      var inicio = ahora.getTime(), cambio = true;
+      while (cambio) {
+        cambio = false;
+        lista.forEach(function(p) {
+          var t = p.fecha.getTime();
+          if (t < inicio && t + (p.dias || 1) * dia + tolerancia >= inicio) { inicio = t; cambio = true; }
+        });
+      }
+      return inicio;
+    };
+    var diasDesde = function(inicio) { return Math.round((ahora.getTime() - inicio) / dia); };
 
     var E = function(cp) { return String.fromCodePoint(cp); };
     var actuales = leerSlots(e);
-    var detalle = [];
-    actuales.forEach(function(am) {
-      var mismas = previas.filter(function(p) { return p.nombre === am.nombre; });
-      if (mismas.length === 0) return;
-      var horas = (ahora.getTime() - mismas[0].fecha.getTime()) / 3600000;
-      if (horas < 12) {
-        detalle.push('   ' + E(0x26A0) + E(0xFE0F) + ' ' + am.nombre + ': también solicitado hace ' + (horas < 1 ? 'menos de 1 h' : formatoNumero(Math.round(horas), 0) + ' h') +
-          ' (' + (mismas[0].dosis || '-') + ' mg cada ' + (mismas[0].frecuencia || '-') + ' h' + (mismas[0].dias ? ', ' + formatoNumero(mismas[0].dias, 0) + ' d' : '') + '); posible solicitud repetida');
-      }
-      // Curso continuo: cada orden anterior que termina (con tolerancia) cuando empieza la siguiente.
-      var inicio = ahora.getTime();
-      for (var i = 0; i < mismas.length; i++) {
-        var fin = mismas[i].fecha.getTime() + ((mismas[i].dias || 1) + CONFIG.SEGUIMIENTO_TOLERANCIA_DIAS) * dia;
-        if (fin >= inicio) inicio = mismas[i].fecha.getTime(); else break;
-      }
-      var transcurridos = Math.round((ahora.getTime() - inicio) / dia);
-      var n = numeroONulo(am.dias);
-      var proyectado = transcurridos + ((n !== null && n > 0) ? n : 0);
-      res.porAm[am.nombre] = { inicio: fechaCorta(new Date(inicio)), transcurridos: transcurridos, proyectado: proyectado };
-      if (transcurridos >= 1) {
-        detalle.push('   ' + am.nombre + ': en curso desde ' + fechaCorta(new Date(inicio)) + ' (' + formatoNumero(transcurridos, 0) + ' d)' +
-          ((n !== null && n > 0) ? '; con esta orden completaría ' + formatoNumero(proyectado, 0) + ' d' : ''));
+    var detalle = [], enEpisodio = {};
+    [false, true].forEach(function(antifungico) {
+      var delTipo = actuales.filter(function(am) { return esAntifungico(am.nombre) === antifungico; });
+      if (delTipo.length === 0) return;
+      var previasTipo = previas.filter(function(p) { return esAntifungico(p.nombre) === antifungico; });
+      var inicioEpisodio = inicioContinuo(previasTipo);
+      var transcurridosEpisodio = diasDesde(inicioEpisodio);
+      var maxDias = 0, inicioMismoMasAntiguo = ahora.getTime();
+      delTipo.forEach(function(am) {
+        var n = numeroONulo(am.dias);
+        if (n !== null && n > maxDias) maxDias = n;
+        var mismas = previas.filter(function(p) { return p.nombre === am.nombre; });
+        res.porAm[am.nombre] = { inicio: fechaCorta(new Date(inicioEpisodio)), transcurridos: transcurridosEpisodio,
+          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0) };
+        if (mismas.length === 0) return;
+        var horas = (ahora.getTime() - mismas[0].fecha.getTime()) / 3600000;
+        if (horas < 12) {
+          detalle.push('   ' + E(0x26A0) + E(0xFE0F) + ' ' + am.nombre + ': también solicitado hace ' + (horas < 1 ? 'menos de 1 h' : formatoNumero(Math.round(horas), 0) + ' h') +
+            ' (' + (mismas[0].dosis || '-') + ' mg cada ' + (mismas[0].frecuencia || '-') + ' h' + (mismas[0].dias ? ', ' + formatoNumero(mismas[0].dias, 0) + ' d' : '') + '); posible solicitud repetida');
+        }
+        var inicioMismo = inicioContinuo(mismas), transcurridos = diasDesde(inicioMismo);
+        if (inicioMismo < inicioMismoMasAntiguo) inicioMismoMasAntiguo = inicioMismo;
+        if (transcurridos >= 1) {
+          detalle.push('   ' + am.nombre + ': en curso desde ' + fechaCorta(new Date(inicioMismo)) + ' (' + formatoNumero(transcurridos, 0) + ' d)' +
+            ((n !== null && n > 0) ? '; con esta orden completaría ' + formatoNumero(transcurridos + n, 0) + ' d' : ''));
+        } else if (horas >= 12) {
+          detalle.push('   ' + am.nombre + ': curso previo el ' + fechaCorta(mismas[0].fecha) + (mismas[0].dias ? ' (' + formatoNumero(mismas[0].dias, 0) + ' d)' : ''));
+        }
+      });
+      // Tratamiento continuo que empezo con otro antimicrobiano: se nombra la secuencia.
+      if (transcurridosEpisodio >= 1 && inicioEpisodio < inicioMismoMasAntiguo) {
+        var secuencia = [];
+        previasTipo.filter(function(p) { return p.fecha.getTime() >= inicioEpisodio; })
+          .sort(function(a, b) { return a.fecha.getTime() - b.fecha.getTime(); })
+          .forEach(function(p) { if (secuencia.indexOf(p.nombre) === -1) secuencia.push(p.nombre); enEpisodio[p.nombre] = true; });
+        delTipo.forEach(function(am) { if (secuencia.indexOf(am.nombre) === -1) secuencia.push(am.nombre); });
+        detalle.push('   Tratamiento ' + (antifungico ? 'antifúngico' : 'antibiótico') + ' continuo desde ' + fechaCorta(new Date(inicioEpisodio)) +
+          ' (' + secuencia.join(' → ') + '): ' + formatoNumero(transcurridosEpisodio, 0) + ' d' +
+          (maxDias > 0 ? '; con esta orden completaría ' + formatoNumero(transcurridosEpisodio + maxDias, 0) + ' d' : ''));
       }
     });
     var nombresActuales = actuales.map(function(am) { return am.nombre; });
     var otros = [], vistos = {};
     previas.forEach(function(p) {
-      if (nombresActuales.indexOf(p.nombre) > -1 || vistos[p.nombre]) return;
+      if (nombresActuales.indexOf(p.nombre) > -1 || vistos[p.nombre] || enEpisodio[p.nombre]) return;
       vistos[p.nombre] = true;
       otros.push(p.nombre + ' (' + fechaCorta(p.fecha) + (p.dias ? ', ' + formatoNumero(p.dias, 0) + ' d' : '') + ')');
     });
