@@ -425,13 +425,13 @@ prueba('seguimiento: curso acumulado, solicitud repetida, otros previos y dias v
   var t = seg.lineas.join('\n');
   incluye(t, '🔁 Seguimiento (60 días): 3 solicitudes previas');
   incluye(t, 'ERTAPENEM: también solicitado hace 2 h (500 mg cada 24 h, 3 d); posible solicitud repetida');
-  incluye(t, 'Antibiótico continuo desde 01/11/2026: ERTAPENEM + VANCOMICINA 7 d → ERTAPENEM 6 d → esta orden 7 d = 20 d');
+  incluye(t, 'Antibiótico continuo: ERTAPENEM + VANCOMICINA 01/11/2026 7 d → ERTAPENEM 08/11/2026 6 d → esta orden 14/11/2026 7 d = 20 d');
   incluye(t, 'ERTAPENEM: también solicitado hace 2 h');
   noIncluye(t, 'DAPTOMICINA');
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(msg, '🔁 Seguimiento (60 días): 3 solicitudes previas');
   // 7 d ordenados estarian dentro de 5-7 d, pero el curso completo (20 d) supera el doble
-  incluye(msg, '🔴 ERTAPENEM: 20 d continuos (ERTAPENEM + VANCOMICINA 7 d + ERTAPENEM 6 d + esta orden 7 d): supera la referencia; revaluar duración');
+  incluye(msg, '🔴 ERTAPENEM: 20 d continuos (ERTAPENEM + VANCOMICINA 01/11/2026 7 d + ERTAPENEM 08/11/2026 6 d + esta orden 14/11/2026 7 d): supera la referencia; revaluar duración');
   incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), 'HISTORIA DEL PACIENTE: solicitudes previas');
   incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '- 08/11/2026: ERTAPENEM 1000 mg cada 24 h por 7 d');
   noIncluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '123456');
@@ -449,12 +449,12 @@ prueba('seguimiento: tratamiento continuo con cambio de antimicrobiano y renovac
   e.namedValues[CAMPOS.MICROORGANISMO] = ['BETALACTAMASA DE AMPLIO ESPECTRO']; e.namedValues[CAMPOS.CULTIVOS] = ['SECRECIÓN'];
   e.namedValues[CAMPOS.TIPO_INDICACION] = ['Tratamiento Etiológico (En presencia de aislamiento conocido)'];
   var seg = seguimientoPaciente(e), t = seg.lineas.join('\n');
-  incluye(t, 'Antibiótico continuo desde 17/10/2026: MEROPENEM 5 d → ERTAPENEM 24 d → esta orden 7 d = 36 d');
+  incluye(t, 'Antibiótico continuo: MEROPENEM 17/10/2026 5 d → ERTAPENEM 22/10/2026 24 d → esta orden 15/11/2026 7 d = 36 d');
   noIncluye(t, 'Otros previos');
   assert.strictEqual(seg.historia.length, 2); incluye(seg.historia[0], '17/10/2026: MEROPENEM 1000 mg cada 8 h por 7 d');
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(msg, '🟢 ERTAPENEM: indicado para el aislamiento registrado');   // BLEE escrita en palabras
-  incluye(msg, '🔴 ERTAPENEM: 36 d continuos (MEROPENEM 5 d + ERTAPENEM 24 d + esta orden 7 d): supera la referencia; revaluar duración');
+  incluye(msg, '🔴 ERTAPENEM: 36 d continuos (MEROPENEM 17/10/2026 5 d + ERTAPENEM 22/10/2026 24 d + esta orden 15/11/2026 7 d): supera la referencia; revaluar duración');
   var caso = textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e));
   incluye(caso, '- 22/10/2026: ERTAPENEM 1000 mg cada 24 h por 21 d'); incluye(caso, 'Cálculo del bot sobre esa historia'); noIncluye(caso, '777001');
   // un curso antiguo, ya terminado hace mas de la tolerancia, no se suma
@@ -617,7 +617,7 @@ prueba('IA: la historia del paciente va al modelo y su interpretacion abre el me
     tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: '' }],
     dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'muy por encima de la referencia; confirmar foco no controlado antes de prolongar' }], datos_faltantes: [] }), function (llamadas) {
     var rev = revisarCasoConIa_(e, co, { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO });
-    incluye(llamadas[0].cuerpo.messages[0].content, 'Antibiótico continuo desde 17/10/2026: MEROPENEM 5 d → ERTAPENEM 24 d');
+    incluye(llamadas[0].cuerpo.messages[0].content, 'Antibiótico continuo: MEROPENEM 17/10/2026 5 d → ERTAPENEM 22/10/2026 24 d');
     assert.strictEqual(mensajeRevision_(e, co, rev), ['🔎 *Revisión PROA · Ertapenem*',
       '🔴 *Se sugiere revaluar*',
       '🧭 Carbapenémico continuo desde el 17/10: meropenem 5 d y luego ertapenem 24 d; esta orden lo lleva a 36 d',

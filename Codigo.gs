@@ -801,7 +801,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
     if (!(am.diasAcumulados > n)) return am.nombre + ' ' + formatoNumero(n, 0) + ' d';
     // desglose por antimicrobiano, para que no se lea que todos los dias fueron del actual
     return am.nombre + ': ' + formatoNumero(am.diasAcumulados, 0) + ' d continuos (' +
-      (am.desgloseCurso ? am.desgloseCurso + ' + ' : '') + 'esta orden ' + formatoNumero(n, 0) + ' d)';
+      (am.desgloseCurso ? am.desgloseCurso + ' + ' : '') + 'esta orden ' + (am.fechaOrden || '') + ' ' + formatoNumero(n, 0) + ' d)';
   };
   var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
 
@@ -978,13 +978,14 @@ function seguimientoPaciente(e) {
           suma += tr.dias;
         });
       }
-      var desglose = tramos.map(function(tr) { return tr.esquema + ' ' + formatoNumero(tr.dias, 0) + ' d'; }).join(' + ');
+      var tramoTexto = function(tr) { return tr.esquema + ' ' + fechaCorta(new Date(tr.inicio)) + ' ' + formatoNumero(tr.dias, 0) + ' d'; };
+      var desglose = tramos.map(tramoTexto).join(' + ');
       delTipo.forEach(function(am) {
         var n = numeroONulo(am.dias);
         if (n !== null && n > maxDias) maxDias = n;
         var mismas = previas.filter(function(p) { return p.nombre === am.nombre; });
         res.porAm[am.nombre] = { inicio: fechaCorta(new Date(inicioEpisodio)), transcurridos: transcurridosEpisodio,
-          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0), desglose: desglose };
+          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0), desglose: desglose, fechaOrden: fechaCorta(ahora) };
         if (mismas.length === 0) return;
         var horas = (ahora.getTime() - mismas[0].fecha.getTime()) / 3600000;
         if (horas < 12) {
@@ -998,9 +999,8 @@ function seguimientoPaciente(e) {
       // Una sola linea con el tratamiento continuo: tramos por antimicrobiano, esta orden y el total.
       if (transcurridosEpisodio >= 1) {
         previasTipo.forEach(function(p) { if (p.fecha.getTime() >= inicioEpisodio) enEpisodio[p.nombre] = true; });
-        detalle.push('   ' + (antifungico ? 'Antifúngico' : 'Antibiótico') + ' continuo desde ' + fechaCorta(new Date(inicioEpisodio)) + ': ' +
-          tramos.map(function(tr) { return tr.esquema + ' ' + formatoNumero(tr.dias, 0) + ' d'; }).join(' → ') +
-          (maxDias > 0 ? ' → esta orden ' + formatoNumero(maxDias, 0) + ' d = ' + formatoNumero(transcurridosEpisodio + maxDias, 0) + ' d' : ''));
+        detalle.push('   ' + (antifungico ? 'Antifúngico' : 'Antibiótico') + ' continuo: ' + tramos.map(tramoTexto).join(' → ') +
+          (maxDias > 0 ? ' → esta orden ' + fechaCorta(ahora) + ' ' + formatoNumero(maxDias, 0) + ' d = ' + formatoNumero(transcurridosEpisodio + maxDias, 0) + ' d' : ''));
       }
     });
     var nombresActuales = actuales.map(function(am) { return am.nombre; });
@@ -1074,7 +1074,7 @@ function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var seg = seguimientoPaciente(e);
   esquemas.forEach(function(am) {
     var curso = seg.porAm[am.nombre];
-    if (curso && curso.transcurridos >= 1) { am.diasAcumulados = curso.proyectado; am.inicioCurso = curso.inicio; am.desgloseCurso = curso.desglose; }
+    if (curso && curso.transcurridos >= 1) { am.diasAcumulados = curso.proyectado; am.inicioCurso = curso.inicio; am.desgloseCurso = curso.desglose; am.fechaOrden = curso.fechaOrden; }
   });
   return analisisPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
     micro === '-' ? '' : micro, esquemas, { cultivos: campoDelEvento(valores, CAMPOS.CULTIVOS) });
