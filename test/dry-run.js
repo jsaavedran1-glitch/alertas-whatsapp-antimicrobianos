@@ -440,7 +440,7 @@ prueba('seguimiento: curso acumulado, solicitud repetida, otros previos y dias v
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(msg, '🔁 Antibiótico continuo:');
   // 7 d ordenados estarian dentro de 5-7 d, pero el curso completo (20 d) supera el doble
-  incluye(msg, '🔴 ERTAPENEM 20 d continuos: supera la referencia; revaluar duración');
+  incluye(msg, '🔴 ERTAPENEM · 20 d de antibiótico continuo (7 + 6 + 7): supera la referencia; revaluar duración');
   incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), 'HISTORIA DEL PACIENTE: solicitudes previas');
   incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '- 08/11/2026: ERTAPENEM 1000 mg cada 24 h por 7 d');
   noIncluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '123456');
@@ -463,7 +463,7 @@ prueba('seguimiento: tratamiento continuo con cambio de antimicrobiano y renovac
   assert.strictEqual(seg.historia.length, 2); incluye(seg.historia[0], '17/10/2026: MEROPENEM 1000 mg cada 8 h por 7 d');
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(msg, '🟢 ERTAPENEM: indicado para el aislamiento registrado');   // BLEE escrita en palabras
-  incluye(msg, '🔴 ERTAPENEM 36 d continuos: supera la referencia; revaluar duración');
+  incluye(msg, '🔴 ERTAPENEM · 36 d de antibiótico continuo (5 + 24 + 7): supera la referencia; revaluar duración');
   var caso = textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e));
   incluye(caso, '- 22/10/2026: ERTAPENEM 1000 mg cada 24 h por 21 d'); incluye(caso, 'Cálculo del bot sobre esa historia'); noIncluye(caso, '777001');
   // un curso antiguo, ya terminado hace mas de la tolerancia, no se suma
@@ -485,7 +485,7 @@ prueba('seguimiento: dias calendario que cuadran con las fechas y sin tramos de 
   incluye(t, '🔁 Antibiótico continuo: ERTAPENEM 17/09/2026-08/10/2026 21 d → MEROPENEM 08/10/2026-22/10/2026 14 d → ERTAPENEM 22/10/2026-15/11/2026 24 d → esta orden 15/11/2026-22/11/2026 7 d = 66 d');
   noIncluye(t, ' 0 d');
   var m = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(m, '🔴 ERTAPENEM 66 d continuos: supera la referencia');
+  incluye(m, '🔴 ERTAPENEM · 66 d de antibiótico continuo (21 + 14 + 24 + 7): supera la referencia');
   incluye(m, '💊 ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · 7 d hasta 22/11/2026');   // fin contado desde la solicitud
 });
 
@@ -534,9 +534,9 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   // El caso PROA usa la misma referencia: los dos mensajes dicen lo mismo
   var t7 = analisisPertinenciaDesdeEvento(e7, []);
   incluye(t7.encabezadoDias, 'Osteomielitis / espondilodiscitis: 42 d ('); incluye(t7.encabezadoDias, ', la más larga de sus patologías');
-  incluye(t7.lineas.join('\n'), '🟢 CEFAZOLINA 29 d continuos: dentro de la referencia');
+  incluye(t7.lineas.join('\n'), '🟢 CEFAZOLINA · 29 d de antibiótico continuo (22 + 7): dentro de la referencia');
   var t6 = analisisPertinenciaDesdeEvento(e6, []);
-  incluye(t6.encabezadoDias, 'Bacteriemia / sepsis: 7-14 d'); incluye(t6.lineas.join('\n'), '🟡 CEFEPIME 23 d continuos: supera la referencia');
+  incluye(t6.encabezadoDias, 'Bacteriemia / sepsis: 7-14 d'); incluye(t6.lineas.join('\n'), '🟡 CEFEPIME · 23 d de antibiótico continuo (8 + 8 + 7): supera la referencia');
   assert.strictEqual(t6.nivel, r6.nivel);
   // sin cursos previos, la referencia es la del diagnostico actual
   incluye(analisisPertinenciaDesdeEvento(eventoSeguimiento('01/11/2026 10:00:00', '888099', 'L031', [['CEFAZOLINA', '2000', '8', '7']]), []).encabezadoDias,
@@ -810,7 +810,7 @@ prueba('IA: la historia del paciente va al modelo y su interpretacion abre el an
     incluye(llamadas[0].cuerpo.messages[0].content, 'Antibiótico continuo: MEROPENEM 17/10/2026-22/10/2026 5 d → ERTAPENEM 22/10/2026-15/11/2026 24 d');
     var m = construirMensajeDesdeEvento(e, co, { analisis: analisisDeRevision_(rev) });
     incluye(m, '🧭 Carbapenémico continuo: meropenem del 17/10 al 22/10 (5 d) y ertapenem desde el 22/10 (24 d); esta orden lo lleva a 36 d');
-    incluye(m, '🔴 Ertapenem 36 d continuos: muy por encima de la referencia; confirmar foco no controlado antes de prolongar');
+    incluye(m, '🔴 Ertapenem · 36 d de antibiótico continuo (5 + 24 + 7): muy por encima de la referencia; confirmar foco no controlado antes de prolongar');
     incluye(m, '📏 Infección de piel y tejidos blandos: 5-7 d (IDSA 2014)');
     incluye(m, '🟢 Lo demás, sin observaciones');
   });

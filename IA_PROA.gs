@@ -173,7 +173,7 @@ function analisisDeRevision_(revision) {
     if (d.nivel === 0) { verdes++; return; }
     if (d.nivel < 0) return;   // tratamiento en rojo: sus dias no se valoran ni se mencionan
     observaciones++; diasObservados = true;
-    cuerpo.push(color[d.nivel] + " " + capitalizar(d.nombre) + " " + d.dias + ": " + d.motivo);
+    cuerpo.push(color[d.nivel] + " " + capitalizar(d.nombre) + (/continuo/.test(d.dias) ? " \u00b7 " : " ") + d.dias + ": " + d.motivo);
   });
   if (observaciones === 0) cuerpo.push(color[0] + " Tratamiento y días sin observaciones");
   else if (verdes > 0) cuerpo.push(color[0] + " Lo demás, sin observaciones");
@@ -224,11 +224,8 @@ function revisarCasoConIa_(e, coincidencias, cfg) {
     }
     var bloque = (datos.content || []).filter(function(b) { return b.type === "text" && b.text; })[0];
     var salida = JSON.parse(bloque.text);
-    var esquemas = leerSlots(e), seg = seguimientoPaciente(e);
-    esquemas.forEach(function(am) {
-      var curso = seg.porAm[am.nombre];
-      if (curso && curso.transcurridos >= 1) am.diasAcumulados = curso.proyectado;
-    });
+    var esquemas = leerSlots(e);
+    asignarCursos(esquemas, seguimientoPaciente(e));
     var tratamiento = itemsIa_(salida.tratamiento, esquemas);
     var diasIa = tablas.encabezadoDias ? itemsIa_(salida.dias, esquemas).filter(function(d) { return d.dias; }) : [];
     if (tratamiento.length === 0 && diasIa.length === 0) { Logger.log("Revision IA sin resultado: respuesta sin antimicrobianos de la solicitud."); return null; }
@@ -416,7 +413,7 @@ function itemsIa_(lista, esquemas) {
     esquemas.forEach(function(q) { var c = clave(q.nombre); if (!am && (c === nombre || c.indexOf(nombre) > -1 || nombre.indexOf(c) > -1)) am = q; });
     if (!am) return;
     var n = numeroONulo(am.dias);
-    var dias = (am.diasAcumulados > n) ? formatoNumero(am.diasAcumulados, 0) + " d continuos" : ((n !== null && n > 0) ? formatoNumero(n, 0) + " d" : "");
+    var dias = (am.diasAcumulados > n) ? textoDiasContinuos(am, n) : ((n !== null && n > 0) ? formatoNumero(n, 0) + " d" : "");
     salida.push({ nombre: am.nombre, nivel: nivel, motivo: fraseIa_(x.motivo).replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ ])/, function(c) { return c.toLowerCase(); }), dias: dias });
   });
   return salida;

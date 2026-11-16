@@ -890,6 +890,26 @@ function duracionFrenteReferencia(diagnosticos, tipoIndicacion, antifungico, tot
     nivel: nivel, texto: ['dentro de la referencia', 'supera la referencia', 'duplica la referencia'][nivel] };
 }
 
+// Datos del tratamiento continuo en cada antimicrobiano de la solicitud: diasAcumulados (dias ya recibidos +
+// los de esta orden), tramosDias y diagnosticosCurso. Lo usan las tablas y la revision por IA.
+function asignarCursos(esquemas, seg) {
+  esquemas.forEach(function(am) {
+    var curso = seg.porAm[am.nombre];
+    if (!curso || curso.transcurridos < 1) return;
+    am.diasAcumulados = curso.proyectado;
+    am.tramosDias = curso.tramosDias;
+    am.diagnosticosCurso = curso.episodio.solicitudes.map(function(x) { return x.dx; });
+  });
+}
+
+// "66 d de antibiótico continuo (21 + 14 + 24 + 7)": la suma de cada tramo de la linea de seguimiento (de una
+// solicitud a la siguiente, en dias calendario) mas los dias ordenados en esta solicitud.
+function textoDiasContinuos(am, n) {
+  var sumandos = (am.tramosDias || []).concat((n !== null && n > 0) ? [n] : []);
+  return formatoNumero(am.diasAcumulados, 0) + ' d de ' + (esAntifungico(am.nombre) ? 'antifúngico' : 'antibiótico') + ' continuo' +
+    (sumandos.length > 1 ? ' (' + sumandos.map(function(x) { return formatoNumero(x, 0); }).join(' + ') + ')' : '');
+}
+
 // Referencia de duracion del caso: la del diagnostico actual o, si el tratamiento continuo de algun
 // antibacteriano paso por otras patologias (am.diagnosticosCurso), la de mayor duracion. Es la misma regla
 // de la revision por tratamiento prolongado, para que los dos mensajes digan lo mismo.
@@ -920,7 +940,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   // Con seguimiento (am.diasAcumulados), la duracion que se compara es la del curso completo.
   var etiquetaDias = function(am, n) {
     // el desglose por fechas va en la linea de seguimiento; aqui solo el total del tratamiento continuo
-    return am.nombre + ' ' + formatoNumero(am.diasAcumulados > n ? am.diasAcumulados : n, 0) + ' d' + (am.diasAcumulados > n ? ' continuos' : '');
+    return am.diasAcumulados > n ? am.nombre + ' · ' + textoDiasContinuos(am, n) : am.nombre + ' ' + formatoNumero(n, 0) + ' d';
   };
   var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
 
@@ -1128,7 +1148,9 @@ function seguimientoPaciente(e) {
         if (n !== null && n > maxDias) maxDias = n;
         var mismas = previas.filter(function(p) { return p.nombre === am.nombre; });
         res.porAm[am.nombre] = { inicio: fechaCorta(new Date(inicioEpisodio)), transcurridos: transcurridosEpisodio,
-          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0), solicitudes: solicitudesEp.length + 1, episodio: episodio };
+          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0), solicitudes: solicitudesEp.length + 1, episodio: episodio,
+          // dias de cada tramo de la linea de seguimiento: su suma son los dias ya recibidos
+          tramosDias: tramos.filter(function(tr) { return tr.dias > 0; }).map(function(tr) { return tr.dias; }) };
         if (mismas.length === 0) return;
         var horas = (ahora.getTime() - mismas[0].fecha.getTime()) / 3600000;
         if (horas < 12) {
@@ -1397,14 +1419,7 @@ function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
   var micro = campoDelEvento(valores, CAMPOS.MICROORGANISMO);
   var esquemas = coincidencias.concat(acompanantesNoRestringidos(e));
-  var seg = seguimientoPaciente(e);
-  esquemas.forEach(function(am) {
-    var curso = seg.porAm[am.nombre];
-    if (curso && curso.transcurridos >= 1) {
-      am.diasAcumulados = curso.proyectado;
-      am.diagnosticosCurso = curso.episodio.solicitudes.map(function(x) { return x.dx; });
-    }
-  });
+  asignarCursos(esquemas, seguimientoPaciente(e));
   return analisisPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
     micro === '-' ? '' : micro, esquemas, { cultivos: campoDelEvento(valores, CAMPOS.CULTIVOS) });
 }
