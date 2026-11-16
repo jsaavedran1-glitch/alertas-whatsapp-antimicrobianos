@@ -5,7 +5,7 @@ Todas las fechas en hora de Colombia (America/Bogota).
 ## [1.16.0] - 2026-11-16
 
 ### Cambiado
-- El desglose del tratamiento continuo lleva la **fecha de inicio de cada antimicrobiano** y la de la orden actual: `MEROPENEM 17/10 5 d → ERTAPENEM 22/10 24 d → esta orden 15/11 7 d = 36 d`. El modelo tiene instrucción de nombrar esas fechas en su línea de historia.
+- El desglose del tratamiento continuo muestra las **fechas de cada antimicrobiano** y de la orden actual, con sus días: `MEROPENEM 17/10-22/10 5 d → ERTAPENEM 22/10-15/11 24 d → esta orden 15/11-22/11 7 d = 36 d`. El modelo tiene instrucción de nombrar esas fechas en su línea de historia.
 
 ## [1.15.0] - 2026-11-16
 
