@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.20.0] - 2026-11-16
+
+### Cambiado (revisión por tratamiento prolongado: la patología cuenta)
+- Cada solicitud de la lista muestra **su patología** (`1. PIPERACILINA / TAZOBACTAM · 16/10-24/10 · 8 d · Bacteriemia / sepsis`). En la matriz real, 16 de 24 revisiones cambiaban de diagnóstico dentro del mismo tratamiento.
+- El total se compara con **la patología de mayor duración del tratamiento**, no solo con el diagnóstico de la orden actual, y se nombran las demás: `📏 Bacteriemia / sepsis: 7-14 d (...); la más larga de sus patologías (también Neumonía 5-7 d)`. Así una osteomielitis previa (42 d) no queda juzgada como celulitis (5-7 d). Con los datos de 01/11–15/11: verde/amarillo/rojo pasa de 0/12/12 a 1/8/15.
+
 ## [1.19.0] - 2026-11-16
 
 ### Cambiado (criterio del referente para la revisión por tratamiento prolongado)

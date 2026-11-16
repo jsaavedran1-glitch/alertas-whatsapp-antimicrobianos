@@ -820,10 +820,22 @@ function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, es
 // espectro descarta algun antimicrobiano) }. IA_PROA.gs lo usa como referencia y como piso del veredicto.
 var TEXTO_PROFILAXIS = 'Profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)';
 
+// "5-7"
+function rangoDuracion(sindrome) {
+  return (sindrome.min !== null && sindrome.min !== sindrome.max) ? formatoNumero(sindrome.min, 0) + '-' + formatoNumero(sindrome.max, 0) : formatoNumero(sindrome.max, 0);
+}
+
 // "Neumonía: 5-7 d (ATS/IDSA 2019)"
 function encabezadoDuracion(sindrome) {
-  var rango = (sindrome.min !== null && sindrome.min !== sindrome.max) ? formatoNumero(sindrome.min, 0) + '-' + formatoNumero(sindrome.max, 0) : formatoNumero(sindrome.max, 0);
-  return sindrome.sindrome + ': ' + rango + ' d (' + sindrome.fuente + ')';
+  return sindrome.sindrome + ': ' + rangoDuracion(sindrome) + ' d (' + sindrome.fuente + ')';
+}
+
+// Patologia de una solicitud para la lista del tratamiento: " · Neumonía" (el sindrome de la tabla o, si no
+// lo hay, el codigo); '' sin diagnostico.
+function patologiaCorta(diagnosticoCrudo) {
+  if (!String(diagnosticoCrudo || '').trim()) return '';
+  var s = sindromePara(diagnosticoCrudo, obtenerPertinencia());
+  return ' · ' + (s ? s.sindrome : (extraerCodigoCIE10(diagnosticoCrudo) || String(diagnosticoCrudo).trim().slice(0, 30)));
 }
 
 // Total de dias frente al maximo del sindrome: amarillo si lo supera, rojo si lo duplica. La misma regla
@@ -837,24 +849,36 @@ function valorarDuracion(sindrome, total) {
   return { nivel: 0, texto: 'dentro de la referencia' };
 }
 
-// Duracion total de un tratamiento frente a la referencia del diagnostico:
-// { encabezado, nivel (-1 sin referencia), texto }.
-function duracionFrenteReferencia(diagnosticoCrudo, tipoIndicacion, antifungico, total) {
+// Duracion total de un tratamiento frente a la referencia de sus patologias (los diagnosticos de cada
+// solicitud): { encabezado, nivel (-1 sin referencia), texto }. Si el tratamiento paso por varias, se compara
+// con la de mayor duracion (una osteomielitis justifica semanas aunque la orden actual diga celulitis) y se
+// nombran las demas.
+function duracionFrenteReferencia(diagnosticos, tipoIndicacion, antifungico, total) {
   var sin = { encabezado: '', nivel: -1, texto: '' };
   if (!CONFIG.PERTINENCIA_ACTIVA) return sin;
   if (tipoIndicacion === 'Profiláctico') {
     return { encabezado: TEXTO_PROFILAXIS, nivel: total > 1 ? 2 : 0, texto: total > 1 ? 'supera las 24 h de la profilaxis; revaluar' : 'dentro de la referencia' };
   }
-  var sindrome = sindromePara(diagnosticoCrudo, obtenerPertinencia());
-  if (!sindrome) return sin;
-  if (antifungico && CONFIG.SINDROMES_FUNGICOS.indexOf(sindrome.clave) === -1) {
-    return { encabezado: '', nivel: -1, texto: 'sin duración de referencia para un antifúngico en este foco' };
+  var tabla = obtenerPertinencia(), vistos = {}, sindromes = [];
+  [].concat(diagnosticos).forEach(function(dx) {
+    var s = sindromePara(dx, tabla);
+    if (s && !vistos[s.clave]) { vistos[s.clave] = true; sindromes.push(s); }
+  });
+  if (!sindromes.length) return sin;
+  if (antifungico) {
+    sindromes = sindromes.filter(function(s) { return CONFIG.SINDROMES_FUNGICOS.indexOf(s.clave) > -1; });
+    if (!sindromes.length) return { encabezado: '', nivel: -1, texto: 'sin duración de referencia para un antifúngico en este foco' };
   }
-  if (sindrome.max === null) {
-    return { encabezado: sindrome.nota ? sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')' : '', nivel: -1, texto: '' };
+  var conMax = sindromes.filter(function(s) { return s.max !== null; });
+  if (!conMax.length) {
+    var s0 = sindromes[0];
+    return { encabezado: s0.nota ? s0.sindrome + ': ' + s0.nota + ' (' + s0.fuente + ')' : '', nivel: -1, texto: '' };
   }
-  var v = valorarDuracion(sindrome, total);
-  return { encabezado: encabezadoDuracion(sindrome), nivel: v.nivel, texto: v.texto };
+  var elegido = conMax.reduce(function(a, b) { return b.max > a.max ? b : a; });
+  var otras = conMax.filter(function(s) { return s !== elegido; }).map(function(s) { return s.sindrome + ' ' + rangoDuracion(s) + ' d'; });
+  var v = valorarDuracion(elegido, total);
+  return { encabezado: encabezadoDuracion(elegido) + (otras.length ? '; la más larga de sus patologías (también ' + otras.join(', ') + ')' : ''),
+    nivel: v.nivel, texto: v.texto };
 }
 
 function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas, contexto) {
@@ -977,7 +1001,8 @@ function seguimientoPaciente(e) {
       SLOTS.forEach(function(slot) {
         var nombre = nombreLimpio(dato(slot.nombre));
         if (!nombre || nombre === '-') return;
-        var p = { fecha: fecha, nombre: nombre, dias: numeroONulo(dato(slot.dias)), dosis: dato(slot.dosis), frecuencia: dato(slot.frecuencia) };
+        var p = { fecha: fecha, nombre: nombre, dias: numeroONulo(dato(slot.dias)), dosis: dato(slot.dosis), frecuencia: dato(slot.frecuencia),
+          dx: dato(CAMPOS.DIAGNOSTICO) };
         previas.push(p);
         items.push(nombre + ' ' + (p.dosis || '-') + ' mg cada ' + (p.frecuencia || '-') + ' h por ' + (p.dias !== null ? formatoNumero(p.dias, 0) + ' d' : '-'));
       });
@@ -1048,8 +1073,8 @@ function seguimientoPaciente(e) {
           .sort(function(a, b) { return a.fecha.getTime() - b.fecha.getTime(); })
           .forEach(function(p) {
             var d = diaCal(p.fecha.getTime()), ult = solicitudesEp[solicitudesEp.length - 1];
-            if (ult && ult.dia === d) { if (ult.nombres.indexOf(p.nombre) === -1) ult.nombres.push(p.nombre); return; }
-            solicitudesEp.push({ dia: d, inicio: p.fecha.getTime(), nombres: [p.nombre] });
+            if (ult && ult.dia === d) { if (ult.nombres.indexOf(p.nombre) === -1) ult.nombres.push(p.nombre); if (!ult.dx) ult.dx = p.dx; return; }
+            solicitudesEp.push({ dia: d, inicio: p.fecha.getTime(), nombres: [p.nombre], dx: p.dx });
           });
         var mismoDia = solicitudesEp.some(function(x) { return x.dia === diaCal(ahora.getTime()); });
         solicitudesEp = solicitudesEp.filter(function(x) { return x.dia !== diaCal(ahora.getTime()); });
@@ -1148,15 +1173,15 @@ function revisionProlongado(e, coincidenciasOpt) {
 
   var lista = p.episodio.solicitudes.map(function(x, i) {
     return (i + 1) + '. ' + x.nombres.join(' + ') + ' · ' + fechaCorta(new Date(x.inicio)) + '-' + fechaCorta(new Date(x.fin)) +
-      ' · ' + formatoNumero(x.dias, 0) + ' d';
+      ' · ' + formatoNumero(x.dias, 0) + ' d' + patologiaCorta(x.dx);
   });
   var diasOrden = p.proyectado - p.dias;
   lista.push(p.solicitudes + '. ' + actuales.map(function(am) { return am.nombre + ' ' + esquemaCorto(am); }).join(' + ') +
     ' · ' + fechaCorta(fechaSolicitud) + (diasOrden > 0 ? '-' + fechaCorta(new Date(fechaSolicitud.getTime() + diasOrden * dia)) +
-    ' · ' + formatoNumero(diasOrden, 0) + ' d' : '') + ' (esta orden)');
+    ' · ' + formatoNumero(diasOrden, 0) + ' d' : '') + patologiaCorta(campoDelEvento(valores, CAMPOS.DIAGNOSTICO)) + ' (esta orden)');
 
-  var dur = duracionFrenteReferencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campo('TIPO_INDICACION')),
-    p.antifungico, p.proyectado);
+  var diagnosticos = p.episodio.solicitudes.map(function(x) { return x.dx; }).concat([campoDelEvento(valores, CAMPOS.DIAGNOSTICO)]);
+  var dur = duracionFrenteReferencia(diagnosticos, tipoIndicacionTexto(campo('TIPO_INDICACION')), p.antifungico, p.proyectado);
   // sin referencia para el foco, se sugiere verificar
   var nivel = dur.nivel >= 0 ? dur.nivel : 1;
   var duracion = [E(0x1F4CF) + ' ' + (dur.encabezado || 'Sin duración de referencia en las tablas para este diagnóstico')];

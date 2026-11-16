@@ -503,7 +503,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, mens
     '⏳ *3 solicitudes seguidas: lleva 16 d de antibiótico y con esta orden serían 23 d*');
   incluye(r.mensaje, '📄 HC 888001 · 60 años · 70 kg');
   incluye(r.mensaje, '🔁 Tratamiento continuo:\n   1. PIPERACILINA / TAZOBACTAM · 16/10/2026-23/10/2026 · 7 d\n' +
-    '   2. MEROPENEM · 23/10/2026-01/11/2026 · 9 d\n   3. CEFEPIME 2000 mg (28,6 mg/kg) IV c/8 h · 01/11/2026-08/11/2026 · 7 d (esta orden)');
+    '   2. MEROPENEM · 23/10/2026-01/11/2026 · 9 d\n   3. CEFEPIME 2000 mg (28,6 mg/kg) IV c/8 h · 01/11/2026-08/11/2026 · 7 d · Neumonía (esta orden)');
   incluye(r.mensaje, '📏 Neumonía: 5-7 d');
   incluye(r.mensaje, '🔴 23 d continuos con esta orden: supera la referencia; revaluar duración');
   incluye(r.mensaje, '💡 Sugerencia PROA: confirmar con el médico tratante el motivo para continuar');
@@ -517,6 +517,20 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, mens
   filas.push(filaMatriz('25/10/2026 08:00:00', '888004', [['CEFEPIME', '2000', '8', '3']]));
   filas.push(filaMatriz('28/10/2026 08:00:00', '888004', [['CEFEPIME', '2000', '8', '3']]));
   assert.strictEqual(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888004', 'J189', [['MEROPENEM', '1000', '8', '7']])), null);
+  // La patologia cuenta: cada solicitud muestra la suya y el total se compara con la de mayor duracion
+  var conDx = function (fecha, hc, ams, dx) { var f = filaMatriz(fecha, hc, ams); f[ENCABEZADOS_REALES.indexOf(CAMPOS.DIAGNOSTICO)] = dx; return f; };
+  filas.push(conDx('16/10/2026 08:00:00', '888006', [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']], 'A419 - SEPSIS'));
+  filas.push(conDx('24/10/2026 08:00:00', '888006', [['CEFEPIME', '2000', '8', '7']], 'J189 - NEUMONIA'));
+  var r6 = revisionProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888006', 'J22X', [['CEFEPIME', '2000', '8', '7']]), []);
+  incluye(r6.mensaje, '1. PIPERACILINA / TAZOBACTAM · 16/10/2026-24/10/2026 · 8 d · Bacteriemia / sepsis\n   2. CEFEPIME · 24/10/2026-01/11/2026 · 8 d · Neumonía');
+  incluye(r6.mensaje, '📏 Bacteriemia / sepsis: 7-14 d'); incluye(r6.mensaje, 'la más larga de sus patologías (también Neumonía 5-7 d)');
+  incluye(r6.mensaje, '🟡 23 d continuos con esta orden: supera la referencia; revaluar duración'); assert.strictEqual(r6.nivel, 1);
+  filas.push(conDx('10/10/2026 08:00:00', '888007', [['CEFAZOLINA', '2000', '8', '14']], 'M861 - OSTEOMIELITIS'));
+  filas.push(conDx('24/10/2026 08:00:00', '888007', [['CEFAZOLINA', '2000', '8', '7']], 'L039 - CELULITIS'));
+  var r7 = revisionProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888007', 'L031', [['CEFAZOLINA', '2000', '8', '7']]), []);
+  incluye(r7.mensaje, '📏 Osteomielitis / espondilodiscitis: 42 d'); incluye(r7.mensaje, '🟢 29 d continuos con esta orden: dentro de la referencia');
+  assert.strictEqual(r7.nivel, 0);
+
   // Una revision por paciente y dia: la segunda orden del mismo dia no repite el mensaje
   filas.push(filaMatriz('01/11/2026 07:00:00', '888001', [['CEFEPIME', '2000', '8', '7']]));
   var eDup = eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['CEFEPIME', '2000', '8', '7']]);
@@ -553,7 +567,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, mens
       incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*'); noIncluye(envios[0].message, '⏳');
       noIncluye(envios[0].message, '48-72 h');
       incluye(envios[1].message, '*⏳ REVISIÓN PROA · Tratamiento prolongado*');
-      incluye(envios[1].message, '3. ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · 01/11/2026-08/11/2026 · 7 d (esta orden)');
+      incluye(envios[1].message, '3. ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · 01/11/2026-08/11/2026 · 7 d · Neumonía (esta orden)');
       // sin criterio no hay mensaje aparte
       envios.length = 0;
       notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888004', 'J189', [['MEROPENEM', '1000', '8', '7']]));
