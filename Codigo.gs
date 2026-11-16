@@ -1251,25 +1251,25 @@ function revisionProlongado(e, coincidenciasOpt) {
   return { hc: String(campo('HC')).replace(/\s+/g, ''), nivel: nivel, bloque: bloque, mensaje: mensajeProlongado({ nivel: nivel, bloque: bloque }) };
 }
 
-// Mensaje de un paciente ("REVISION DE DURACION", nombre elegido por el referente para distinguirlo del caso
-// PROA): corto y sin lineas en blanco para que WhatsApp no lo corte con "Leer mas". El titulo lleva el total de
-// dias con esta orden; los dias van en negrita. item: { nivel, bloque }.
+// Mensaje de un paciente ("REVISION DE DURACION DE TTO", nombre elegido por el referente para distinguirlo del
+// caso PROA): corto y sin lineas en blanco para que WhatsApp no lo corte con "Leer mas". El titulo lleva el total
+// de dias con esta orden; los dias van en negrita. Sin la referencia de la guia (📏) ni sugerencia: decision del
+// referente, 2026-11-16; la linea 📏 sigue en el bloque que se guarda en el registro. item: { nivel, bloque }.
 function mensajeProlongado(item) {
   var E = function(cp) { return String.fromCodePoint(cp); };
   var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
   var nivel = (item.nivel >= 0 && item.nivel <= 2) ? item.nivel : 1;
   var resumen = String(item.bloque[1] || '');
   var total = (resumen.match(/con esta orden (\d+) d/) || resumen.match(/lleva (\d+) d/) || [])[1];
-  var lineas = ['*' + E(0x1F4C6) + ' REVISIÓN DE DURACIÓN' + (total ? ' · ' + total + ' d de ' + (/antifúngico/.test(resumen) ? 'antifúngico' : 'antibiótico') : '') + '*',
+  var lineas = ['*' + E(0x1F4C6) + ' REVISIÓN DE DURACIÓN DE TTO' + (total ? ' · ' + total + ' d de ' + (/antifúngico/.test(resumen) ? 'antifúngico' : 'antibiótico') : '') + '*',
     color[nivel] + ' *' + item.bloque[0] + '*'];
-  // dias en negrita: los de la linea de resumen, los de cada prescripcion y el total frente a la referencia
+  // dias en negrita: los de la linea de resumen y los de cada prescripcion
   item.bloque.slice(1).forEach(function(l, i) {
+    if (l.indexOf(E(0x1F4CF)) === 0) return;   // la referencia (📏) queda solo en el registro
     if (i === 0) l = l.replace(/(\d+ d)\b/g, '*$1*');
     else if (/^\d+(-\d+)?\. /.test(l)) l = l.replace(/ · (\d+ d)\b/, ' · *$1*');
-    else l = l.replace(/: (\d+ d) (supera|duplica|dentro)/, ': *$1* $2');
     lineas.push(l);
   });
-  lineas.push(E(0x1F4A1) + ' Confirmar con el médico tratante el motivo para continuar y la fecha de suspensión.');
   return lineas.join('\n');
 }
 

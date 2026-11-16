@@ -512,15 +512,17 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   assert.strictEqual(r.bloque.length, 6);
   // filas pendientes guardadas por la version anterior ("5 solicitudes · ...") se muestran con el titulo nuevo
   incluye(mensajeProlongado({ nivel: 2, bloque: ['HC 1 · 60 años · N390', '5 solicitudes · lleva 21 d, con esta orden 35 d · se sugiere revaluar'] }),
-    '*📆 REVISIÓN DE DURACIÓN · 35 d de antibiótico*\n🔴 *HC 1 · 60 años · N390*\n5 solicitudes · lleva *21 d*, con esta orden *35 d*');
+    '*📆 REVISIÓN DE DURACIÓN DE TTO · 35 d de antibiótico*\n🔴 *HC 1 · 60 años · N390*\n5 solicitudes · lleva *21 d*, con esta orden *35 d*');
   // un mensaje por paciente, sin lineas en blanco y con los dias en negrita
-  incluye(r.mensaje, '*📆 REVISIÓN DE DURACIÓN · 23 d de antibiótico*\n🔴 *HC 888001 · 60 años · J189*\n' +
+  incluye(r.mensaje, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*\n🔴 *HC 888001 · 60 años · J189*\n' +
     '3 prescripciones seguidas · lleva *16 d*, con esta orden *23 d* · se sugiere revaluar\n1. PIPERACILINA');
   noIncluye(r.mensaje, 'CASO PROA'); noIncluye(r.mensaje, 'prolongado');
   incluye(r.mensaje, '\n1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · *7 d*\n2. MEROPENEM 23/10/2026-01/11/2026 · *9 d*\n');
-  incluye(r.mensaje, ': *23 d* duplica la referencia\n💡 Confirmar con el médico tratante el motivo para continuar y la fecha de suspensión.');
+  // sin la referencia (📏) ni la sugerencia (💡) en el mensaje; la referencia queda en el bloque del registro
+  noIncluye(r.mensaje, '📏'); noIncluye(r.mensaje, '💡'); incluye(r.bloque.join('\n'), '23 d duplica la referencia');
+  assert.ok(/ · \*7 d\* · Neumonía \(esta orden\)$/.test(r.mensaje), r.mensaje);
   noIncluye(r.mensaje, '\n\n'); noIncluye(r.mensaje, 'CASO PROA'); noIncluye(r.mensaje, '48-72 h');
-  assert.strictEqual(r.mensaje.split('\n').length, 8);
+  assert.strictEqual(r.mensaje.split('\n').length, 6);
   // un solo antimicrobiano de amplio espectro no es "terapia combinada"
   noIncluye(sugerenciaPROA('Empírico', [], [{ nombre: 'CEFEPIME' }]), 'combinada');
 
@@ -614,9 +616,9 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       enviarResumenProlongados();
       // un mensaje por paciente, los rojos primero; la verde no sale
       assert.strictEqual(envios.length, 2);
-      incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN · 23 d de antibiótico*\n🔴 *HC 888001');
-      incluye(envios[1].message, '*📆 REVISIÓN DE DURACIÓN · 23 d de antibiótico*\n🟡 *HC 888006');
-      envios.forEach(function (x) { noIncluye(x.message, '888007'); assert.strictEqual(x.message.split('💡').length, 2); });
+      incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*\n🔴 *HC 888001');
+      incluye(envios[1].message, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*\n🟡 *HC 888006');
+      envios.forEach(function (x) { noIncluye(x.message, '888007'); noIncluye(x.message, '💡'); noIncluye(x.message, '📏'); });
       var pend = reg.filter(function (f) { return f[col('Fuente del análisis')] === 'TRATAMIENTO PROLONGADO' && f[col('Enviado al grupo')] === 'SI'; });
       assert.strictEqual(pend.length, 2); incluye(pend[0][col('Destino')], 'RESUMEN DIARIO ');
       envios.length = 0;
@@ -635,7 +637,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       try {
         envios.length = 0;
         notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]));
-        assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN · 36 d de antibiótico*\n🔴 *HC 888003 · 60 años · J189*\n4 prescripciones seguidas · lleva *22 d*, con esta orden *36 d*');
+        assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO · 36 d de antibiótico*\n🔴 *HC 888003 · 60 años · J189*\n4 prescripciones seguidas · lleva *22 d*, con esta orden *36 d*');
         // renovaciones seguidas del mismo antimicrobiano en una linea
         incluye(envios[0].message, '\n1-3. MEROPENEM 10/10/2026-01/11/2026 · *22 d*\n4. MEROPENEM 1000 mg IV c/8 h 01/11/2026-15/11/2026 · *14 d* · Neumonía (esta orden)');
         assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION');
@@ -659,7 +661,7 @@ prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolo
     });
   } finally { Logger.log = logReal; filas.pop(); }
   var texto = registro.join('\n');
-  incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN · 23 d de antibiótico*');
+  incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*');
 });
 
 prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, sin analisis ni modelo', function () {

@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.26.0] - 2026-11-16
+
+### Cambiado (pedido del referente)
+- Título: `*📆 REVISIÓN DE DURACIÓN DE TTO · 66 d de antibiótico*` (todo en negrita, días incluidos).
+- Se quitan del mensaje la línea `📏` (referencia de la guía) y la `💡` (sugerencia). La línea 📏 se sigue guardando en `Detalle` de `REGISTRO_REVISIONES` para auditoría, y la comparación con la guía sigue decidiendo el color y el filtro de verdes.
+- El mensaje queda en 6 líneas más una por prescripción.
+
 ## [1.25.0] - 2026-11-16
 
 ### Cambiado (nombre elegido por el referente para distinguirlo del caso PROA)
