@@ -501,16 +501,17 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   assert.deepStrictEqual(p.nuevos, ['CEFEPIME']);
   var r = revisionProlongado(e, filtrarAntimicrobianosRestringidos(e));
   assert.strictEqual(r.nivel, 2); assert.strictEqual(r.hc, '888001');
-  assert.deepStrictEqual(r.bloque.slice(0, 5), ['HC 888001 · 60 años · J189', '3 solicitudes · 16 d, con esta orden 23 d · se sugiere revaluar',
+  assert.deepStrictEqual(r.bloque.slice(0, 5), ['HC 888001 · 60 años · J189', '3 solicitudes · lleva 16 d, con esta orden 23 d · se sugiere revaluar',
     '1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · 7 d', '2. MEROPENEM 23/10/2026-01/11/2026 · 9 d',
     '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d · Neumonía (esta orden)']);
   incluye(r.bloque[5], '📏 Neumonía 5-7 d ('); incluye(r.bloque[5], '): 23 d duplica la referencia');
   assert.strictEqual(r.bloque.length, 6);
-  incluye(r.mensaje, '*⏳ REVISIÓN PROA · Tratamiento prolongado*\n_1 paciente con 3 o más solicitudes seguidas y más de 10 d de antimicrobiano_\n\n' +
-    '🔴 *HC 888001 · 60 años · J189*\n3 solicitudes');
-  incluye(r.mensaje, '\n\n💡 Sugerencia PROA: confirmar con el médico tratante el motivo para continuar y la fecha de suspensión.');
-  noIncluye(r.mensaje, 'CASO PROA'); noIncluye(r.mensaje, '48-72 h');
-  assert.ok(r.mensaje.split('\n').length <= 11, 'formato compacto');
+  // un mensaje por paciente, sin lineas en blanco y con los dias en negrita
+  incluye(r.mensaje, '*⏳ REVISIÓN PROA · Tratamiento prolongado*\n🔴 *HC 888001 · 60 años · J189*\n' +
+    '3 solicitudes · lleva *16 d*, con esta orden *23 d* · se sugiere revaluar\n1. PIPERACILINA');
+  incluye(r.mensaje, ' duplica la referencia\n💡 Confirmar con el médico tratante el motivo para continuar y la fecha de suspensión.');
+  noIncluye(r.mensaje, '\n\n'); noIncluye(r.mensaje, 'CASO PROA'); noIncluye(r.mensaje, '48-72 h');
+  assert.strictEqual(r.mensaje.split('\n').length, 8);
   // un solo antimicrobiano de amplio espectro no es "terapia combinada"
   noIncluye(sugerenciaPROA('Empírico', [], [{ nombre: 'CEFEPIME' }]), 'combinada');
 
@@ -522,13 +523,13 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   assert.strictEqual(r6.nivel, 1);
   incluye(r6.bloque.join('\n'), '1. PIPERACILINA / TAZOBACTAM 16/10/2026-24/10/2026 · 8 d · Bacteriemia / sepsis\n2. CEFEPIME 24/10/2026-01/11/2026 · 8 d · Neumonía\n' +
     '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d (esta orden)');   // la patologia solo cuando cambia
-  incluye(r6.bloque[5], '📏 Bacteriemia / sepsis 7-14 d ('); incluye(r6.bloque[5], ', la más larga (también Neumonía 5-7 d): 23 d supera la referencia');
+  incluye(r6.bloque[5], '📏 Bacteriemia / sepsis 7-14 d ('); incluye(r6.bloque[5], ', la más larga de sus patologías: 23 d supera la referencia');
   filas.push(conDx('10/10/2026 08:00:00', '888007', [['CEFAZOLINA', '2000', '8', '14']], 'M861 - OSTEOMIELITIS'));
   filas.push(conDx('24/10/2026 08:00:00', '888007', [['CEFAZOLINA', '2000', '8', '7']], 'L039 - CELULITIS'));
   var e7 = eventoSeguimiento('01/11/2026 10:00:00', '888007', 'L031', [['CEFAZOLINA', '2000', '8', '7']]);
   var r7 = revisionProlongado(e7, []);
   assert.strictEqual(r7.nivel, 0); incluye(r7.bloque[r7.bloque.length - 1], '📏 Osteomielitis / espondilodiscitis 42 d (');
-  incluye(r7.bloque[r7.bloque.length - 1], '): 29 d dentro de la referencia');
+  incluye(r7.bloque[r7.bloque.length - 1], ', la más larga de sus patologías: 29 d dentro de la referencia');
 
   // No alcanza: 2 solicitudes aunque sean 22 d; 3 solicitudes con solo 7 d; dos ordenes el mismo dia son una
   filas.push(filaMatriz('10/10/2026 08:00:00', '888002', [['MEROPENEM', '1000', '8', '21']]));
@@ -585,13 +586,11 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       probarResumenProlongados();
       assert.strictEqual(envios.length, 0);
       enviarResumenProlongados();
-      assert.strictEqual(envios.length, 1);
-      var m = envios[0].message;
-      incluye(m, '*⏳ REVISIÓN PROA · Tratamientos prolongados · ');
-      incluye(m, '_2 pacientes con 3 o más solicitudes seguidas y más de 10 d de antimicrobiano_');
-      assert.ok(m.indexOf('🔴 *HC 888001') > -1 && m.indexOf('🔴 *HC 888001') < m.indexOf('🟡 *HC 888006'), 'los rojos primero');
-      noIncluye(m, '888007');
-      assert.strictEqual(m.split('💡').length, 2, 'una sola sugerencia al final');
+      // un mensaje por paciente, los rojos primero; la verde no sale
+      assert.strictEqual(envios.length, 2);
+      incluye(envios[0].message, '*⏳ REVISIÓN PROA · Tratamiento prolongado*\n🔴 *HC 888001');
+      incluye(envios[1].message, '*⏳ REVISIÓN PROA · Tratamiento prolongado*\n🟡 *HC 888006');
+      envios.forEach(function (x) { noIncluye(x.message, '888007'); assert.strictEqual(x.message.split('💡').length, 2); });
       var pend = reg.filter(function (f) { return f[col('Fuente del análisis')] === 'TRATAMIENTO PROLONGADO' && f[col('Enviado al grupo')] === 'SI'; });
       assert.strictEqual(pend.length, 2); incluye(pend[0][col('Destino')], 'RESUMEN DIARIO ');
       envios.length = 0;
@@ -610,7 +609,9 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       try {
         envios.length = 0;
         notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]));
-        assert.strictEqual(envios.length, 1); incluye(envios[0].message, '🔴 *HC 888003 · 60 años · J189*\n4 solicitudes · 22 d, con esta orden 36 d');
+        assert.strictEqual(envios.length, 1); incluye(envios[0].message, '🔴 *HC 888003 · 60 años · J189*\n4 solicitudes · lleva *22 d*, con esta orden *36 d*');
+        // renovaciones seguidas del mismo antimicrobiano en una linea
+        incluye(envios[0].message, '\n1-3. MEROPENEM 10/10/2026-01/11/2026 · 22 d\n4. MEROPENEM 1000 mg IV c/8 h 01/11/2026-15/11/2026 · 14 d · Neumonía (esta orden)');
         assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION');
       } finally { CONFIG.PROLONGADO_RESUMEN_DIARIO = true; }
     });

@@ -860,8 +860,7 @@ function valorarDuracion(sindrome, total) {
 
 // Duracion total de un tratamiento frente a la referencia de sus patologias (los diagnosticos de cada
 // solicitud): { encabezado, nivel (-1 sin referencia), texto }. Si el tratamiento paso por varias, se compara
-// con la de mayor duracion (una osteomielitis justifica semanas aunque la orden actual diga celulitis) y se
-// nombran las demas.
+// con la de mayor duracion (una osteomielitis justifica semanas aunque la orden actual diga celulitis).
 function duracionFrenteReferencia(diagnosticos, tipoIndicacion, antifungico, total) {
   var sin = { encabezado: '', nivel: -1, texto: '' };
   if (!CONFIG.PERTINENCIA_ACTIVA) return sin;
@@ -884,10 +883,10 @@ function duracionFrenteReferencia(diagnosticos, tipoIndicacion, antifungico, tot
     return { encabezado: s0.nota ? s0.sindrome + ': ' + s0.nota + ' (' + s0.fuente + ')' : '', nivel: -1, texto: '' };
   }
   var elegido = conMax.reduce(function(a, b) { return b.max > a.max ? b : a; });
-  var otras = conMax.filter(function(s) { return s !== elegido; }).map(function(s) { return s.sindrome + ' ' + rangoDuracion(s) + ' d'; });
+  // las demas patologias ya se ven en la lista de solicitudes; aqui solo se dice que es la mas larga
   var nivel = valorarDuracion(elegido, total).nivel;
   return { encabezado: elegido.sindrome + ' ' + rangoDuracion(elegido) + ' d (' + elegido.fuente + ')' +
-    (otras.length ? ', la más larga (también ' + otras.join(', ') + ')' : ''),
+    (conMax.length > 1 ? ', la más larga de sus patologías' : ''),
     nivel: nivel, texto: ['dentro de la referencia', 'supera la referencia', 'duplica la referencia'][nivel] };
 }
 
@@ -1188,42 +1187,43 @@ function revisionProlongado(e, coincidenciasOpt) {
   var codigo = extraerCodigoCIE10(dxActual) || String(dxActual || '-').trim().slice(0, 30);
   var bloque = ['HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
     (servicio !== '-' ? ' · ' + servicio : '') + (cama !== '-' ? ' · Cama ' + cama : '') + ' · ' + codigo];
-  bloque.push(p.solicitudes + ' solicitudes · ' + formatoNumero(p.dias, 0) + ' d' +
+  bloque.push(p.solicitudes + ' solicitudes · lleva ' + formatoNumero(p.dias, 0) + ' d' +
     (p.proyectado > p.dias ? ', con esta orden ' + formatoNumero(p.proyectado, 0) + ' d' : '') + ' · ' + ETIQUETA_NIVEL[nivel]);
-  // la patologia se escribe en la primera solicitud y cuando cambia
-  var anterior = null;
-  var patologia = function(dx) { var t = patologiaCorta(dx); if (t === anterior) return ''; anterior = t; return t; };
+  // Renovaciones seguidas del mismo esquema y patologia van en una linea ("2-3. CEFTAZIDIMA / AVIBACTAM
+  // 14/10-22/10 · 8 d"); la patologia se escribe en la primera solicitud y cuando cambia.
+  var tramos = [];
   p.episodio.solicitudes.forEach(function(x, i) {
-    bloque.push((i + 1) + '. ' + x.nombres.join(' + ') + ' ' + fechaCorta(new Date(x.inicio)) + '-' + fechaCorta(new Date(x.fin)) +
-      ' · ' + formatoNumero(x.dias, 0) + ' d' + patologia(x.dx));
+    var esquema = x.nombres.join(' + '), pat = patologiaCorta(x.dx), ult = tramos[tramos.length - 1];
+    if (ult && ult.esquema === esquema && ult.pat === pat) { ult.hasta = i + 1; ult.fin = x.fin; ult.dias += x.dias; return; }
+    tramos.push({ desde: i + 1, hasta: i + 1, esquema: esquema, pat: pat, inicio: x.inicio, fin: x.fin, dias: x.dias });
+  });
+  var anterior = null;
+  var patologia = function(t) { if (t === anterior) return ''; anterior = t; return t; };
+  tramos.forEach(function(tr) {
+    bloque.push(tr.desde + (tr.hasta > tr.desde ? '-' + tr.hasta : '') + '. ' + tr.esquema + ' ' + fechaCorta(new Date(tr.inicio)) + '-' +
+      fechaCorta(new Date(tr.fin)) + ' · ' + formatoNumero(tr.dias, 0) + ' d' + patologia(tr.pat));
   });
   var diasOrden = p.proyectado - p.dias;
   bloque.push(p.solicitudes + '. ' + actuales.map(function(am) {
     var d = numeroONulo(am.dosis);
     return am.nombre + ' ' + (d !== null ? formatoNumero(d, 2) + ' mg' : am.dosis) + ' ' + viaCorta(am.via) + ' ' + frecuenciaCorta(am.frecuencia);
   }).join(' + ') + ' ' + fechaCorta(fechaSolicitud) + (diasOrden > 0 ? '-' + fechaCorta(new Date(fechaSolicitud.getTime() + diasOrden * dia)) +
-    ' · ' + formatoNumero(diasOrden, 0) + ' d' : '') + patologia(dxActual) + ' (esta orden)');
+    ' · ' + formatoNumero(diasOrden, 0) + ' d' : '') + patologia(patologiaCorta(dxActual)) + ' (esta orden)');
   bloque.push(E(0x1F4CF) + ' ' + (dur.encabezado
     ? dur.encabezado + (dur.nivel >= 0 ? ': ' + formatoNumero(p.proyectado, 0) + ' d ' + dur.texto : '')
     : (dur.texto ? capitalizar(dur.texto) : 'Sin duración de referencia en las tablas para estas patologías')));
-  return { hc: String(campo('HC')).replace(/\s+/g, ''), nivel: nivel, bloque: bloque, mensaje: mensajeProlongados([{ nivel: nivel, bloque: bloque }]) };
+  return { hc: String(campo('HC')).replace(/\s+/g, ''), nivel: nivel, bloque: bloque, mensaje: mensajeProlongado({ nivel: nivel, bloque: bloque }) };
 }
 
-// Mensaje con uno o varios pacientes (resumen diario), los rojos primero. items: [{ nivel, bloque }].
-function mensajeProlongados(items, fechaTexto) {
+// Mensaje de un paciente: corto y sin lineas en blanco para que WhatsApp no lo corte con "Leer mas".
+// Los dias que lleva y los proyectados van en negrita. item: { nivel, bloque }.
+function mensajeProlongado(item) {
   var E = function(cp) { return String.fromCodePoint(cp); };
   var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
-  var varios = items.length > 1;
-  var lineas = ['*' + E(0x23F3) + ' REVISIÓN PROA · ' + (varios ? 'Tratamientos prolongados' : 'Tratamiento prolongado') +
-    (fechaTexto ? ' · ' + fechaTexto : '') + '*',
-    '_' + (varios ? items.length + ' pacientes' : '1 paciente') + ' con ' + CONFIG.PROLONGADO_MIN_SOLICITUDES + ' o más solicitudes seguidas y más de ' +
-    CONFIG.PROLONGADO_DIAS + ' d de antimicrobiano_'];
-  items.slice().sort(function(a, b) { return b.nivel - a.nivel; }).forEach(function(it) {
-    var nivel = (it.nivel >= 0 && it.nivel <= 2) ? it.nivel : 1;
-    lineas.push('', color[nivel] + ' *' + it.bloque[0] + '*');
-    it.bloque.slice(1).forEach(function(l) { lineas.push(l); });
-  });
-  lineas.push('', E(0x1F4A1) + ' Sugerencia PROA: confirmar con el médico tratante el motivo para continuar y la fecha de suspensión.');
+  var nivel = (item.nivel >= 0 && item.nivel <= 2) ? item.nivel : 1;
+  var lineas = ['*' + E(0x23F3) + ' REVISIÓN PROA · Tratamiento prolongado*', color[nivel] + ' *' + item.bloque[0] + '*'];
+  item.bloque.slice(1).forEach(function(l, i) { lineas.push(i === 0 ? l.replace(/(\d+ d)\b/g, '*$1*') : l); });
+  lineas.push(E(0x1F4A1) + ' Confirmar con el médico tratante el motivo para continuar y la fecha de suspensión.');
   return lineas.join('\n');
 }
 
@@ -1263,15 +1263,16 @@ function prolongadoRevisadoReciente(hc, fecha) {
 
 var FUENTE_PROLONGADO = 'TRATAMIENTO PROLONGADO';
 
-// Activador diario (crearTriggerResumenProlongados): envia en un solo mensaje las revisiones pendientes y
-// las marca como enviadas. Si el envio falla, quedan pendientes para el dia siguiente.
+// Activador diario (crearTriggerResumenProlongados): envia las revisiones pendientes, un mensaje por
+// paciente (los rojos primero), y marca cada una como enviada. La que falle queda pendiente para el dia siguiente.
 function enviarResumenProlongados() {
   var r = resumenProlongadosPendiente_();
   if (!r) return;
-  var ok = r.mensajes.every(function(m) { var envio = enviarAlertaWhatsApp(m, { sinFirma: true }); return !!(envio && envio.ok); });
-  if (!ok) { Logger.log('El resumen de tratamientos prolongados no se pudo enviar; queda pendiente.'); return; }
   var col = function(n) { return ENCABEZADOS_REGISTRO.indexOf(n) + 1; };
-  r.pendientes.forEach(function(p) {
+  r.pendientes.forEach(function(p, i) {
+    if (i > 0 && typeof Utilities.sleep === 'function') Utilities.sleep(1500);   // conserva el orden en el grupo
+    var envio = enviarAlertaWhatsApp(p.mensaje, { sinFirma: true });
+    if (!(envio && envio.ok)) { Logger.log('Revision de la fila %s no enviada; queda pendiente.', p.fila); return; }
     r.hoja.getRange(p.fila, col('Enviado al grupo')).setValue('SI');
     r.hoja.getRange(p.fila, col('Destino')).setValue('RESUMEN DIARIO ' + r.fecha);
   });
@@ -1280,7 +1281,8 @@ function enviarResumenProlongados() {
 // Igual que enviarResumenProlongados(), pero solo escribe en el registro de ejecucion lo que se enviaria.
 function probarResumenProlongados() {
   var r = resumenProlongadosPendiente_();
-  Logger.log(r ? r.pendientes.length + ' paciente(s) pendiente(s):\n\n' + r.mensajes.join('\n\n----- mensaje siguiente -----\n\n')
+  Logger.log(r ? r.pendientes.length + ' paciente(s) pendiente(s), un mensaje por paciente:\n\n' +
+    r.pendientes.map(function(p) { return p.mensaje; }).join('\n\n----- mensaje siguiente -----\n\n')
     : 'No hay revisiones por tratamiento prolongado pendientes.');
 }
 
@@ -1295,16 +1297,9 @@ function resumenProlongadosPendiente_() {
     pendientes.push({ fila: i + 2, nivel: semaforo.indexOf(String(fila[col('Semáforo final')])), bloque: String(fila[col('Detalle')]).split('\n') });
   });
   if (!pendientes.length) return null;
-  var fecha = Utilities.formatDate(new Date(), 'America/Bogota', 'dd/MM');
-  // Green-API acepta hasta 20.000 caracteres por mensaje: con muchos pacientes se parte en varios.
-  var mensajes = [], grupo = [], largo = 0;
-  pendientes.slice().sort(function(a, b) { return b.nivel - a.nivel; }).forEach(function(p) {
-    var n = p.bloque.join('\n').length + 10;
-    if (grupo.length && largo + n > 12000) { mensajes.push(mensajeProlongados(grupo, fecha)); grupo = []; largo = 0; }
-    grupo.push(p); largo += n;
-  });
-  mensajes.push(mensajeProlongados(grupo, fecha));
-  return { hoja: hoja, pendientes: pendientes, mensajes: mensajes, fecha: fecha };
+  pendientes.sort(function(a, b) { return b.nivel - a.nivel || a.fila - b.fila; });
+  pendientes.forEach(function(p) { p.mensaje = mensajeProlongado(p); });
+  return { hoja: hoja, pendientes: pendientes, fecha: Utilities.formatDate(new Date(), 'America/Bogota', 'dd/MM') };
 }
 
 // Crea (o recrea) el activador diario del resumen, a la hora CONFIG.PROLONGADO_RESUMEN_HORA (hora de Colombia).

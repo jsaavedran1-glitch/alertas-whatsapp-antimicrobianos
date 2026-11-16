@@ -2,6 +2,14 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.21.0] - 2026-11-16
+
+### Cambiado (revisión por tratamiento prolongado, pedido del referente)
+- **Un mensaje por paciente** en el envío de las 7:00, los rojos primero, para que WhatsApp no corte el mensaje con "Leer más". Cada revisión se marca como enviada por separado; la que falle queda pendiente para el día siguiente. Entre mensajes hay una pausa de 1,5 s para conservar el orden.
+- **Días en negrita:** `5 solicitudes · lleva *21 d*, con esta orden *35 d* · se sugiere revaluar`.
+- Más corto: sin subtítulo ni líneas en blanco; las **renovaciones seguidas** del mismo esquema y patología van en una línea (`2-3. CEFTAZIDIMA / AVIBACTAM 14/10-22/10 · 8 d`); la línea 📏 dice "la más larga de sus patologías" sin repetir las otras (ya están en la lista).
+- Con la matriz real (01/11–15/11): 18 mensajes en 11 días (1-2 por día), de 575 a 745 caracteres con el pie y como máximo 12 líneas.
+
 ## [1.20.0] - 2026-11-16
 
 ### Cambiado (revisión por tratamiento prolongado: la patología cuenta)
