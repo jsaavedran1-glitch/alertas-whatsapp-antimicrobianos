@@ -488,64 +488,87 @@ prueba('seguimiento: dias calendario que cuadran con las fechas y sin tramos de 
   incluye(m, '💊 ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · 7 d hasta 22/11/2026');   // fin contado desde la solicitud
 });
 
-prueba('tratamiento prolongado: mas de 14 d continuos al formular un medicamento, con o sin restringido', function () {
+prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, mensaje aparte con o sin restringido', function () {
   var filas = HOJAS['Respuestas de formulario 1']._filas;
-  // A: piperacilina/tazobactam 7 d -> meropenem 9 d -> se formula cefepime (nuevo): 16 d ya recibidos
+  // A: piperacilina/tazobactam 7 d -> meropenem 9 d -> se formula cefepime: 3 solicitudes, 16 d ya recibidos
   filas.push(filaMatriz('16/10/2026 08:00:00', '888001', [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]));
   filas.push(filaMatriz('23/10/2026 08:00:00', '888001', [['MEROPENEM', '1000', '8', '7']]));
   var e = eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['CEFEPIME', '2000', '8', '7']]);
   var p = tratamientoProlongado(e);
-  assert.strictEqual(p.dias, 16); assert.strictEqual(p.proyectado, 23); assert.deepStrictEqual(p.nuevos, ['CEFEPIME']);
-  var m = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(m, '*⏳ REVISIÓN PROA · Tratamiento prolongado*');
-  incluye(m, '🔴 *Se sugiere revaluar*');
-  incluye(m, '⏳ *Lleva 16 d de antibiótico continuo y se formula CEFEPIME; con esta orden, 23 d*');
-  incluye(m, '💊 CEFEPIME 2000 mg (28,6 mg/kg) IV c/8 h · 7 d');
-  incluye(m, '🔁 Antibiótico continuo: PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 7 d → MEROPENEM 23/10/2026-01/11/2026 9 d');
-  incluye(m, '🔴 CEFEPIME 23 d continuos: supera la referencia; revaluar duración');
-  noIncluye(m, 'CASO PROA');
-  noIncluye(m, 'Sugerencia PROA');   // revaluar a las 48-72 h no aplica con mas de 14 d
+  assert.strictEqual(p.dias, 16); assert.strictEqual(p.proyectado, 23); assert.strictEqual(p.solicitudes, 3);
+  assert.deepStrictEqual(p.nuevos, ['CEFEPIME']);
+  var r = revisionProlongado(e, filtrarAntimicrobianosRestringidos(e));
+  assert.strictEqual(r.nivel, 2);
+  incluye(r.mensaje, '*⏳ REVISIÓN PROA · Tratamiento prolongado*\n🔴 *Se sugiere revaluar*\n' +
+    '⏳ *3 solicitudes seguidas: lleva 16 d de antibiótico y con esta orden serían 23 d*');
+  incluye(r.mensaje, '📄 HC 888001 · 60 años · 70 kg');
+  incluye(r.mensaje, '🔁 Tratamiento continuo:\n   1. PIPERACILINA / TAZOBACTAM · 16/10/2026-23/10/2026 · 7 d\n' +
+    '   2. MEROPENEM · 23/10/2026-01/11/2026 · 9 d\n   3. CEFEPIME 2000 mg (28,6 mg/kg) IV c/8 h · 01/11/2026-08/11/2026 · 7 d (esta orden)');
+  incluye(r.mensaje, '📏 Neumonía: 5-7 d');
+  incluye(r.mensaje, '🔴 23 d continuos con esta orden: supera la referencia; revaluar duración');
+  incluye(r.mensaje, '💡 Sugerencia PROA: confirmar con el médico tratante el motivo para continuar');
+  noIncluye(r.mensaje, 'CASO PROA'); noIncluye(r.mensaje, '48-72 h');
   // un solo antimicrobiano de amplio espectro no es "terapia combinada"
   noIncluye(sugerenciaPROA('Empírico', [], [{ nombre: 'CEFEPIME' }]), 'combinada');
-  // se envia aunque no haya restringido, y queda en el registro
+
+  // No alcanza: 2 solicitudes aunque sean 22 d; 3 solicitudes con solo 7 d
+  filas.push(filaMatriz('10/10/2026 08:00:00', '888002', [['MEROPENEM', '1000', '8', '21']]));
+  assert.strictEqual(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888002', 'J189', [['MEROPENEM', '1000', '8', '7']])), null);
+  filas.push(filaMatriz('25/10/2026 08:00:00', '888004', [['CEFEPIME', '2000', '8', '3']]));
+  filas.push(filaMatriz('28/10/2026 08:00:00', '888004', [['CEFEPIME', '2000', '8', '3']]));
+  assert.strictEqual(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888004', 'J189', [['MEROPENEM', '1000', '8', '7']])), null);
+  // Una revision por paciente y dia: la segunda orden del mismo dia no repite el mensaje
+  filas.push(filaMatriz('01/11/2026 07:00:00', '888001', [['CEFEPIME', '2000', '8', '7']]));
+  var eDup = eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['CEFEPIME', '2000', '8', '7']]);
+  assert.strictEqual(tratamientoProlongado(eDup).solicitudes, 3); assert.strictEqual(revisionProlongado(eDup, []), null);
+  filas.pop();
+  // Dos ordenes el mismo dia cuentan como una solicitud
+  filas.push(filaMatriz('20/10/2026 08:00:00', '888005', [['CEFEPIME', '2000', '8', '7']]));
+  filas.push(filaMatriz('20/10/2026 15:00:00', '888005', [['CEFEPIME', '2000', '8', '7']]));
+  assert.strictEqual(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888005', 'J189', [['MEROPENEM', '1000', '8', '7']])), null);
+
+  // Renovaciones del mismo antimicrobiano: cuentan; con PROLONGADO_SOLO_CAMBIO, solo si se formula uno nuevo
+  ['10/10/2026', '17/10/2026', '24/10/2026'].forEach(function (f) { filas.push(filaMatriz(f + ' 08:00:00', '888003', [['MEROPENEM', '1000', '8', '7']])); });
+  var e3 = eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]);
+  var p3 = tratamientoProlongado(e3);
+  assert.strictEqual(p3.dias, 22); assert.strictEqual(p3.solicitudes, 4); assert.deepStrictEqual(p3.nuevos, []);
+  incluye(revisionProlongado(e3, []).mensaje, '⏳ *4 solicitudes seguidas: lleva 22 d de antibiótico y con esta orden serían 36 d*');
+  CONFIG.PROLONGADO_SOLO_CAMBIO = true;
+  try { assert.strictEqual(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']])), null); }
+  finally { CONFIG.PROLONGADO_SOLO_CAMBIO = false; }
+
+  // Envio: sin restringido sale solo la revision; con restringido, el caso PROA y aparte la revision
   var propsReal = global.PropertiesService;
   var P = { GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test' };
   global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
+  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice(0, 21)]);   // pestana de la version anterior
   try {
     conApiSimulada(respuestaIa({}), function (llamadas) {
       notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['CEFEPIME', '2000', '8', '7']]));
       assert.strictEqual(envios.length, 1); assert.strictEqual(llamadas.length, 0);
-      incluye(envios[0].message, 'REVISIÓN PROA · Tratamiento prolongado');
-      // B: 7 d continuos y sin restringido: no hay mensaje
+      incluye(envios[0].message, '*⏳ REVISIÓN PROA · Tratamiento prolongado*');
       envios.length = 0;
-      filas.push(filaMatriz('25/10/2026 08:00:00', '888002', [['MEROPENEM', '1000', '8', '7']]));
-      var e2 = eventoSeguimiento('01/11/2026 10:00:00', '888002', 'J189', [['MEROPENEM', '1000', '8', '7']]);
-      assert.strictEqual(tratamientoProlongado(e2), null);
-      notificarNuevaRespuesta(e2);
+      notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['ERTAPENEM', '1000', '24', '7']]));
+      assert.strictEqual(envios.length, 2);
+      incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*'); noIncluye(envios[0].message, '⏳');
+      noIncluye(envios[0].message, '48-72 h');
+      incluye(envios[1].message, '*⏳ REVISIÓN PROA · Tratamiento prolongado*');
+      incluye(envios[1].message, '3. ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · 01/11/2026-08/11/2026 · 7 d (esta orden)');
+      // sin criterio no hay mensaje aparte
+      envios.length = 0;
+      notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888004', 'J189', [['MEROPENEM', '1000', '8', '7']]));
       assert.strictEqual(envios.length, 0);
     });
   } finally { global.PropertiesService = propsReal; }
-  // C: renovacion del mismo antimicrobiano; con PROLONGADO_SOLO_CAMBIO solo cuenta si se formula uno nuevo
-  filas.push(filaMatriz('10/10/2026 08:00:00', '888003', [['MEROPENEM', '1000', '8', '21']]));   // termina el 31/10: continuo
-  var e3 = eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]);
-  var p3 = tratamientoProlongado(e3);
-  assert.strictEqual(p3.dias, 22); assert.deepStrictEqual(p3.nuevos, []);
-  incluye(construirMensajeDesdeEvento(e3, []), '⏳ *Lleva 22 d de antibiótico continuo; con esta orden, 36 d*');
-  CONFIG.PROLONGADO_SOLO_CAMBIO = true;
-  try { assert.strictEqual(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']])), null); }
-  finally { CONFIG.PROLONGADO_SOLO_CAMBIO = false; }
-  // con restringido: el caso sigue siendo CASO PROA y suma la linea de tratamiento prolongado
-  var e4 = eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['ERTAPENEM', '1000', '24', '7']]);
-  var m4 = construirMensajeDesdeEvento(e4, filtrarAntimicrobianosRestringidos(e4));
-  incluye(m4, '*🚨 CASO PROA · Ertapenem*'); incluye(m4, '⏳ *Lleva 16 d de antibiótico continuo y se formula ERTAPENEM; con esta orden, 23 d*');
-  // el registro amplia el encabezado de una pestana creada con la version anterior
-  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice(0, 21)]);
-  registrarRevision(e, [], { enviado: true });
-  var reg = HOJAS['REGISTRO_REVISIONES']._filas;
-  assert.deepStrictEqual(reg[0], ENCABEZADOS_REGISTRO); assert.strictEqual(reg[1][ENCABEZADOS_REGISTRO.indexOf('Días de tratamiento continuo')], 16);
+  // registro: encabezado ampliado; una fila por mensaje, la de la revision con su fuente
+  var reg = HOJAS['REGISTRO_REVISIONES']._filas, col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+  assert.deepStrictEqual(reg[0], ENCABEZADOS_REGISTRO);
+  assert.deepStrictEqual(reg.slice(1).map(function (f) { return f[col('Fuente del análisis')]; }), ['TRATAMIENTO PROLONGADO', 'TABLAS', 'TRATAMIENTO PROLONGADO']);
+  assert.strictEqual(reg[1][col('Días de tratamiento continuo')], 16); assert.strictEqual(reg[1][col('Semáforo final')], 'ROJO');
+  incluye(reg[1][col('Detalle')], '2. MEROPENEM · 23/10/2026-01/11/2026 · 9 d');
 });
 
-prueba('probarUltimoProlongado: muestra la ultima solicitud con mas de 14 d sin enviar nada', function () {
+prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolongado sin enviar nada', function () {
   var filas = HOJAS['Respuestas de formulario 1']._filas;
   filas.push(filaMatriz('01/11/2026 10:00:00', '888001', [['CEFEPIME', '2000', '8', '7']]));
   var registro = [], logReal = Logger.log;
@@ -560,7 +583,7 @@ prueba('probarUltimoProlongado: muestra la ultima solicitud con mas de 14 d sin 
     });
   } finally { Logger.log = logReal; filas.pop(); }
   var texto = registro.join('\n');
-  incluye(texto, 'tratamiento continuo: 16 d'); incluye(texto, '*⏳ REVISIÓN PROA · Tratamiento prolongado*');
+  incluye(texto, 'tratamiento prolongado: sí (3 solicitudes seguidas, 16 d)'); incluye(texto, '*⏳ REVISIÓN PROA · Tratamiento prolongado*');
 });
 
 prueba('registro: una fila por revision en REGISTRO_REVISIONES', function () {

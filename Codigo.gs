@@ -52,11 +52,13 @@ var CONFIG = {
   // Una orden continua el tratamiento anterior si empieza hasta N dias despues de su fin (las renovaciones
   // suelen llegar tarde: con 2 dias se perdio un curso de ertapenem de 24 dias, caso del 2026-11-15).
   SEGUIMIENTO_TOLERANCIA_DIAS: 3,
-  // Revision por tratamiento prolongado (decision del referente, 2026-11-16): cada solicitud nueva, con o sin
-  // restringido, cuyo paciente ya lleva mas de PROLONGADO_DIAS dias de tratamiento continuo genera mensaje.
+  // Revision por tratamiento prolongado (decision del referente, 2026-11-16): mensaje APARTE del caso PROA
+  // cuando la solicitud es al menos la PROLONGADO_MIN_SOLICITUDES-esima del mismo tratamiento continuo (contando
+  // esta) y el paciente ya lleva mas de PROLONGADO_DIAS dias. Aplica con o sin restringido.
   // Con PROLONGADO_SOLO_CAMBIO = true, solo cuando se formula un antimicrobiano que el paciente no venia recibiendo.
   PROLONGADO_ACTIVO: true,
-  PROLONGADO_DIAS: 14,
+  PROLONGADO_DIAS: 10,
+  PROLONGADO_MIN_SOLICITUDES: 3,
   PROLONGADO_SOLO_CAMBIO: false,
   // Registro de cada revision (indicadores PROA y auditoria del analisis).
   REGISTRO_ACTIVO: true,
@@ -368,18 +370,36 @@ function rangoTexto(min, max) {
    ===================================================================== */
 function notificarNuevaRespuesta(e) {
   var coincidencias = filtrarAntimicrobianosRestringidos(e);
-  // Revision por tratamiento prolongado: aplica a toda solicitud, tenga o no restringido.
-  var prolongado = tratamientoProlongado(e);
+  notificarCaso_(e, coincidencias);
+  // Mensaje aparte, tenga o no restringido: tratamiento continuo largo con varias solicitudes.
+  notificarTratamientoProlongado(e, coincidencias);
+}
+
+function notificarCaso_(e, coincidencias) {
   // IA_PROA.gs: con la revision por IA activa, el modelo analiza el caso y su analisis va en el mismo mensaje.
   // Sin ANTHROPIC_API_KEY, con IA_PROA_MODO = NO o sin el archivo IA_PROA.gs sigue el flujo de siempre.
-  if ((coincidencias.length > 0 || prolongado) && typeof notificarConRevisionIa_ === 'function' && notificarConRevisionIa_(e, coincidencias)) return;
-  if (!debeAlertar(coincidencias) && !prolongado) {
+  if (coincidencias.length > 0 && typeof notificarConRevisionIa_ === 'function' && notificarConRevisionIa_(e, coincidencias)) return;
+  if (!debeAlertar(coincidencias)) {
     if (coincidencias.length > 0) registrarRevision(e, coincidencias, { enviado: false });
     return;
   }
   // El mensaje ya se encabeza con "CASO PROA": no lleva la linea de titulo del bot.
   var envio = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias), { sinFirma: true });
   registrarRevision(e, coincidencias, { enviado: !!(envio && envio.ok), destino: 'PRODUCCION' });
+}
+
+// Revision por tratamiento prolongado: va siempre al grupo de produccion, sin modelo (son datos de la matriz
+// y la tabla de duracion). Un error aqui no afecta al caso PROA, que ya salio.
+function notificarTratamientoProlongado(e, coincidencias) {
+  try {
+    var revision = revisionProlongado(e, coincidencias);
+    if (!revision) return;
+    var envio = enviarAlertaWhatsApp(revision.mensaje, { sinFirma: true });
+    registrarRevision(e, coincidencias, { enviado: !!(envio && envio.ok), destino: 'PRODUCCION', fuente: 'TRATAMIENTO PROLONGADO',
+      nivelFinal: revision.nivel, detalle: revision.detalle });
+  } catch (err) {
+    Logger.log('Revision por tratamiento prolongado no disponible: ' + err);
+  }
 }
 
 function nombreLimpio(valor) {
@@ -798,6 +818,45 @@ function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, es
 
 // { lineas, nivel (-1 sin criterio, 0 pertinente, 1 verificar, 2 intervenir), espectroRojo (una regla de
 // espectro descarta algun antimicrobiano) }. IA_PROA.gs lo usa como referencia y como piso del veredicto.
+var TEXTO_PROFILAXIS = 'Profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)';
+
+// "Neumonía: 5-7 d (ATS/IDSA 2019)"
+function encabezadoDuracion(sindrome) {
+  var rango = (sindrome.min !== null && sindrome.min !== sindrome.max) ? formatoNumero(sindrome.min, 0) + '-' + formatoNumero(sindrome.max, 0) : formatoNumero(sindrome.max, 0);
+  return sindrome.sindrome + ': ' + rango + ' d (' + sindrome.fuente + ')';
+}
+
+// Total de dias frente al maximo del sindrome: amarillo si lo supera, rojo si lo duplica. La misma regla
+// para el caso PROA y para la revision por tratamiento prolongado.
+function valorarDuracion(sindrome, total) {
+  if (total > sindrome.max) {
+    var doble = total >= 2 * sindrome.max;
+    // en rojo, directo; en amarillo se agrega la nota con las excepciones que justifican extender
+    return { nivel: doble ? 2 : 1, texto: 'supera la referencia; revaluar duración' + (!doble && sindrome.nota ? ' · ' + sindrome.nota : '') };
+  }
+  return { nivel: 0, texto: 'dentro de la referencia' };
+}
+
+// Duracion total de un tratamiento frente a la referencia del diagnostico:
+// { encabezado, nivel (-1 sin referencia), texto }.
+function duracionFrenteReferencia(diagnosticoCrudo, tipoIndicacion, antifungico, total) {
+  var sin = { encabezado: '', nivel: -1, texto: '' };
+  if (!CONFIG.PERTINENCIA_ACTIVA) return sin;
+  if (tipoIndicacion === 'Profiláctico') {
+    return { encabezado: TEXTO_PROFILAXIS, nivel: total > 1 ? 2 : 0, texto: total > 1 ? 'supera las 24 h de la profilaxis; revaluar' : 'dentro de la referencia' };
+  }
+  var sindrome = sindromePara(diagnosticoCrudo, obtenerPertinencia());
+  if (!sindrome) return sin;
+  if (antifungico && CONFIG.SINDROMES_FUNGICOS.indexOf(sindrome.clave) === -1) {
+    return { encabezado: '', nivel: -1, texto: 'sin duración de referencia para un antifúngico en este foco' };
+  }
+  if (sindrome.max === null) {
+    return { encabezado: sindrome.nota ? sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')' : '', nivel: -1, texto: '' };
+  }
+  var v = valorarDuracion(sindrome, total);
+  return { encabezado: encabezadoDuracion(sindrome), nivel: v.nivel, texto: v.texto };
+}
+
 function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas, contexto) {
   var vacio = { lineas: [], nivel: -1, espectroRojo: false, encabezadoDias: '', rojos: [] };
   if (!CONFIG.PERTINENCIA_ACTIVA) return vacio;
@@ -826,7 +885,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   var conDias = esquemas.filter(function(am) { var n = numeroONulo(am.dias); return n !== null && n > 0; });
   var encabezadoDias = '';
   if (tipoIndicacion === 'Profiláctico') {
-    encabezadoDias = 'Profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)';
+    encabezadoDias = TEXTO_PROFILAXIS;
     conDias.forEach(function(am) {
       var n = numeroONulo(am.dias);
       if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
@@ -834,8 +893,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
       else marcar(dias, 0, am.nombre + ' ' + formatoNumero(n, 0) + ' d: dentro de la referencia');
     });
   } else if (sindrome && sindrome.max !== null) {
-    var rango = (sindrome.min !== null && sindrome.min !== sindrome.max) ? formatoNumero(sindrome.min, 0) + '-' + formatoNumero(sindrome.max, 0) : formatoNumero(sindrome.max, 0);
-    encabezadoDias = sindrome.sindrome + ': ' + rango + ' d (' + sindrome.fuente + ')';
+    encabezadoDias = encabezadoDuracion(sindrome);
     conDias.forEach(function(am) {
       var n = numeroONulo(am.dias);
       if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
@@ -844,15 +902,8 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
         soloAntifungico++;
         return;
       }
-      var total = am.diasAcumulados > n ? am.diasAcumulados : n;
-      if (total > sindrome.max) {
-        // el doble de la referencia o mas: rojo
-        var doble = total >= 2 * sindrome.max;
-        // en rojo, directo; en amarillo se agrega la nota con las excepciones que justifican extender
-        marcar(dias, doble ? 2 : 1, etiquetaDias(am, n) + ': supera la referencia; revaluar duración' + (!doble && sindrome.nota ? ' · ' + sindrome.nota : ''));
-      } else {
-        marcar(dias, 0, etiquetaDias(am, n) + ': dentro de la referencia');
-      }
+      var v = valorarDuracion(sindrome, am.diasAcumulados > n ? am.diasAcumulados : n);
+      marcar(dias, v.nivel, etiquetaDias(am, n) + ': ' + v.texto);
     });
   } else if (sindrome && sindrome.nota) {
     encabezadoDias = sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')';
@@ -989,6 +1040,27 @@ function seguimientoPaciente(e) {
           tr.dias = diaCal(tr.fin) - diaCal(tr.inicio);
         });
       }
+      // Solicitudes del tratamiento continuo, una por dia calendario (dos ordenes el mismo dia cuentan como
+      // una; una orden previa del mismo dia que esta es esta misma solicitud, repetida o corregida).
+      var solicitudesEp = [], mismoDia = false;
+      if (transcurridosEpisodio >= 1) {
+        previasTipo.filter(function(p) { return p.fecha.getTime() >= inicioEpisodio; })
+          .sort(function(a, b) { return a.fecha.getTime() - b.fecha.getTime(); })
+          .forEach(function(p) {
+            var d = diaCal(p.fecha.getTime()), ult = solicitudesEp[solicitudesEp.length - 1];
+            if (ult && ult.dia === d) { if (ult.nombres.indexOf(p.nombre) === -1) ult.nombres.push(p.nombre); return; }
+            solicitudesEp.push({ dia: d, inicio: p.fecha.getTime(), nombres: [p.nombre] });
+          });
+        var mismoDia = solicitudesEp.some(function(x) { return x.dia === diaCal(ahora.getTime()); });
+        solicitudesEp = solicitudesEp.filter(function(x) { return x.dia !== diaCal(ahora.getTime()); });
+        solicitudesEp.forEach(function(x, i) {
+          x.fin = (i < solicitudesEp.length - 1) ? solicitudesEp[i + 1].inicio : ahora.getTime();
+          x.dias = diaCal(x.fin) - diaCal(x.inicio);
+        });
+      }
+      // mismoDia: el paciente ya tuvo hoy otra orden de este tratamiento (la revision ya salio con ella)
+      var episodio = { antifungico: antifungico, inicio: inicioEpisodio, transcurridos: transcurridosEpisodio, solicitudes: solicitudesEp,
+        mismoDia: mismoDia };
       var tramoTexto = function(tr) { return tr.esquema + ' ' + fechaCorta(new Date(tr.inicio)) + '-' + fechaCorta(new Date(tr.fin)) + ' ' + formatoNumero(tr.dias, 0) + ' d'; };
       // Periodo de la orden actual: desde la fecha de la solicitud y por los dias ordenados.
       var ordenTexto = function(n) { return 'esta orden ' + fechaCorta(ahora) + '-' + fechaCorta(new Date(ahora.getTime() + n * dia)) + ' ' + formatoNumero(n, 0) + ' d'; };
@@ -997,7 +1069,7 @@ function seguimientoPaciente(e) {
         if (n !== null && n > maxDias) maxDias = n;
         var mismas = previas.filter(function(p) { return p.nombre === am.nombre; });
         res.porAm[am.nombre] = { inicio: fechaCorta(new Date(inicioEpisodio)), transcurridos: transcurridosEpisodio,
-          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0) };
+          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0), solicitudes: solicitudesEp.length + 1, episodio: episodio };
         if (mismas.length === 0) return;
         var horas = (ahora.getTime() - mismas[0].fecha.getTime()) / 3600000;
         if (horas < 12) {
@@ -1033,9 +1105,10 @@ function seguimientoPaciente(e) {
   return res;
 }
 
-// Tratamiento continuo del paciente al momento de esta solicitud, si supera CONFIG.PROLONGADO_DIAS:
-// { dias (ya recibidos), proyectado (con esta orden), antifungico, nuevos (antimicrobianos de la solicitud que
-// el paciente no venia recibiendo) }. null si no lo supera o si esta desactivado.
+// Tratamiento continuo del paciente al momento de esta solicitud, si esta es al menos la
+// CONFIG.PROLONGADO_MIN_SOLICITUDES-esima del tratamiento y ya lleva mas de CONFIG.PROLONGADO_DIAS dias:
+// { dias (ya recibidos), proyectado (con esta orden), solicitudes (contando esta), antifungico, episodio,
+// nuevos (antimicrobianos de la solicitud que el paciente no venia recibiendo) }. null si no o si esta desactivado.
 function tratamientoProlongado(e) {
   if (!CONFIG.PROLONGADO_ACTIVO || !e) return null;
   if (e._prolongado !== undefined) return e._prolongado;
@@ -1043,8 +1116,10 @@ function tratamientoProlongado(e) {
   var slots = leerSlots(e);
   slots.forEach(function(am) {
     var c = seg.porAm[am.nombre];
-    if (c && c.transcurridos > CONFIG.PROLONGADO_DIAS && (!mejor || c.transcurridos > mejor.dias)) {
-      mejor = { dias: c.transcurridos, proyectado: c.proyectado, antifungico: esAntifungico(am.nombre) };
+    if (c && c.transcurridos > CONFIG.PROLONGADO_DIAS && c.solicitudes >= (CONFIG.PROLONGADO_MIN_SOLICITUDES || 1) &&
+        (!mejor || c.transcurridos > mejor.dias || (c.transcurridos === mejor.dias && c.proyectado > mejor.proyectado))) {
+      mejor = { dias: c.transcurridos, proyectado: c.proyectado, solicitudes: c.solicitudes, antifungico: esAntifungico(am.nombre),
+        episodio: c.episodio };
     }
   });
   if (mejor) {
@@ -1053,6 +1128,51 @@ function tratamientoProlongado(e) {
   }
   e._prolongado = mejor;
   return mejor;
+}
+
+// Revision por tratamiento prolongado, mensaje aparte del caso PROA: { mensaje, nivel, detalle } o null.
+// Lista las solicitudes del tratamiento continuo con sus fechas y compara el total con la referencia del foco.
+function revisionProlongado(e, coincidenciasOpt) {
+  var p = tratamientoProlongado(e);
+  if (!p || p.episodio.mismoDia) return null;   // una revision por paciente y dia
+  var valores = (e && e.namedValues) ? e.namedValues : {};
+  var campo = function(clave) { return campoDelEvento(valores, CAMPOS[clave]) || '-'; };
+  var E = function(cp) { return String.fromCodePoint(cp); };
+  var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
+  var dia = 24 * 3600 * 1000;
+  var pesoKg = pesoKgDesde(campo('PESO_KG'), campo('PESO_G'));
+  var fechaSolicitud = fechaDe(campoDelEvento(valores, 'Marca temporal')) || new Date();
+  var actuales = leerSlots(e).filter(function(am) { return esAntifungico(am.nombre) === p.antifungico; });
+  actuales.forEach(function(am) { am.mgKg = (pesoKg !== null && numeroONulo(am.dosis) !== null) ? numeroONulo(am.dosis) / pesoKg : null; });
+  var tipo = p.antifungico ? 'antifúngico' : 'antibiótico';
+
+  var lista = p.episodio.solicitudes.map(function(x, i) {
+    return (i + 1) + '. ' + x.nombres.join(' + ') + ' · ' + fechaCorta(new Date(x.inicio)) + '-' + fechaCorta(new Date(x.fin)) +
+      ' · ' + formatoNumero(x.dias, 0) + ' d';
+  });
+  var diasOrden = p.proyectado - p.dias;
+  lista.push(p.solicitudes + '. ' + actuales.map(function(am) { return am.nombre + ' ' + esquemaCorto(am); }).join(' + ') +
+    ' · ' + fechaCorta(fechaSolicitud) + (diasOrden > 0 ? '-' + fechaCorta(new Date(fechaSolicitud.getTime() + diasOrden * dia)) +
+    ' · ' + formatoNumero(diasOrden, 0) + ' d' : '') + ' (esta orden)');
+
+  var dur = duracionFrenteReferencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campo('TIPO_INDICACION')),
+    p.antifungico, p.proyectado);
+  // sin referencia para el foco, se sugiere verificar
+  var nivel = dur.nivel >= 0 ? dur.nivel : 1;
+  var duracion = [E(0x1F4CF) + ' ' + (dur.encabezado || 'Sin duración de referencia en las tablas para este diagnóstico')];
+  if (dur.nivel >= 0) duracion.push(color[dur.nivel] + ' ' + formatoNumero(p.proyectado, 0) + ' d continuos con esta orden: ' + dur.texto);
+  else if (dur.texto) duracion.push(E(0x26AA) + ' ' + dur.texto);
+
+  var lineas = ['*' + E(0x23F3) + ' REVISIÓN PROA · Tratamiento prolongado*', color[nivel] + ' *' + capitalizar(ETIQUETA_NIVEL[nivel]) + '*',
+    E(0x23F3) + ' *' + p.solicitudes + ' solicitudes seguidas: lleva ' + formatoNumero(p.dias, 0) + ' d de ' + tipo +
+      (p.proyectado > p.dias ? ' y con esta orden serían ' + formatoNumero(p.proyectado, 0) + ' d' : '') + '*', ''];
+  lineasPaciente(campo, pesoKg).forEach(function(l) { lineas.push(l); });
+  lineas.push('', E(0x1F501) + ' Tratamiento continuo:');
+  lista.forEach(function(l) { lineas.push('   ' + l); });
+  lineas.push('');
+  duracion.forEach(function(l) { lineas.push(l); });
+  lineas.push('', E(0x1F4A1) + ' Sugerencia PROA: confirmar con el médico tratante el motivo para continuar (foco, cultivos, respuesta clínica) y la fecha de suspensión.');
+  return { mensaje: lineas.join('\n'), nivel: nivel, detalle: lista.concat(duracion).join(' | ') };
 }
 
 var ENCABEZADOS_REGISTRO = ['Fecha de registro', 'Marca temporal de la solicitud', 'Historia clínica', 'Servicio', 'Especialidad', 'Diagnóstico',
@@ -1077,12 +1197,13 @@ function registrarRevision(e, coincidencias, datos) {
     var semaforo = ['VERDE', 'AMARILLO', 'ROJO'];
     var tablas = datos.tablas || analisisPertinenciaDesdeEvento(e, coincidencias);
     var rev = datos.revision || null;
-    var nivelFinal = rev ? ['pertinente', 'verificar', 'intervenir'].indexOf(rev.veredicto) : tablas.nivel;
+    var nivelFinal = rev ? ['pertinente', 'verificar', 'intervenir'].indexOf(rev.veredicto) :
+      (datos.nivelFinal !== undefined ? datos.nivelFinal : tablas.nivel);
     hoja.appendRow([new Date(), c('Marca temporal'), c(CAMPOS.HC), c(CAMPOS.SERVICIO), c(CAMPOS.ESPECIALIDAD),
       diagnosticoCorto(c(CAMPOS.DIAGNOSTICO)), c(CAMPOS.MICROORGANISMO), tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION)),
       coincidencias.map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
       acompanantesNoRestringidos(e).map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
-      tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], rev ? 'IA' : 'TABLAS',
+      tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], datos.fuente || (rev ? 'IA' : 'TABLAS'),
       String(datos.detalle || tablas.lineas.join(' | ')).replace(/[*_]/g, '').slice(0, 1500), seg.previas,
       datos.enviado ? 'SI' : 'NO', datos.destino || '', rev ? rev.modelo : '', rev ? rev.entrada : '', rev ? rev.salida : '', datos.costo || '',
       diasContinuos]);
@@ -1171,6 +1292,23 @@ function diagnosticoCorto(diagnosticoCrudo) {
   return m ? m[1] + ' · ' + capitalizar(m[2]) : texto;
 }
 
+// Datos del paciente que encabezan el caso PROA y la revision por tratamiento prolongado.
+// campo(clave) devuelve el valor de CAMPOS[clave] o '-'.
+function lineasPaciente(campo, pesoKg) {
+  var E = function(cp) { return String.fromCodePoint(cp); };
+  var cama = campo('CAMA'), especialidad = campo('ESPECIALIDAD');
+  var lineas = [E(0x1F4C4) + ' HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
+    ' · ' + ((pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-')];
+  lineas.push(E(0x1F3E5) + ' ' + campo('SERVICIO') + (cama !== '-' ? ' · Cama ' + cama : '') + (especialidad !== '-' ? ' · ' + especialidad : ''));
+  lineas.push(E(0x1F4CB) + ' ' + diagnosticoCorto(campo('DIAGNOSTICO')));
+  lineas.push(E(0x1F9A0) + ' ' + [campo('MICROORGANISMO'), campo('CULTIVOS'), tipoIndicacionTexto(campo('TIPO_INDICACION')), campo('ORIGEN')]
+    .filter(function(x) { return x && x !== '-'; }).join(' · '));
+  if (String(campo('INDICACION')).toUpperCase() === 'CAMBIO') lineas.push(E(0x1F504) + ' Cambio: ' + capitalizar(campo('RAZON_CAMBIO')));
+  if (esSi(campo('INTERCONSULTA'))) lineas.push(E(0x1F9EA) + ' Interconsulta a Infectología: Sí');
+  else lineas.push(E(0x26A0) + E(0xFE0F) + ' Sin interconsulta a Infectología');
+  return lineas;
+}
+
 // Mensaje unico del caso: encabezado con el veredicto, datos del paciente, esquema, seguimiento,
 // analisis de pertinencia y avisos. opciones.analisis = { cuerpo, nivel } del modelo (IA_PROA.gs);
 // si no se pasa, se usa el analisis de las tablas.
@@ -1199,36 +1337,16 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, opciones) {
   var analisis = opciones.analisis || analisisPertinenciaDesdeEvento(e, coincidencias);
   var cuerpoAnalisis = analisis.cuerpo || analisis.lineas.slice(1);
   var nivel = (analisis.nivel === undefined || analisis.nivel === null) ? -1 : analisis.nivel;
-  var prolongado = tratamientoProlongado(e);
-  // Sin restringido que alerte, el mensaje sale solo por tratamiento prolongado: titulo propio y, si las
-  // tablas no tienen criterio, se sugiere verificar.
-  var soloProlongado = !!prolongado && !debeAlertar(coincidencias);
-  if (prolongado && nivel < 0) nivel = 1;
 
   var lineas = encabezadosDestacados(esquemas);
   if (lineas.length) lineas.push('');
-  if (soloProlongado) lineas.push('*' + E(0x23F3) + ' REVISIÓN PROA · Tratamiento prolongado*');
-  else lineas.push('*' + E(0x1F6A8) + ' CASO PROA · ' +
+  lineas.push('*' + E(0x1F6A8) + ' CASO PROA · ' +
     (coincidencias.map(function(am) { return capitalizar(am.nombre); }).join(' + ') || 'Antimicrobiano restringido') + '*');
   if (nivel >= 0) lineas.push(color[nivel] + ' *' + capitalizar(ETIQUETA_NIVEL[nivel]) + '*');
-  if (prolongado) {
-    lineas.push(E(0x23F3) + ' *Lleva ' + formatoNumero(prolongado.dias, 0) + ' d de ' + (prolongado.antifungico ? 'antifúngico' : 'antibiótico') + ' continuo' +
-      (prolongado.nuevos.length ? ' y se formula ' + prolongado.nuevos.join(' + ') : '') +
-      (prolongado.proyectado > prolongado.dias ? '; con esta orden, ' + formatoNumero(prolongado.proyectado, 0) + ' d' : '') + '*');
-  }
 
-  var cama = campo('CAMA'), especialidad = campo('ESPECIALIDAD'), cultivos = campo('CULTIVOS');
-  lineas.push('', E(0x1F4C4) + ' HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
-    ' · ' + ((pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-'));
-  lineas.push(E(0x1F3E5) + ' ' + campo('SERVICIO') + (cama !== '-' ? ' · Cama ' + cama : '') + (especialidad !== '-' ? ' · ' + especialidad : ''));
-  lineas.push(E(0x1F4CB) + ' ' + diagnosticoCorto(campo('DIAGNOSTICO')));
+  lineas.push('');
+  lineasPaciente(campo, pesoKg).forEach(function(l) { lineas.push(l); });
   var tipoIndicacion = tipoIndicacionTexto(campo('TIPO_INDICACION'));
-  lineas.push(E(0x1F9A0) + ' ' + [campo('MICROORGANISMO'), cultivos, tipoIndicacion, campo('ORIGEN')]
-    .filter(function(x) { return x && x !== '-'; }).join(' · '));
-  if (String(campo('INDICACION')).toUpperCase() === 'CAMBIO') lineas.push(E(0x1F504) + ' Cambio: ' + capitalizar(campo('RAZON_CAMBIO')));
-
-  if (esSi(campo('INTERCONSULTA'))) lineas.push(E(0x1F9EA) + ' Interconsulta a Infectología: Sí');
-  else lineas.push(adv + ' Sin interconsulta a Infectología');
 
   if (esSi(campo('AJUSTE_RENAL')) || esSi(campo('FALLA_HEPATICA'))) {
     var extras = [];
@@ -1253,10 +1371,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, opciones) {
     var avisoDosis = avisoDosisEspecifico(am, pesoKg, esquemas);
     if (avisoDosis) lineas.push('   ' + adv + ' ' + avisoDosis);
   });
-  // sin restringidos, todos los antimicrobianos de la solicitud son los que se revisan: van con 💊
-  var iconoAcompanante = coincidencias.length ? E(0x2795) : E(0x1F48A);
   acompanantes.forEach(function(am) {
-    lineas.push(iconoAcompanante + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias, fechaSolicitud));
+    lineas.push(E(0x2795) + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias, fechaSolicitud));
   });
   seguimientoPaciente(e).lineas.forEach(function(l) { lineas.push(l); });
 
@@ -1440,7 +1556,7 @@ function eventoPruebaSinRestringidos() {
 // No envia nada ni escribe en ninguna pestana.
 function probarUltimaSolicitud(filaOpcional) { probarSolicitud_(filaOpcional, false); }
 
-// Igual, pero busca la ultima solicitud con mas de CONFIG.PROLONGADO_DIAS de tratamiento continuo
+// Igual, pero busca la ultima solicitud que genera revision por tratamiento prolongado
 // (hasta 100 filas: cada una consulta la historia del paciente). No envia nada.
 function probarUltimoProlongado() { probarSolicitud_(null, true); }
 
@@ -1467,15 +1583,20 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
     }
     if (!e) {
       Logger.log('Ninguna de las ultimas %s solicitudes %s.', n,
-        buscarProlongado ? 'supera ' + CONFIG.PROLONGADO_DIAS + ' d de tratamiento continuo' : 'dispara alerta');
+        buscarProlongado ? 'genera revisión por tratamiento prolongado' : 'dispara alerta');
       return;
     }
   }
   var coincidencias = filtrarAntimicrobianosRestringidos(e);
-  var prolongado = tratamientoProlongado(e);
-  Logger.log('Fila %s · restringidos: %s · dispara alerta: %s · tratamiento continuo: %s\n\n%s', fila, coincidencias.length,
-    debeAlertar(coincidencias), prolongado ? prolongado.dias + ' d' : 'no supera ' + CONFIG.PROLONGADO_DIAS + ' d',
-    (coincidencias.length || prolongado) ? construirMensajeDesdeEvento(e, coincidencias) : '(sin restringido ni tratamiento prolongado: no genera mensaje)');
+  var revision = revisionProlongado(e, coincidencias);
+  var mensajes = [];
+  if (debeAlertar(coincidencias)) mensajes.push(construirMensajeDesdeEvento(e, coincidencias));
+  if (revision) mensajes.push(revision.mensaje);
+  var p = tratamientoProlongado(e);
+  Logger.log('Fila %s · restringidos: %s · dispara alerta: %s · tratamiento prolongado: %s\n\n%s', fila, coincidencias.length,
+    debeAlertar(coincidencias), p ? 'sí (' + p.solicitudes + ' solicitudes seguidas, ' + p.dias + ' d)' :
+      'no (necesita ' + CONFIG.PROLONGADO_MIN_SOLICITUDES + ' solicitudes seguidas y más de ' + CONFIG.PROLONGADO_DIAS + ' d)',
+    mensajes.length ? mensajes.join('\n\n----- mensaje aparte -----\n\n') : '(no genera mensaje)');
 }
 
 function testCruceCIE10() {

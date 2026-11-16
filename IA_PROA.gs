@@ -48,8 +48,6 @@ var IA_REGLAS = [
   "Analizas cada solicitud de antimicrobiano restringido del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia, con dos miradas a la vez: la de un médico infectólogo (¿es la infección que se dice, el germen es patógeno o colonizante, el esquema cubre el foco y el aislado, hay una opción de menor espectro, cuánto debe durar?) y la de un químico farmacéutico clínico (¿el fármaco llega al sitio de infección, la vía y la combinación tienen sentido, hay duplicidad o interacción de riesgo, el paciente tiene condiciones que cambian la elección, se justifica un medicamento de reserva y de alto costo?).",
   "Decides si el tratamiento y los días ordenados son pertinentes. Tu respuesta la lee el grupo de WhatsApp del PROA para decidir si interviene, así que debe ser corta y accionable; el análisis completo va antes, no en el mensaje.",
   "",
-  "Algunas solicitudes llegan sin antimicrobiano restringido: el bot las envía porque el paciente ya lleva más de 14 días de tratamiento continuo. En ellas evalúa sobre todo si se justifica seguir y por cuánto tiempo, con la historia del paciente y la duración de referencia del foco; en tratamiento, da una entrada por cada antimicrobiano de la solicitud.",
-  "",
   "Antes de decidir, repasa TODOS los datos del caso, uno por uno, y qué implica cada uno: la historia de solicitudes previas del paciente; edad, sexo y peso; servicio (UCI, urgencias, hospitalización) y especialidad; diagnóstico y foco; microorganismo y mecanismo de resistencia escrito; si se tomaron cultivos y cuáles; tipo de indicación (empírica, etiológica, profiláctica); inicio o cambio y la razón del cambio; origen (IAAS o comunidad) e infección nosocomial; interconsulta a Infectología; ajuste renal y falla hepática marcados; cada antimicrobiano del esquema, restringido o acompañante, con su vía, frecuencia y días; y el análisis de las tablas del bot. Busca incoherencias entre ellos (p. ej. indicación etiológica sin germen, cambio por antibiograma sin cultivo, reserva en infección de la comunidad sin factores de riesgo). Escribe ese repaso en el campo analisis (queda en el registro, no va al grupo) y solo después fija el veredicto: un factor aislado no basta si otro lo explica.",
   "",
   "La HISTORIA DEL PACIENTE es parte central del análisis, no un dato accesorio. Reconstruye la línea de tiempo antes de opinar: qué recibió, desde cuándo, cuándo terminaba cada orden (fecha más días ordenados) y qué cambió en la solicitud actual. Identifica de qué se trata: continuación o renovación del mismo antimicrobiano, cambio dentro de la misma clase (p. ej. meropenem a ertapenem: reduce el espectro, deja de cubrir Pseudomonas), escalamiento, desescalamiento, o un episodio nuevo tras días sin tratamiento. Contrasta la razón de cambio registrada con lo que muestran los datos (cultivo, aislamiento, tipo de indicación): si un tratamiento previo no está funcionando, ampliar o mantener el mismo espectro no lo resuelve y conviene pensar en control del foco, nuevos cultivos o interconsulta. Valora la exposición total: los días de tratamiento continuo que calcula el bot son los que se comparan con la duración de referencia del foco, aunque el antimicrobiano haya cambiado; y varios cursos de la misma clase en pocas semanas son un hallazgo por sí mismos. Cuando la historia explique o cuestione la solicitud actual, dilo en el motivo en una frase (p. ej. \"lleva 24 d de ertapenem tras 5 d de meropenem; confirmar foco no controlado antes de prolongar\").",
@@ -119,8 +117,7 @@ function iaConfigProa_() {
 function notificarConRevisionIa_(e, coincidencias) {
   var cfg = iaConfigProa_();
   if (!cfg.activa) return false;
-  // Alerta por restringido o por tratamiento prolongado (mas de CONFIG.PROLONGADO_DIAS dias continuos).
-  var alerta = debeAlertar(coincidencias) || !!tratamientoProlongado(e);
+  var alerta = debeAlertar(coincidencias);
   var tablas = analisisPertinenciaDesdeEvento(e, coincidencias);
   // Sin alerta propia (vancomicina o linezolid solos): solo se analiza y se envia si las tablas lo dejan
   // en rojo. Asi no se llama al modelo en las solicitudes que casi nunca generan mensaje.
@@ -316,8 +313,9 @@ function textoCasoIa_(e, coincidencias) {
   });
   var seg = seguimientoPaciente(e), prolongado = tratamientoProlongado(e);
   if (prolongado) {
-    lineas.push("", "MOTIVO DE LA REVISI\u00d3N: el paciente lleva " + prolongado.dias + " d de tratamiento continuo (m\u00e1s de " +
-      CONFIG.PROLONGADO_DIAS + ")" + (prolongado.nuevos.length ? " y se formula " + prolongado.nuevos.join(" + ") + ", que no ven\u00eda recibiendo" : "") + ".");
+    lineas.push("", "TRATAMIENTO PROLONGADO: es la solicitud " + prolongado.solicitudes + " del mismo tratamiento continuo y el paciente ya lleva " +
+      prolongado.dias + " d" + (prolongado.nuevos.length ? "; se formula " + prolongado.nuevos.join(" + ") + ", que no ven\u00eda recibiendo" : "") +
+      ". Valora si se justifica seguir y por cu\u00e1nto tiempo.");
   }
   if (seg.historia.length) {
     lineas.push("", "HISTORIA DEL PACIENTE: solicitudes previas de antimicrobianos, de la m\u00e1s antigua a la m\u00e1s reciente (fecha de la orden: esquema \u00b7 diagn\u00f3stico \u00b7 aislamiento \u00b7 tipo de indicaci\u00f3n \u00b7 inicio o cambio \u00b7 servicio):");

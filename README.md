@@ -40,7 +40,7 @@ Paso a paso:
 1. **Llega una solicitud.** Al enviarse el formulario, Google agrega una fila a la hoja y dispara el activador "Al enviar el formulario", que llama a `notificarNuevaRespuesta(e)`.
 2. **Se carga la lista de restringidos** desde la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` de la misma hoja (columna A, desde la fila 2). Si esa pestaña no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO`, para que las alertas nunca dejen de funcionar por eso.
 3. **Se revisan los 3 antimicrobianos de la solicitud.** El formulario guarda el nombre con un código interno (`ERTAPENEM - UT-19973898-1`). `nombreLimpio()` quita todo desde ` - UT-`, se pasa a mayúsculas y se marca como restringido si el nombre **contiene** alguno de la lista. Por eso `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`, y `ANFOTERICINA` cubre la convencional y la liposomal.
-4. **Si ninguno es restringido, termina** sin enviar nada. Es lo más común: la mayoría de solicitudes son de cefepime, piperacilina/tazobactam, meropenem, etc. **Excepción (v1.18.0): tratamiento prolongado.** Si el paciente ya lleva **más de 14 días de antimicrobiano continuo** (sumando los cambios entre fármacos, `seguimientoPaciente()`) y se formula una orden nueva, se envía `*⏳ REVISIÓN PROA · Tratamiento prolongado*` aunque no haya restringido, con la línea `⏳ Lleva N d de antibiótico continuo y se formula X; con esta orden, M d`. Con restringido, el caso sigue siendo `CASO PROA` y suma esa línea.
+4. **Si ninguno es restringido, termina** sin enviar nada. Es lo más común: la mayoría de solicitudes son de cefepime, piperacilina/tazobactam, meropenem, etc. **Mensaje aparte (v1.19.0): tratamiento prolongado.** Si la solicitud es la **3.ª o más del mismo tratamiento continuo** y el paciente ya lleva **más de 10 días** (sumando los cambios entre fármacos, `seguimientoPaciente()`), se envía además `*⏳ REVISIÓN PROA · Tratamiento prolongado*`, tenga o no restringido, con cada solicitud y sus fechas, el total frente a la duración de referencia y una sugerencia. Sin modelo; una por paciente y día.
 5. **Si hay al menos uno, arma el mensaje.** Además de historia clínica, edad y servicio, incluye lo que PROA interviene: peso y **mg/kg por dosis**, cama, indicación (empírico/etiológico/profiláctico), cultivos, origen (IAAS/comunidad), si fue un cambio de antimicrobiano y por qué, ajuste renal con depuración de creatinina, y un aviso cuando **no se pidió interconsulta a Infectología**. El diagnóstico se busca en la pestaña `CIE10` por su código (`G06.0` → `G060 - ABSCESO…`; `J40` → `J40X`); si no lo encuentra, deja lo que escribió el médico. Cada antimicrobiano restringido va con dosis, vía, frecuencia, días y **fecha fin prevista**; si la dosis queda fuera del rango de referencia de la pestaña `RANGOS_DOSIS`, se agrega `⚠️ … revisar`. Los antimicrobianos **no** restringidos de la misma solicitud salen como "Acompañante", para ver la combinación completa.
 6. **WhatsApp.** `enviarAlertaWhatsApp()` pone la firma en negrita arriba (`Bot PROA Antimicrobianos HDV` o lo que diga `GREENAPI_BOT_LABEL`) y el pie en cursiva abajo, y hace un `POST` a `sendMessage` de Green-API. Si Green-API responde con error o no hay conexión, lo deja en el registro sin detener la ejecución.
 
@@ -133,7 +133,7 @@ La pestaña **`RANGOS_DOSIS`** de la matriz tiene una fila por antimicrobiano co
 | `HOJA_RANGOS_DOSIS` / `RANGOS_DOSIS_RESPALDO` | Pestaña y tabla de respaldo de rangos de dosis |
 | `HOJA_RESPUESTAS` | `Respuestas de formulario 1` (solo la usa `verificarEncabezados()`) |
 | `CAMPOS` / `SLOTS` | Títulos exactos de las preguntas del formulario |
-| `PROLONGADO_ACTIVO` / `PROLONGADO_DIAS` | Revisión por tratamiento prolongado: `true` / `14` (días continuos ya recibidos para revisar la orden nueva) |
+| `PROLONGADO_ACTIVO` / `PROLONGADO_DIAS` / `PROLONGADO_MIN_SOLICITUDES` | Revisión por tratamiento prolongado (mensaje aparte): `true` / `10` (más de 10 días ya recibidos) / `3` (3.ª solicitud o más del tratamiento continuo, contando la actual) |
 | `PROLONGADO_SOLO_CAMBIO` | `false`: revisa toda orden nueva (cambio o renovación); `true`: solo cuando se formula un antimicrobiano que el paciente no venía recibiendo |
 
 ### Propiedades del script
@@ -158,7 +158,7 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 
 | Función | ¿Envía algo? | Uso |
 |---|---|---|
-| `notificarNuevaRespuesta(e)` | Sí, si hay restringido o tratamiento prolongado | La llama el activador |
+| `notificarNuevaRespuesta(e)` | Sí, si hay restringido y, aparte, si hay tratamiento prolongado | La llama el activador |
 | `obtenerAntimicrobianosRestringidos()` | **No** | Lee la pestaña de restringidos (o el respaldo) |
 | `obtenerRangosDosis()`, `evaluarDosis()` | **No** | Lee la pestaña `RANGOS_DOSIS` (o el respaldo) y evalúa cada dosis |
 | `crearHojaRangosDosis()` | No (escribe en la hoja) | Crea la pestaña `RANGOS_DOSIS` con la propuesta inicial; no la toca si ya existe |
@@ -168,8 +168,9 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 | `advertenciasCoherencia()`, `sugerenciaPROA()` | **No** | Avisos de digitación y sugerencia de revaluación a las 48-72 h |
 | `filtrarAntimicrobianosRestringidos(e)`, `debeAlertar()`, `acompanantesNoRestringidos(e)` | **No** | Separan los antimicrobianos de la solicitud y deciden si la alerta se envía (algún restringido con `dispara_alerta` ≠ NO) |
 | `construirMensajeDesdeEvento(e)` | **No** | Arma el texto del mensaje |
-| `tratamientoProlongado(e)` | **No** | Días de antimicrobiano continuo ya recibidos si superan `PROLONGADO_DIAS` (14) |
-| `probarUltimaSolicitud(fila)`, `probarUltimoProlongado()` | **No** | Escriben en el registro de ejecución el mensaje de una fila real (o de la última que alerta / la última con más de 14 d continuos) |
+| `tratamientoProlongado(e)`, `revisionProlongado(e)` | **No** | Detectan la revisión por tratamiento prolongado (≥ 3 solicitudes seguidas y > 10 d) y arman su mensaje |
+| `notificarTratamientoProlongado(e)` | Sí, si aplica | La llama `notificarNuevaRespuesta(e)` después del caso PROA |
+| `probarUltimaSolicitud(fila)`, `probarUltimoProlongado()` | **No** | Escriben en el registro de ejecución los mensajes de una fila real (o de la última que alerta / la última con revisión por tratamiento prolongado) |
 | `formatearDiagnosticoCIE10()`, `buscarDescripcionCIE10()` | **No** | Cruce del diagnóstico con la pestaña `CIE10` (TextFinder + caché) |
 | `verificarEncabezados()` | **No** | Comprueba que todas las preguntas usadas existan en la fila 1 de la hoja |
 | `enviarAlertaWhatsApp(mensaje)` | Sí | Envío a Green-API con firma y pie |

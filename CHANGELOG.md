@@ -2,6 +2,18 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.19.0] - 2026-11-16
+
+### Cambiado (criterio del referente para la revisión por tratamiento prolongado)
+- **Criterio nuevo:** la revisión sale cuando la solicitud es **la 3.ª o más del mismo tratamiento continuo** (contando esta; dos órdenes el mismo día cuentan como una) **y el paciente ya lleva más de 10 días**. Antes bastaba con más de 14 días. `CONFIG.PROLONGADO_MIN_SOLICITUDES` (3) y `PROLONGADO_DIAS` (10).
+- **Mensaje aparte:** `*⏳ REVISIÓN PROA · Tratamiento prolongado*` ya no se mezcla con el caso PROA. Si la solicitud tiene restringido salen dos mensajes: primero `🚨 CASO PROA` (sin la línea ⏳) y después la revisión. Sin restringido, solo la revisión.
+- La revisión lista **cada solicitud del tratamiento con sus fechas y días** (`1. PIPERACILINA / TAZOBACTAM · 16/10-24/10 · 8 d`, …, `3. CEFEPIME 2000 mg IV c/8 h · 01/11-08/11 · 7 d (esta orden)`), compara el total con la referencia del foco (misma regla de colores que el caso PROA: amarillo si la supera, rojo si la duplica; sin referencia, 🟡 verificar) y cierra con `💡 Sugerencia PROA: confirmar con el médico tratante el motivo para continuar (foco, cultivos, respuesta clínica) y la fecha de suspensión`.
+- La revisión **no llama al modelo** (son datos de la matriz y de la tabla de duración): sale al instante y sin costo. El caso PROA sigue con el análisis de IA, que recibe como contexto que es un tratamiento prolongado.
+- **Una revisión por paciente y día:** si el paciente ya tuvo otra orden del mismo tratamiento ese día, no se repite.
+- `REGISTRO_REVISIONES`: la revisión queda en su propia fila con `Fuente del análisis` = `TRATAMIENTO PROLONGADO`, su semáforo y el listado de solicitudes en `Detalle`.
+- Estimación con la matriz real (01/11–15/11): 24 revisiones de 359 solicitudes (17 pacientes, unas 1-2 al día); 21 sin restringido y 3 junto a un caso PROA; 12 en amarillo y 12 en rojo.
+- `probarUltimoProlongado()` y `probarUltimaSolicitud(fila)` muestran los dos mensajes cuando aplican, sin enviar nada.
+
 ## [1.18.0] - 2026-11-16
 
 ### Agregado (petición del referente: revisar pacientes con más de 14 días de tratamiento cuando se formula un medicamento nuevo)
