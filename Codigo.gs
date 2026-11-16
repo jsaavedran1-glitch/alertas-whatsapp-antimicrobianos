@@ -68,6 +68,10 @@ var CONFIG = {
   PROLONGADO_DIAS: 10,
   PROLONGADO_MIN_SOLICITUDES: 3,
   PROLONGADO_SOLO_CAMBIO: false,
+  // Antimicrobianos que no generan revision de duracion por si solos (decision del referente, 2026-11-16):
+  // una orden solo de vancomicina o linezolid no la genera; con otro antibiotico, sale por el otro. Sus dias
+  // se siguen contando en el tratamiento continuo. Para volver a incluirlos, quitarlos de esta lista.
+  PROLONGADO_EXCLUIDOS: ['VANCOMICINA', 'LINEZOLID'],
   // Contra el spam (decision del referente, 2026-11-16): sin verdes, un paciente como maximo cada 7 dias y
   // todo en un resumen diario a las 7:00 (activador de crearTriggerResumenProlongados).
   PROLONGADO_ENVIAR_VERDES: false,
@@ -1298,7 +1302,8 @@ function tratamientoProlongado(e) {
   if (!CONFIG.PROLONGADO_ACTIVO || !e) return null;
   if (e._prolongado !== undefined) return e._prolongado;
   var seg = seguimientoPaciente(e), historia = seg.historia.join(' \n '), mejor = null;
-  var slots = leerSlots(e);
+  // los de CONFIG.PROLONGADO_EXCLUIDOS no generan la revision (sus dias si cuentan en la historia)
+  var slots = leerSlots(e).filter(function(am) { return !excluidoDeRevision(am.nombre); });
   slots.forEach(function(am) {
     var c = seg.porAm[am.nombre];
     if (c && c.transcurridos > CONFIG.PROLONGADO_DIAS && c.solicitudes >= (CONFIG.PROLONGADO_MIN_SOLICITUDES || 1) &&
@@ -1313,6 +1318,11 @@ function tratamientoProlongado(e) {
   }
   e._prolongado = mejor;
   return mejor;
+}
+
+function excluidoDeRevision(nombre) {
+  var n = normalizarTexto(nombre);
+  return (CONFIG.PROLONGADO_EXCLUIDOS || []).some(function(x) { return n.indexOf(normalizarTexto(x)) > -1; });
 }
 
 // Revision por tratamiento prolongado de una solicitud: { hc, nivel, bloque, mensaje } o null.

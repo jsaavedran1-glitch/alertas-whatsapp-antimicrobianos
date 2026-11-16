@@ -140,6 +140,7 @@ La pestaña **`RANGOS_DOSIS`** de la matriz tiene una fila por antimicrobiano co
 | `PROLONGADO_ACTIVO` / `PROLONGADO_DIAS` / `PROLONGADO_MIN_SOLICITUDES` | Revisión por tratamiento prolongado (mensaje aparte): `true` / `10` (más de 10 días ya recibidos) / `3` (3.ª solicitud o más del tratamiento continuo, contando la actual) |
 | `PROLONGADO_ENVIAR_VERDES` / `PROLONGADO_REPETIR_DIAS` | `false` (no se envían las que están dentro de la referencia) / `7` (un paciente como máximo cada 7 días) |
 | `PROLONGADO_RESUMEN_DIARIO` / `PROLONGADO_RESUMEN_HORA` | `true` (un resumen al día) / `7` (hora de Colombia del activador de `crearTriggerResumenProlongados()`) |
+| `PROLONGADO_EXCLUIDOS` | `['VANCOMICINA', 'LINEZOLID']`: no generan la revisión de duración por sí solos (sus días sí cuentan) |
 | `PROLONGADO_SOLO_CAMBIO` | `false`: revisa toda orden nueva (cambio o renovación); `true`: solo cuando se formula un antimicrobiano que el paciente no venía recibiendo |
 
 ### Propiedades del script

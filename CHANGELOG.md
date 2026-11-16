@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.30.0] - 2026-11-16
+
+### Cambiado (decisión del referente)
+- **Vancomicina y linezolid ya no generan la revisión de duración por sí solos** (`CONFIG.PROLONGADO_EXCLUIDOS`, `excluidoDeRevision()`). Si la orden trae otro antibiótico, la revisión sale por ese otro y la orden muestra los dos. Sus días se siguen contando en el tratamiento continuo y en la línea por antimicrobiano. Para volver a incluirlos, se quitan de la lista.
+- Con la matriz real (01/11–15/11): 12 revisiones en lugar de 17.
+
 ## [1.29.4] - 2026-11-16
 
 ### Cambiado (rendimiento, tercera parte: la prueba de la fila 7603 seguía en 48 s)

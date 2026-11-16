@@ -736,6 +736,28 @@ prueba('restringido: caso PROA solo si supera 14 d con esta orden; sin listado: 
   } finally { CONFIG.CASO_DIAS_MINIMOS = 14; global.PropertiesService = propsReal; }
 });
 
+prueba('revision de duracion: vancomicina y linezolid solos no la generan, pero sus dias cuentan', function () {
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  filas.push(filaMatriz('16/10/2026 08:00:00', '888030', [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]));
+  filas.push(filaMatriz('23/10/2026 08:00:00', '888030', [['MEROPENEM', '1000', '8', '7']]));
+  // solo vancomicina: no hay revision
+  var ev = eventoSeguimiento('01/11/2026 10:00:00', '888030', 'J189', [['VANCOMICINA', '1000', '12', '7']]);
+  assert.strictEqual(tratamientoProlongado(ev), null); assert.strictEqual(revisionProlongado(ev, filtrarAntimicrobianosRestringidos(ev)), null);
+  assert.strictEqual(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888030', 'J189', [['LINEZOLID', '600', '12', '7']])), null);
+  // vancomicina con cefepime: sale por el cefepime y la orden muestra los dos
+  var ec = eventoSeguimiento('01/11/2026 10:00:00', '888030', 'J189', [['VANCOMICINA', '1000', '12', '7'], ['CEFEPIME', '2000', '8', '7']]);
+  var r = revisionProlongado(ec, filtrarAntimicrobianosRestringidos(ec));
+  assert.ok(r); incluye(r.mensaje, '3. VANCOMICINA 1000 mg IV c/12 h + CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026');
+  // la vancomicina previa sigue contando en el tratamiento continuo
+  filas.push(filaMatriz('01/11/2026 10:00:00', '888030', [['VANCOMICINA', '1000', '12', '7']]));
+  var p2 = tratamientoProlongado(eventoSeguimiento('08/11/2026 10:00:00', '888030', 'J189', [['CEFEPIME', '2000', '8', '7']]));
+  assert.strictEqual(p2.dias, 23); assert.strictEqual(p2.solicitudes, 4);
+  // sin exclusiones, la vancomicina sola vuelve a generar la revision
+  var antes = CONFIG.PROLONGADO_EXCLUIDOS; CONFIG.PROLONGADO_EXCLUIDOS = [];
+  try { assert.ok(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888030', 'J189', [['VANCOMICINA', '1000', '12', '7']]))); }
+  finally { CONFIG.PROLONGADO_EXCLUIDOS = antes; }
+});
+
 prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, sin analisis ni modelo', function () {
   CONFIG.CASO_ANALISIS = CASO_ANALISIS_PRODUCCION;
   assert.strictEqual(CONFIG.CASO_ANALISIS, false);
