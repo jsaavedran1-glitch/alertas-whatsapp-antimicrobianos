@@ -868,6 +868,27 @@ prueba('cache de la ejecucion: cada pestana de configuracion se lee una sola vez
   } finally { SpreadsheetApp.openById = realOpen; }
 });
 
+prueba('crearTriggerFormSubmit deja un solo activador del formulario', function () {
+  var activadores = [
+    { f: 'notificarNuevaRespuesta' }, { f: 'notificarNuevaRespuesta' }, { f: 'otraFuncion' }
+  ].map(function (x) { return { getHandlerFunction: function () { return x.f; } }; });
+  var creados = [], real = global.ScriptApp;
+  global.ScriptApp = {
+    getProjectTriggers: function () { return activadores.slice(); },
+    deleteTrigger: function (t) { activadores.splice(activadores.indexOf(t), 1); },
+    newTrigger: function (f) {
+      var b = { forSpreadsheet: function () { return b; }, onFormSubmit: function () { return b; },
+        create: function () { var t = { getHandlerFunction: function () { return f; } }; activadores.push(t); creados.push(f); return t; } };
+      return b;
+    }
+  };
+  try {
+    crearTriggerFormSubmit();
+    assert.deepStrictEqual(activadores.map(function (t) { return t.getHandlerFunction(); }).sort(), ['notificarNuevaRespuesta', 'otraFuncion']);
+    assert.deepStrictEqual(creados, ['notificarNuevaRespuesta']);
+  } finally { global.ScriptApp = real; }
+});
+
 prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {
   assert.ok(src.indexOf("getProperty('GREENAPI_API_TOKEN')") > -1);
   assert.ok(!/https:\/\/\d+\.api\.greenapi\.com/.test(src));

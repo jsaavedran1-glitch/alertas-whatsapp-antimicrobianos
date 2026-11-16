@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.31.1] - 2026-11-16
+
+### Corregido
+- `crearTriggerFormSubmit()` borra primero los activadores de `notificarNuevaRespuesta` que ya existan en el proyecto y deja uno solo. En el proyecto en vivo había dos (uno sin ejecuciones): con dos activadores, cada formulario se procesa dos veces y el caso PROA llega duplicado.
+
 ## [1.31.0] - 2026-11-16
 
 ### Cambiado (decisión del referente)

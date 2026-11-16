@@ -1740,12 +1740,18 @@ function listarChatsGreenAPI() {
   });
 }
 
+// Crea el activador del formulario. Antes borra los que ya existan para notificarNuevaRespuesta en este proyecto:
+// con dos activadores cada formulario se procesa dos veces y el caso PROA llega duplicado (paso el 2026-11-16).
 function crearTriggerFormSubmit() {
-  var hoja = libroProa();
+  var borrados = 0;
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'notificarNuevaRespuesta') { ScriptApp.deleteTrigger(t); borrados++; }
+  });
   ScriptApp.newTrigger('notificarNuevaRespuesta')
-    .forSpreadsheet(hoja)
+    .forSpreadsheet(libroProa())
     .onFormSubmit()
     .create();
+  Logger.log('Activador del formulario creado' + (borrados ? ' (se borraron ' + borrados + ' que ya existían)' : '') + '.');
 }
 
 /* =====================================================================
