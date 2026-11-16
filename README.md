@@ -78,7 +78,7 @@ Desde la v1.23.0 el caso PROA va **solo con datos** (`CONFIG.CASO_ANALISIS = fal
 | 💊 Antimicrobiano restringido | `Nombre Antimicrobiano 1/2/3` con dosis (+ mg/kg), vía, frecuencia, días y fecha fin (hoy + días) |
 | ⚠️ Dosis fuera del rango (solo si aplica) | Pestaña `RANGOS_DOSIS` |
 | ➕ Acompañante | Los antimicrobianos de la solicitud que no son restringidos |
-| 📏 Duración de referencia / ⚠️ Superan la referencia / ⚠️ Espectro (solo si aplica) | Pertinencia: duración por síndrome (pestaña `PERTINENCIA_DURACION`, por CIE10 o palabra clave), profilaxis > 24 h, reglas de espectro (`CONFIG.REGLAS_ESPECTRO`) e indicación etiológica sin aislamiento. Detalle y fuentes en `docs/pertinencia.md` |
+| 📏 Duración de referencia / ⚠️ Superan la referencia / ⚠️ Espectro (solo con `CASO_ANALISIS = true`; apagado desde la v1.23.0) | Pertinencia: duración por síndrome (pestaña `PERTINENCIA_DURACION`, por CIE10 o palabra clave), profilaxis > 24 h, reglas de espectro (`CONFIG.REGLAS_ESPECTRO`) e indicación etiológica sin aislamiento. Detalle y fuentes en `docs/pertinencia.md` |
 | ⚠️ Verificar peso / dosis (solo si aplica) | Incoherencias de digitación: peso fuera de 0,4–250 kg, peso < 20 kg con ≥ 12 años o < 30 kg con ≥ 18 años, > 20 kg con menos de 12 meses, o más de 100 mg/kg por dosis |
 | 💡 Sugerencia PROA (solo si aplica) | Terapia empírica con un restringido más un acompañante de amplio espectro (`AMPLIO_ESPECTRO`: meropenem, imipenem, cefepime, piperacilina/tazobactam, ceftazidima, ceftriaxona): "Revaluar a las 48-72 h con el resultado de cultivos para desescalar" (intervención *time-out*, guía OPS/OMS 2024). `SUGERENCIA_EMPIRICO_SOLO = true` la extiende a toda terapia empírica |
 
