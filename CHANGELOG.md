@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.14.1] - 2026-11-16
+
+### Cambiado
+- Los días de tratamiento continuo se muestran desglosados por antimicrobiano (`36 d de tratamiento continuo: MEROPENEM 5 d + ERTAPENEM 24 d + esta orden 7 d`), para que no se lea que todos fueron del antimicrobiano actual.
+
 ## [1.14.0] - 2026-11-16
 
 ### Corregido (caso real del 2026-11-15: ertapenem por 7 d tras 24 d de ertapenem y 5 d de meropenem, que salió como "se sugiere verificar")

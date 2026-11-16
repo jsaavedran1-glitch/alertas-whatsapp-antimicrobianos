@@ -798,7 +798,10 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   var sinValorar = function(am, n) { dias.push(neutro + ' ' + am.nombre + ' ' + formatoNumero(n, 0) + ' d: ' + TEXTO_DIAS_SIN_VALORAR); };
   // Con seguimiento (am.diasAcumulados), la duracion que se compara es la del curso completo.
   var etiquetaDias = function(am, n) {
-    return am.nombre + ' ' + formatoNumero(n, 0) + ' d' + (am.diasAcumulados > n ? ' (' + formatoNumero(am.diasAcumulados, 0) + ' d de tratamiento continuo desde ' + am.inicioCurso + ')' : '');
+    if (!(am.diasAcumulados > n)) return am.nombre + ' ' + formatoNumero(n, 0) + ' d';
+    // desglose por antimicrobiano, para que no se lea que todos los dias fueron del actual
+    return am.nombre + ' ' + formatoNumero(n, 0) + ' d (' + formatoNumero(am.diasAcumulados, 0) + ' d de tratamiento continuo: ' +
+      (am.desgloseCurso ? am.desgloseCurso + ' + ' : '') + 'esta orden ' + formatoNumero(n, 0) + ' d)';
   };
   var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
 
@@ -954,12 +957,32 @@ function seguimientoPaciente(e) {
       var inicioEpisodio = inicioContinuo(previasTipo);
       var transcurridosEpisodio = diasDesde(inicioEpisodio);
       var maxDias = 0, inicioMismoMasAntiguo = ahora.getTime();
+      // Desglose del tratamiento continuo: dias con cada esquema, en orden ("MEROPENEM 5 d + ERTAPENEM 24 d").
+      var tramos = [];
+      if (transcurridosEpisodio >= 1) {
+        var porFecha = {};
+        previasTipo.filter(function(p) { return p.fecha.getTime() >= inicioEpisodio; }).forEach(function(p) {
+          var k = p.fecha.getTime();
+          if (!porFecha[k]) porFecha[k] = [];
+          if (porFecha[k].indexOf(p.nombre) === -1) porFecha[k].push(p.nombre);
+        });
+        Object.keys(porFecha).map(Number).sort(function(a, b) { return a - b; }).forEach(function(k) {
+          var esquema = porFecha[k].sort().join(' + ');
+          if (!tramos.length || tramos[tramos.length - 1].esquema !== esquema) tramos.push({ esquema: esquema, inicio: k });
+        });
+        var suma = 0;
+        tramos.forEach(function(tr, i) {
+          tr.dias = (i < tramos.length - 1) ? Math.round((tramos[i + 1].inicio - tr.inicio) / dia) : Math.max(transcurridosEpisodio - suma, 0);
+          suma += tr.dias;
+        });
+      }
+      var desglose = tramos.map(function(tr) { return tr.esquema + ' ' + formatoNumero(tr.dias, 0) + ' d'; }).join(' + ');
       delTipo.forEach(function(am) {
         var n = numeroONulo(am.dias);
         if (n !== null && n > maxDias) maxDias = n;
         var mismas = previas.filter(function(p) { return p.nombre === am.nombre; });
         res.porAm[am.nombre] = { inicio: fechaCorta(new Date(inicioEpisodio)), transcurridos: transcurridosEpisodio,
-          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0) };
+          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0), desglose: desglose };
         if (mismas.length === 0) return;
         var horas = (ahora.getTime() - mismas[0].fecha.getTime()) / 3600000;
         if (horas < 12) {
@@ -977,13 +1000,9 @@ function seguimientoPaciente(e) {
       });
       // Tratamiento continuo que empezo con otro antimicrobiano: se nombra la secuencia.
       if (transcurridosEpisodio >= 1 && inicioEpisodio < inicioMismoMasAntiguo) {
-        var secuencia = [];
-        previasTipo.filter(function(p) { return p.fecha.getTime() >= inicioEpisodio; })
-          .sort(function(a, b) { return a.fecha.getTime() - b.fecha.getTime(); })
-          .forEach(function(p) { if (secuencia.indexOf(p.nombre) === -1) secuencia.push(p.nombre); enEpisodio[p.nombre] = true; });
-        delTipo.forEach(function(am) { if (secuencia.indexOf(am.nombre) === -1) secuencia.push(am.nombre); });
+        previasTipo.forEach(function(p) { if (p.fecha.getTime() >= inicioEpisodio) enEpisodio[p.nombre] = true; });
         detalle.push('   Tratamiento ' + (antifungico ? 'antifúngico' : 'antibiótico') + ' continuo desde ' + fechaCorta(new Date(inicioEpisodio)) +
-          ' (' + secuencia.join(' → ') + '): ' + formatoNumero(transcurridosEpisodio, 0) + ' d' +
+          ': ' + tramos.map(function(tr) { return tr.esquema + ' ' + formatoNumero(tr.dias, 0) + ' d'; }).join(' → ') +
           (maxDias > 0 ? '; con esta orden completaría ' + formatoNumero(transcurridosEpisodio + maxDias, 0) + ' d' : ''));
       }
     });
@@ -1059,7 +1078,7 @@ function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var seg = seguimientoPaciente(e);
   esquemas.forEach(function(am) {
     var curso = seg.porAm[am.nombre];
-    if (curso && curso.transcurridos >= 1) { am.diasAcumulados = curso.proyectado; am.inicioCurso = curso.inicio; }
+    if (curso && curso.transcurridos >= 1) { am.diasAcumulados = curso.proyectado; am.inicioCurso = curso.inicio; am.desgloseCurso = curso.desglose; }
   });
   return analisisPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
     micro === '-' ? '' : micro, esquemas, { cultivos: campoDelEvento(valores, CAMPOS.CULTIVOS) });

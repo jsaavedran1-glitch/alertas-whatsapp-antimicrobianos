@@ -431,7 +431,7 @@ prueba('seguimiento: curso acumulado, solicitud repetida, otros previos y dias v
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(msg, '🔁 Seguimiento: 3 solicitudes previas');
   // 7 d ordenados estarian dentro de 5-7 d, pero el curso completo (20 d) supera el doble
-  incluye(msg, '🔴 ERTAPENEM 7 d (20 d de tratamiento continuo desde 01/11/2026): supera la referencia; se sugiere revaluar la duración');
+  incluye(msg, '🔴 ERTAPENEM 7 d (20 d de tratamiento continuo: ERTAPENEM + VANCOMICINA 7 d + ERTAPENEM 6 d + esta orden 7 d): supera la referencia; se sugiere revaluar la duración');
   incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), 'HISTORIA DEL PACIENTE: solicitudes previas');
   incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '- 08/11/2026: ERTAPENEM 1000 mg cada 24 h por 7 d');
   noIncluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '123456');
@@ -450,12 +450,12 @@ prueba('seguimiento: tratamiento continuo con cambio de antimicrobiano y renovac
   e.namedValues[CAMPOS.TIPO_INDICACION] = ['Tratamiento Etiológico (En presencia de aislamiento conocido)'];
   var seg = seguimientoPaciente(e), t = seg.lineas.join('\n');
   incluye(t, 'ERTAPENEM: en curso desde 22/10/2026 (24 d); con esta orden completaría 31 d');
-  incluye(t, 'Tratamiento antibiótico continuo desde 17/10/2026 (MEROPENEM → ERTAPENEM): 29 d; con esta orden completaría 36 d');
+  incluye(t, 'Tratamiento antibiótico continuo desde 17/10/2026: MEROPENEM 5 d → ERTAPENEM 24 d; con esta orden completaría 36 d');
   noIncluye(t, 'Otros antimicrobianos previos');
   assert.strictEqual(seg.historia.length, 2); incluye(seg.historia[0], '17/10/2026: MEROPENEM 1000 mg cada 8 h por 7 d');
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(msg, '🟢 ERTAPENEM: acorde con la referencia · el aislamiento registrado está dentro de su indicación');   // BLEE escrita en palabras
-  incluye(msg, '🔴 ERTAPENEM 7 d (36 d de tratamiento continuo desde 17/10/2026): supera la referencia; se sugiere revaluar la duración');
+  incluye(msg, '🔴 ERTAPENEM 7 d (36 d de tratamiento continuo: MEROPENEM 5 d + ERTAPENEM 24 d + esta orden 7 d): supera la referencia; se sugiere revaluar la duración');
   var caso = textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e));
   incluye(caso, '- 22/10/2026: ERTAPENEM 1000 mg cada 24 h por 21 d'); incluye(caso, 'Cálculo del bot sobre esa historia'); noIncluye(caso, '777001');
   // un curso antiguo, ya terminado hace mas de la tolerancia, no se suma
@@ -618,7 +618,7 @@ prueba('IA: la historia del paciente va al modelo y su interpretacion abre el me
     tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: '' }],
     dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'muy por encima de la referencia; confirmar foco no controlado antes de prolongar' }], datos_faltantes: [] }), function (llamadas) {
     var rev = revisarCasoConIa_(e, co, { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO });
-    incluye(llamadas[0].cuerpo.messages[0].content, 'Tratamiento antibiótico continuo desde 17/10/2026 (MEROPENEM → ERTAPENEM)');
+    incluye(llamadas[0].cuerpo.messages[0].content, 'Tratamiento antibiótico continuo desde 17/10/2026: MEROPENEM 5 d → ERTAPENEM 24 d');
     assert.strictEqual(mensajeRevision_(e, co, rev), ['🔎 *Revisión PROA · Ertapenem*',
       '🔴 *Se sugiere revaluar*',
       '🧭 Carbapenémico continuo desde el 17/10: meropenem 5 d y luego ertapenem 24 d; esta orden lo lleva a 36 d',
