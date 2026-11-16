@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.15.0] - 2026-11-16
+
+### Cambiado (mensaje más directo)
+- **Seguimiento en una línea:** `Antibiótico continuo desde 17/10: MEROPENEM 5 d → ERTAPENEM 24 d → esta orden 7 d = 36 d`.
+- **Líneas de pertinencia más cortas:** `ERTAPENEM: indicado para el aislamiento registrado`; `ERTAPENEM: 36 d continuos (...): supera la referencia; revaluar duración`. Sin repetir "se sugiere verificar/revaluar" en cada línea (queda en el título) y, cuando los días están en rojo, sin la nota de excepciones.
+
 ## [1.14.1] - 2026-11-16
 
 ### Cambiado

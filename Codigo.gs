@@ -757,26 +757,26 @@ function veredictoTratamiento(am, esquemas, sindrome, tipoIndicacion, microorgan
     if (r.micro && !(new RegExp(r.micro)).test(micro)) return;
     fallo = r.mensaje;
   });
-  if (fallo) return { nivel: 2, texto: ETIQUETA_NIVEL[2] + ' · ' + fallo };
+  if (fallo) return { nivel: 2, texto: fallo };
 
   var ind = null;
   CONFIG.INDICACIONES.forEach(function(i) { if (!ind && nombre.indexOf(i.am) > -1) ind = i; });
   if (!ind) return null;
-  if (tipoIndicacion === 'Profiláctico') return { nivel: 1, texto: ETIQUETA_NIVEL[1] + ' · antimicrobiano restringido usado en profilaxis; reservado para ' + ind.reserva };
-  if (ind.con && nombres.some(function(n) { return n.indexOf(ind.con) > -1; })) return { nivel: 0, texto: ETIQUETA_NIVEL[0] + ' · combinación dentro de su indicación (' + ind.reserva + ')' };
+  if (tipoIndicacion === 'Profiláctico') return { nivel: 1, texto: 'restringido usado en profilaxis; reservado para ' + ind.reserva };
+  if (ind.con && nombres.some(function(n) { return n.indexOf(ind.con) > -1; })) return { nivel: 0, texto: 'combinación indicada (' + ind.reserva + ')' };
   var cultivos = normalizarTexto(contexto && contexto.cultivos);
   if (esAntifungico(nombre) && /CANDIDA|LEVADURA/.test(micro) && /URO|ORINA/.test(cultivos) && !/HEMO|SANGRE/.test(cultivos)) {
-    return { nivel: 1, texto: ETIQUETA_NIVEL[1] + ' · Candida solo en urocultivo suele ser colonización y sin síntomas no se trata; convendría confirmar infección, tomar hemocultivos y retirar o cambiar la sonda' +
-      (nombre.indexOf('CASPOFUNGINA') > -1 ? '; las equinocandinas no alcanzan nivel terapéutico en orina' : '') + ' (IDSA 2016; CDC)' };
+    return { nivel: 1, texto: 'Candida solo en urocultivo suele ser colonización; confirmar infección, tomar hemocultivos y cambiar la sonda' +
+      (nombre.indexOf('CASPOFUNGINA') > -1 ? '; las equinocandinas no llegan a la orina' : '') + ' (IDSA 2016; CDC)' };
   }
   if (!sinAislamiento(microorganismo)) {
-    if ((new RegExp(ind.micro)).test(micro)) return { nivel: 0, texto: ETIQUETA_NIVEL[0] + ' · el aislamiento registrado está dentro de su indicación' };
-    return { nivel: 1, texto: ETIQUETA_NIVEL[1] + ' · el aislamiento registrado no está entre los que justifican su uso; reservado para ' + ind.reserva };
+    if ((new RegExp(ind.micro)).test(micro)) return { nivel: 0, texto: 'indicado para el aislamiento registrado' };
+    return { nivel: 1, texto: 'el aislamiento registrado no lo justifica; reservado para ' + ind.reserva };
   }
   if (sindrome && ind.sindromes.indexOf(sindrome.clave) > -1) {
-    return { nivel: 0, texto: ETIQUETA_NIVEL[0] + ' para el foco · sin aislamiento, se sugiere revaluar con cultivos' };
+    return { nivel: 0, texto: 'indicado para el foco; sin aislamiento, revaluar con cultivos' };
   }
-  return { nivel: 1, texto: ETIQUETA_NIVEL[1] + ' · sin aislamiento ni foco que lo sustente; reservado para ' + ind.reserva };
+  return { nivel: 1, texto: 'sin aislamiento ni foco que lo sustente; reservado para ' + ind.reserva };
 }
 
 // Lineas de pertinencia del mensaje: veredicto global, tratamiento y dias. esquemas: todos los
@@ -800,7 +800,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   var etiquetaDias = function(am, n) {
     if (!(am.diasAcumulados > n)) return am.nombre + ' ' + formatoNumero(n, 0) + ' d';
     // desglose por antimicrobiano, para que no se lea que todos los dias fueron del actual
-    return am.nombre + ' ' + formatoNumero(n, 0) + ' d (' + formatoNumero(am.diasAcumulados, 0) + ' d de tratamiento continuo: ' +
+    return am.nombre + ': ' + formatoNumero(am.diasAcumulados, 0) + ' d continuos (' +
       (am.desgloseCurso ? am.desgloseCurso + ' + ' : '') + 'esta orden ' + formatoNumero(n, 0) + ' d)';
   };
   var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
@@ -810,7 +810,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
     if (v) { marcar(tratamiento, v.nivel, am.nombre + ': ' + v.texto); if (v.nivel === 2) { espectroRojo = true; rojos.push(am.nombre); } }
   });
   if (tipoIndicacion === 'Etiológico' && sinAislamiento(microorganismo)) {
-    marcar(tratamiento, 1, 'Indicación etiológica sin microorganismo registrado: se sugiere verificar');
+    marcar(tratamiento, 1, 'Indicación etiológica sin microorganismo registrado');
   }
 
   var soloAntifungico = 0;
@@ -821,7 +821,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
     conDias.forEach(function(am) {
       var n = numeroONulo(am.dias);
       if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
-      if (n > 1) marcar(dias, 2, am.nombre + ' ' + formatoNumero(n, 0) + ' d: supera las 24 h de la profilaxis; se sugiere revaluar');
+      if (n > 1) marcar(dias, 2, am.nombre + ' ' + formatoNumero(n, 0) + ' d: supera las 24 h de la profilaxis; revaluar');
       else marcar(dias, 0, am.nombre + ' ' + formatoNumero(n, 0) + ' d: dentro de la referencia');
     });
   } else if (sindrome && sindrome.max !== null) {
@@ -838,7 +838,9 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
       var total = am.diasAcumulados > n ? am.diasAcumulados : n;
       if (total > sindrome.max) {
         // el doble de la referencia o mas: rojo
-        marcar(dias, total >= 2 * sindrome.max ? 2 : 1, etiquetaDias(am, n) + ': supera la referencia; se sugiere revaluar la duración' + (sindrome.nota ? ' · ' + sindrome.nota : ''));
+        var doble = total >= 2 * sindrome.max;
+        // en rojo, directo; en amarillo se agrega la nota con las excepciones que justifican extender
+        marcar(dias, doble ? 2 : 1, etiquetaDias(am, n) + ': supera la referencia; revaluar duración' + (!doble && sindrome.nota ? ' · ' + sindrome.nota : ''));
       } else {
         marcar(dias, 0, etiquetaDias(am, n) + ': dentro de la referencia');
       }
@@ -956,7 +958,7 @@ function seguimientoPaciente(e) {
       var previasTipo = previas.filter(function(p) { return esAntifungico(p.nombre) === antifungico; });
       var inicioEpisodio = inicioContinuo(previasTipo);
       var transcurridosEpisodio = diasDesde(inicioEpisodio);
-      var maxDias = 0, inicioMismoMasAntiguo = ahora.getTime();
+      var maxDias = 0;
       // Desglose del tratamiento continuo: dias con cada esquema, en orden ("MEROPENEM 5 d + ERTAPENEM 24 d").
       var tramos = [];
       if (transcurridosEpisodio >= 1) {
@@ -989,21 +991,16 @@ function seguimientoPaciente(e) {
           detalle.push('   ' + E(0x26A0) + E(0xFE0F) + ' ' + am.nombre + ': también solicitado hace ' + (horas < 1 ? 'menos de 1 h' : formatoNumero(Math.round(horas), 0) + ' h') +
             ' (' + (mismas[0].dosis || '-') + ' mg cada ' + (mismas[0].frecuencia || '-') + ' h' + (mismas[0].dias ? ', ' + formatoNumero(mismas[0].dias, 0) + ' d' : '') + '); posible solicitud repetida');
         }
-        var inicioMismo = inicioContinuo(mismas), transcurridos = diasDesde(inicioMismo);
-        if (inicioMismo < inicioMismoMasAntiguo) inicioMismoMasAntiguo = inicioMismo;
-        if (transcurridos >= 1) {
-          detalle.push('   ' + am.nombre + ': en curso desde ' + fechaCorta(new Date(inicioMismo)) + ' (' + formatoNumero(transcurridos, 0) + ' d)' +
-            ((n !== null && n > 0) ? '; con esta orden completaría ' + formatoNumero(transcurridos + n, 0) + ' d' : ''));
-        } else if (horas >= 12) {
+        if (transcurridosEpisodio < 1 && horas >= 12) {
           detalle.push('   ' + am.nombre + ': curso previo el ' + fechaCorta(mismas[0].fecha) + (mismas[0].dias ? ' (' + formatoNumero(mismas[0].dias, 0) + ' d)' : ''));
         }
       });
-      // Tratamiento continuo que empezo con otro antimicrobiano: se nombra la secuencia.
-      if (transcurridosEpisodio >= 1 && inicioEpisodio < inicioMismoMasAntiguo) {
+      // Una sola linea con el tratamiento continuo: tramos por antimicrobiano, esta orden y el total.
+      if (transcurridosEpisodio >= 1) {
         previasTipo.forEach(function(p) { if (p.fecha.getTime() >= inicioEpisodio) enEpisodio[p.nombre] = true; });
-        detalle.push('   Tratamiento ' + (antifungico ? 'antifúngico' : 'antibiótico') + ' continuo desde ' + fechaCorta(new Date(inicioEpisodio)) +
-          ': ' + tramos.map(function(tr) { return tr.esquema + ' ' + formatoNumero(tr.dias, 0) + ' d'; }).join(' → ') +
-          (maxDias > 0 ? '; con esta orden completaría ' + formatoNumero(transcurridosEpisodio + maxDias, 0) + ' d' : ''));
+        detalle.push('   ' + (antifungico ? 'Antifúngico' : 'Antibiótico') + ' continuo desde ' + fechaCorta(new Date(inicioEpisodio)) + ': ' +
+          tramos.map(function(tr) { return tr.esquema + ' ' + formatoNumero(tr.dias, 0) + ' d'; }).join(' → ') +
+          (maxDias > 0 ? ' → esta orden ' + formatoNumero(maxDias, 0) + ' d = ' + formatoNumero(transcurridosEpisodio + maxDias, 0) + ' d' : ''));
       }
     });
     var nombresActuales = actuales.map(function(am) { return am.nombre; });
@@ -1013,9 +1010,8 @@ function seguimientoPaciente(e) {
       vistos[p.nombre] = true;
       otros.push(p.nombre + ' (' + fechaCorta(p.fecha) + (p.dias ? ', ' + formatoNumero(p.dias, 0) + ' d' : '') + ')');
     });
-    if (otros.length) detalle.push('   Otros antimicrobianos previos: ' + otros.slice(0, 4).join('; '));
-    res.lineas = [E(0x1F501) + ' Seguimiento: ' + res.previas + (res.previas === 1 ? ' solicitud previa' : ' solicitudes previas') + ' en ' +
-      CONFIG.SEGUIMIENTO_DIAS + ' días (última ' + fechaCorta(previas[0].fecha) + ')'].concat(detalle);
+    if (otros.length) detalle.push('   Otros previos: ' + otros.slice(0, 4).join('; '));
+    res.lineas = [E(0x1F501) + ' Seguimiento (' + CONFIG.SEGUIMIENTO_DIAS + ' días): ' + res.previas + (res.previas === 1 ? ' solicitud previa' : ' solicitudes previas')].concat(detalle);
   } catch (err) {
     Logger.log('Seguimiento por paciente no disponible: ' + err);
   }
