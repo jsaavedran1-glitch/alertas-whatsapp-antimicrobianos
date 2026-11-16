@@ -2,13 +2,16 @@ var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
   HOJA_RESPUESTAS: 'Respuestas de formulario 1',
   HOJA_ANTIMICROBIANOS_RESTRINGIDOS: 'ANTIMICROBIANOS_RESTRINGIDOS',
-  ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO: ['CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'CASPOFUNGINA', 'ANFOTERICINA B LIPOSOMAL', 'TYGECICLINA', 'DORIPENEM', 'RIFAMPICINA', 'POLIMIXINA B', 'DAPTOMICINA'],
+  ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO: ['CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'CASPOFUNGINA', 'ANFOTERICINA B LIPOSOMAL', 'TYGECICLINA', 'DORIPENEM', 'RIFAMPICINA', 'POLIMIXINA B', 'DAPTOMICINA'],
   // Restringidos que NO disparan alerta por si solos (decision del Servicio Farmaceutico, 2026-11-02),
   // pero que se muestran como restringidos (con su dosis evaluada) cuando otro antimicrobiano de la
   // misma solicitud si dispara la alerta. Equivale a la columna "dispara_alerta = NO" de la pestana;
-  // si la pestana trae esa columna, la pestana manda. ERTAPENEM desde 2026-11-16 (decision del referente): ya no
-  // genera caso PROA en cada solicitud; lo cubre la revision de duracion (3 o mas prescripciones y mas de 10 d).
-  RESTRINGIDOS_SIN_ALERTA_PROPIA: ['VANCOMICINA', 'LINEZOLID', 'ERTAPENEM'],
+  // si la pestana trae esa columna, la pestana manda.
+  RESTRINGIDOS_SIN_ALERTA_PROPIA: ['VANCOMICINA', 'LINEZOLID'],
+  // Caso PROA solo si el tratamiento continuo del restringido, contando los dias de esta orden, supera estos dias
+  // (decision del referente, 2026-11-16: "si el atb ademas de estar en el listado de restringidos presenta mas de
+  // los 14 dias"). Un restringido con 14 d o menos no genera mensaje. 0 = caso PROA en cada solicitud, como antes.
+  CASO_DIAS_MINIMOS: 14,
   HOJA_CIE10: 'CIE10',
   CACHE_CIE10_SEG: 21600,
   HOJA_RANGOS_DOSIS: 'RANGOS_DOSIS',
@@ -68,8 +71,8 @@ var CONFIG = {
   // Contra el spam (decision del referente, 2026-11-16): sin verdes, un paciente como maximo cada 7 dias y
   // todo en un resumen diario a las 7:00 (activador de crearTriggerResumenProlongados).
   PROLONGADO_ENVIAR_VERDES: false,
-  // Si la solicitud ya genera caso PROA (restringido), la revision no se envia: el caso trae la misma lista de
-  // prescripciones con el total (decision del referente, 2026-11-16). true la envia tambien.
+  // Si la solicitud tiene un restringido que dispara alerta, la revision no se envia: va por el caso PROA, que
+  // trae la misma lista de prescripciones (decision del referente, 2026-11-16). true la envia tambien.
   PROLONGADO_CON_CASO: false,
   PROLONGADO_REPETIR_DIAS: 7,
   PROLONGADO_RESUMEN_DIARIO: true,
@@ -390,8 +393,10 @@ function notificarNuevaRespuesta(e) {
 }
 
 function notificarCaso_(e, coincidencias) {
-  if (!debeAlertar(coincidencias)) {
-    if (coincidencias.length > 0) registrarRevision(e, coincidencias, { enviado: false });
+  if (!generaCasoProa(e, coincidencias)) {
+    if (coincidencias.length > 0) registrarRevision(e, coincidencias, { enviado: false,
+      destino: debeAlertar(coincidencias) ? 'no se envía: ' + formatoNumero(diasCasoProa(e, coincidencias), 0) + ' d (caso PROA desde más de ' +
+        CONFIG.CASO_DIAS_MINIMOS + ' d)' : '' });
     return;
   }
   // El mensaje ya se encabeza con "CASO PROA": no lleva la linea de titulo del bot.
@@ -563,6 +568,25 @@ function filtrarAntimicrobianosRestringidos(e) {
 // Hay alerta solo si al menos un restringido de la solicitud dispara por si mismo.
 function debeAlertar(coincidencias) {
   return coincidencias.some(function(am) { return am.dispara !== false; });
+}
+
+// Dias del tratamiento continuo de los restringidos que disparan alerta, contando los de esta orden (sin curso
+// previo, los dias ordenados). El mayor de la solicitud.
+function diasCasoProa(e, coincidencias) {
+  var seg = seguimientoPaciente(e), max = 0;
+  coincidencias.forEach(function(am) {
+    if (am.dispara === false) return;
+    var c = seg.porAm[am.nombre], n = numeroONulo(am.dias) || 0;
+    var total = (c && c.transcurridos >= 1) ? c.proyectado : n;
+    if (total > max) max = total;
+  });
+  return max;
+}
+
+// El caso PROA sale si hay un restringido que dispara alerta y su tratamiento supera CONFIG.CASO_DIAS_MINIMOS.
+function generaCasoProa(e, coincidencias) {
+  if (!debeAlertar(coincidencias)) return false;
+  return !CONFIG.CASO_DIAS_MINIMOS || diasCasoProa(e, coincidencias) > CONFIG.CASO_DIAS_MINIMOS;
 }
 
 function acompanantesNoRestringidos(e) {
@@ -1277,8 +1301,8 @@ function mensajeProlongado(item) {
   return lineas.join('\n');
 }
 
-// Que se hace con la revision: 'CASO' (la solicitud ya genera caso PROA, que trae la misma lista de
-// prescripciones: no se repite), 'RESUMEN' (queda pendiente para el resumen diario), 'ENVIAR' (sin resumen
+// Que se hace con la revision: 'CASO' (la solicitud tiene un restringido: va por el caso PROA, que trae la
+// misma lista de prescripciones; decision del referente: la revision es para los que no estan en el listado), 'RESUMEN' (queda pendiente para el resumen diario), 'ENVIAR' (sin resumen
 // diario), 'VERDE' (dentro de la referencia: no se envia) o 'REPETIDO' (el paciente ya tuvo revision en los
 // ultimos CONFIG.PROLONGADO_REPETIR_DIAS dias).
 function accionProlongado(revision, e, coincidencias) {
@@ -1289,7 +1313,7 @@ function accionProlongado(revision, e, coincidencias) {
 }
 
 var TEXTO_ACCION_PROLONGADO = {
-  CASO: 'no se envía: la lista de prescripciones ya va en el caso PROA',
+  CASO: 'no se envía: tiene restringido (va por el caso PROA si supera ' + CONFIG.CASO_DIAS_MINIMOS + ' d)',
   RESUMEN: 'queda pendiente para el resumen diario',
   ENVIAR: 'se envía al grupo',
   VERDE: 'no se envía: dentro de la referencia de sus patologías',
@@ -1768,7 +1792,7 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
       // revision de duracion que saldria: sin caso PROA en la misma solicitud (salvo PROLONGADO_CON_CASO)
       var dispara = buscarProlongado
         ? !!revisionProlongado(candidato) && (CONFIG.PROLONGADO_CON_CASO || !debeAlertar(filtrarAntimicrobianosRestringidos(candidato)))
-        : debeAlertar(filtrarAntimicrobianosRestringidos(candidato));
+        : generaCasoProa(candidato, filtrarAntimicrobianosRestringidos(candidato));
       if (dispara) { e = candidato; fila = desde + i; }
     }
     if (!e) {
@@ -1780,7 +1804,9 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
   var coincidencias = filtrarAntimicrobianosRestringidos(e);
   var revision = revisionProlongado(e, coincidencias);
   var mensajes = [];
-  if (debeAlertar(coincidencias)) mensajes.push(construirMensajeDesdeEvento(e, coincidencias));
+  if (generaCasoProa(e, coincidencias)) mensajes.push(construirMensajeDesdeEvento(e, coincidencias));
+  else if (debeAlertar(coincidencias)) mensajes.push('(Caso PROA: no se envía, ' + formatoNumero(diasCasoProa(e, coincidencias), 0) +
+    ' d con esta orden; sale desde más de ' + CONFIG.CASO_DIAS_MINIMOS + ' d)');
   if (revision) {
     var accion = accionProlongado(revision, e, coincidencias);
     // el mensaje solo se muestra si de verdad saldria
@@ -1788,8 +1814,8 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
       (accion === 'RESUMEN' || accion === 'ENVIAR' ? '\n' + revision.mensaje : ''));
   }
   var p = tratamientoProlongado(e);
-  Logger.log('Fila %s · restringidos: %s · dispara alerta: %s · revisión de duración: %s\n\n%s', fila, coincidencias.length,
-    debeAlertar(coincidencias), p ? 'sí (' + p.solicitudes + ' prescripciones seguidas, ' + p.dias + ' d)' :
+  Logger.log('Fila %s · restringidos: %s · caso PROA: %s · revisión de duración: %s\n\n%s', fila, coincidencias.length,
+    generaCasoProa(e, coincidencias) ? 'sí' : 'no', p ? 'sí (' + p.solicitudes + ' prescripciones seguidas, ' + p.dias + ' d)' :
       'no (necesita ' + CONFIG.PROLONGADO_MIN_SOLICITUDES + ' prescripciones seguidas y más de ' + CONFIG.PROLONGADO_DIAS + ' d)',
     mensajes.length ? mensajes.join('\n\n----- mensaje aparte -----\n\n') : '(no genera mensaje)');
 }

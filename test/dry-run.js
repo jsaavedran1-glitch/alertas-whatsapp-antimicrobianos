@@ -601,7 +601,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['ERTAPENEM', '1000', '24', '7']]));
       assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*'); noIncluye(envios[0].message, '📆');
       incluye(envios[0].message, 'Total: *23 d* de antibiótico continuo');
-      assert.strictEqual(ultima()[col('Enviado al grupo')], 'NO'); incluye(ultima()[col('Destino')], 'ya va en el caso PROA');
+      assert.strictEqual(ultima()[col('Enviado al grupo')], 'NO'); incluye(ultima()[col('Destino')], 'tiene restringido');
       notificarNuevaRespuesta(e6);
       assert.strictEqual(ultima()[col('Enviado al grupo')], 'PENDIENTE'); assert.strictEqual(ultima()[col('Semáforo final')], 'AMARILLO');
       notificarNuevaRespuesta(e7);
@@ -666,44 +666,55 @@ prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolo
   incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '(Revisión de duración: queda pendiente para el resumen diario)\n*📆'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*');
 });
 
-prueba('ertapenem sin caso PROA propio: lo cubre la revision de duracion', function () {
-  // como en la pestana real desde 2026-11-16 (dispara_alerta = NO)
-  var original = HOJAS['ANTIMICROBIANOS_RESTRINGIDOS'];
-  HOJAS['ANTIMICROBIANOS_RESTRINGIDOS'] = hojaDeFilas([['Antimicrobiano', 'dispara_alerta']].concat(RESTRINGIDOS.map(function (a) {
-    return [a, a === 'ERTAPENEM' ? 'NO' : 'SI']; })));
+prueba('restringido: caso PROA solo si supera 14 d con esta orden; sin listado: solo revision de duracion', function () {
   var propsReal = global.PropertiesService;
   var P = { GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test' };
   global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
   HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
   var reg = HOJAS['REGISTRO_REVISIONES']._filas, col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+  var ultima = function () { return reg[reg.length - 1]; };
+  assert.strictEqual(CONFIG.CASO_DIAS_MINIMOS, 14);
   try {
     var filas = HOJAS['Respuestas de formulario 1']._filas;
-    filas.push(filaMatriz('17/09/2026 08:00:00', '888010', [['ERTAPENEM', '1000', '24', '21']]));
-    filas.push(filaMatriz('08/10/2026 08:00:00', '888010', [['MEROPENEM', '1000', '8', '14']]));
-    filas.push(filaMatriz('22/10/2026 19:47:19', '888010', [['ERTAPENEM', '1000', '24', '21']]));   // como la fila 7638: sigue vigente con la tolerancia
     conApiSimulada(function (llamadas) {
-      // primera solicitud de ertapenem del paciente: nada
-      notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888011', 'L031', [['ERTAPENEM', '1000', '24', '7']]));
+      // primera orden de ertapenem por 7 d: no sale
+      var e1 = eventoSeguimiento('01/11/2026 10:00:00', '888011', 'L031', [['ERTAPENEM', '1000', '24', '7']]);
+      assert.strictEqual(diasCasoProa(e1, filtrarAntimicrobianosRestringidos(e1)), 7);
+      notificarNuevaRespuesta(e1);
       assert.strictEqual(envios.length, 0);
-      // ertapenem con 4 prescripciones seguidas: sin caso PROA; la revision de duracion queda pendiente para las 7:00
-      notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 10:00:00', '888010', 'L031', [['ERTAPENEM', '1000', '24', '7']]));
-      assert.strictEqual(envios.length, 0);
-      var ult = reg[reg.length - 1];
-      assert.strictEqual(ult[col('Fuente del análisis')], 'TRATAMIENTO PROLONGADO'); assert.strictEqual(ult[col('Enviado al grupo')], 'PENDIENTE');
-      enviarResumenProlongados();
-      assert.strictEqual(envios.length, 1);
-      incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO · 66 d de antibiótico*');
-      incluye(envios[0].message, '4. ERTAPENEM 1000 mg IV c/24 h 15/11/2026-22/11/2026 · *7 d*');
-      noIncluye(envios[0].message, 'CASO PROA');
-      // con otro restringido en la misma solicitud, el caso PROA sale y muestra el ertapenem como restringido
+      assert.strictEqual(ultima()[col('Enviado al grupo')], 'NO'); incluye(ultima()[col('Destino')], 'no se envía: 7 d (caso PROA desde más de 14 d)');
+      // primera orden por 21 d: sale (cuenta la orden)
+      notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888013', 'L031', [['ERTAPENEM', '1000', '24', '21']]));
+      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*');
+      // lleva 10 d y piden 7 mas: 17 d, sale
       envios.length = 0;
-      notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 11:00:00', '888012', 'J189', [['ERTAPENEM', '1000', '24', '7'], ['DAPTOMICINA', '500', '24', '7']]));
-      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '💊 ERTAPENEM'); incluye(envios[0].message, '💊 DAPTOMICINA');
+      filas.push(filaMatriz('22/10/2026 10:00:00', '888014', [['ERTAPENEM', '1000', '24', '10']]));
+      notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888014', 'L031', [['ERTAPENEM', '1000', '24', '7']]));
+      assert.strictEqual(envios.length, 1); incluye(envios[0].message, 'Total: *17 d* de antibiótico continuo');
+      // el caso de la fila 7638 (66 d): sale el caso PROA y no la revision
+      envios.length = 0;
+      filas.push(filaMatriz('17/09/2026 08:00:00', '888010', [['ERTAPENEM', '1000', '24', '21']]));
+      filas.push(filaMatriz('08/10/2026 08:00:00', '888010', [['MEROPENEM', '1000', '8', '14']]));
+      filas.push(filaMatriz('22/10/2026 19:47:19', '888010', [['ERTAPENEM', '1000', '24', '21']]));   // sigue vigente con la tolerancia
+      notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 10:00:00', '888010', 'L031', [['ERTAPENEM', '1000', '24', '7']]));
+      assert.strictEqual(envios.length, 1); incluye(envios[0].message, 'Total: *66 d* de antibiótico continuo');
+      incluye(ultima()[col('Destino')], 'tiene restringido');
+      // fuera del listado (meropenem) con 3 o mas prescripciones y mas de 10 d: solo la revision, a las 7:00
+      envios.length = 0;
+      notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 11:00:00', '888010', 'L031', [['MEROPENEM', '1000', '8', '7']]));
+      assert.strictEqual(envios.length, 0); assert.strictEqual(ultima()[col('Enviado al grupo')], 'PENDIENTE');
+      enviarResumenProlongados();
+      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO · 66 d de antibiótico*');
+      noIncluye(envios[0].message, 'CASO PROA');
+      // restringido que no dispara (vancomicina) cuenta como fuera del listado para la revision
+      assert.strictEqual(generaCasoProa(eventoPruebaVancomicinaSola(), filtrarAntimicrobianosRestringidos(eventoPruebaVancomicinaSola())), false);
+      assert.strictEqual(llamadas.length, 0);
     });
-  } finally { HOJAS['ANTIMICROBIANOS_RESTRINGIDOS'] = original; global.PropertiesService = propsReal; }
-  // la lista de respaldo del codigo hace lo mismo si la pestana no se puede leer
-  var resp = listaRespaldoRestringidos().filter(function (x) { return x.nombre === 'ERTAPENEM'; });
-  assert.strictEqual(resp.length, 1); assert.strictEqual(resp[0].dispara, false);
+    // CASO_DIAS_MINIMOS = 0: caso PROA en cada solicitud, como antes
+    CONFIG.CASO_DIAS_MINIMOS = 0;
+    var e0 = eventoSeguimiento('01/11/2026 10:00:00', '888011', 'L031', [['ERTAPENEM', '1000', '24', '7']]);
+    assert.strictEqual(generaCasoProa(e0, filtrarAntimicrobianosRestringidos(e0)), true);
+  } finally { CONFIG.CASO_DIAS_MINIMOS = 14; global.PropertiesService = propsReal; }
 });
 
 prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, sin analisis ni modelo', function () {
@@ -718,7 +729,7 @@ prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, s
     nv[CAMPOS.TIPO_INDICACION] = ['Tratamiento Etiológico (En presencia de aislamiento conocido)']; nv[CAMPOS.ORIGEN] = ['COMUNIDAD'];
     nv[CAMPOS.INTERCONSULTA] = ['No'];
     nv[SLOTS[0].nombre] = ['ERTAPENEM - UT-1']; nv[SLOTS[0].dosis] = ['1000']; nv[SLOTS[0].via] = ['Intravenoso'];
-    nv[SLOTS[0].frecuencia] = ['24']; nv[SLOTS[0].dias] = ['7'];
+    nv[SLOTS[0].frecuencia] = ['24']; nv[SLOTS[0].dias] = ['21'];   // mas de 14 d: genera caso PROA
     var e = { namedValues: nv };
     var m = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
     incluye(m, '*🚨 CASO PROA · Ertapenem*\n📍 Hospitalización General Adulto (Salud Mental) · Cama 7\n📋 L031');
@@ -735,7 +746,7 @@ prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, s
       noIncluye(envios[0].message, 'Se sugiere');
     });
     var fila = HOJAS['REGISTRO_REVISIONES']._filas[1], col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
-    assert.strictEqual(fila[col('Fuente del análisis')], 'TABLAS'); assert.strictEqual(fila[col('Semáforo tablas')], 'VERDE');
+    assert.strictEqual(fila[col('Fuente del análisis')], 'TABLAS'); assert.strictEqual(fila[col('Semáforo tablas')], 'ROJO');   // 21 d en piel (5-7 d): el registro lo guarda, el mensaje no
     incluye(fila[col('Detalle')], 'ERTAPENEM: indicado para el aislamiento registrado');
   } finally { CONFIG.CASO_ANALISIS = true; global.PropertiesService = propsReal; }
 });

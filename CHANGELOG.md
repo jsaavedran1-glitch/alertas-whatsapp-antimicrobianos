@@ -4,10 +4,12 @@ Todas las fechas en hora de Colombia (America/Bogota).
 
 ## [1.28.0] - 2026-11-16
 
-### Cambiado (decisión del referente)
-- **Ertapenem ya no genera `🚨 CASO PROA` en cada solicitud.** Se cambió `dispara_alerta` a `NO` en la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` (fila de ERTAPENEM) y se pasó de `ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO` a `RESTRINGIDOS_SIN_ALERTA_PROPIA` en el código, por si la pestaña no se puede leer. Sigue siendo restringido: sale con 💊 si otro restringido de la misma solicitud dispara el caso.
-- El ertapenem queda cubierto por la **`📆 REVISIÓN DE DURACIÓN DE TTO`**: cuando el paciente lleva 3 o más prescripciones seguidas y más de 10 días, la revisión sale a las 7:00 (como la fila 7638: 66 d).
-- Con la matriz real (01/11–15/11): 21 casos PROA en lugar de 26; las revisiones de duración siguen en 17.
+### Cambiado (decisión del referente: "si el atb además de estar en el listado de restringidos presenta más de los 14 días; para los otros, solamente la revisión de tto")
+- **El `🚨 CASO PROA` sale solo si el tratamiento continuo del restringido, contando los días de esta orden, supera 14 días** (`CONFIG.CASO_DIAS_MINIMOS = 14`; `diasCasoProa()`, `generaCasoProa()`). Una solicitud de restringido con 14 d o menos no genera mensaje y queda en el registro con el motivo ("no se envía: 7 d (caso PROA desde más de 14 d)"). Con 0 vuelve a salir en cada solicitud.
+- **Los que no están en el listado** (o no disparan alerta, como vancomicina y linezolid) solo reciben la `📆 REVISIÓN DE DURACIÓN DE TTO` (3 o más prescripciones seguidas y más de 10 d). Una solicitud con restringido nunca recibe la revisión: va por el caso PROA.
+- Ertapenem sigue en la lista con `dispara_alerta = SI` (se probó quitarlo y se revirtió en la pestaña antes de esta versión): la regla de 14 días lo filtra como a los demás.
+- `probarUltimaSolicitud(fila)` dice si sale el caso PROA y, si no, cuántos días suma; `probarUltimaSolicitud()` busca la última que sí lo genera.
+- Con la matriz real (01/11–15/11): **12 casos PROA** (antes 26) y 17 revisiones de duración, unos 2 mensajes al día.
 
 ## [1.27.0] - 2026-11-16
 
