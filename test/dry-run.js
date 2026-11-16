@@ -511,6 +511,8 @@ prueba('seguimiento: dias calendario que cuadran con las fechas y sin tramos de 
 });
 
 prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resumen diario sin verdes ni repetidos', function () {
+  CONFIG.PROLONGADO_RESUMEN_DIARIO = true;   // esta prueba revisa el envio diario (en produccion sale al momento)
+  try {
   var filas = HOJAS['Respuestas de formulario 1']._filas;
   var conDx = function (fecha, hc, ams, dx) { var f = filaMatriz(fecha, hc, ams); f[ENCABEZADOS_REALES.indexOf(CAMPOS.DIAGNOSTICO)] = dx; return f; };
   // A: piperacilina/tazobactam 7 d -> meropenem 9 d -> se formula cefepime: 3 solicitudes, 16 d ya recibidos
@@ -654,7 +656,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
 
       // sin resumen diario, la revision sale de inmediato con el mismo formato
       CONFIG.PROLONGADO_RESUMEN_DIARIO = false;
-      try {
+      try {   // modo inmediato
         envios.length = 0;
         notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]));
         assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO · 36 d de antibiótico*\n🔴 *HC 888003 · 60 años · J189*\n4 prescripciones seguidas · lleva *22 d*, con esta orden *36 d*');
@@ -664,6 +666,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       } finally { CONFIG.PROLONGADO_RESUMEN_DIARIO = true; }
     });
   } finally { global.PropertiesService = propsReal; }
+  } finally { CONFIG.PROLONGADO_RESUMEN_DIARIO = false; }
 });
 
 prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolongado sin enviar nada', function () {
@@ -682,7 +685,7 @@ prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolo
     });
   } finally { Logger.log = logReal; filas.pop(); }
   var texto = registro.join('\n');
-  incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '▶ REVISIÓN DE DURACIÓN: se enviaría al día siguiente, a las 7:00\n\n*📆'); incluye(texto, 'PRUEBA (no se envió nada al grupo)'); incluye(texto, 'Tiempos: buscar la fila '); incluye(texto, ' · historia '); noIncluye(texto, 'mensaje aparte'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*');
+  incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '▶ REVISIÓN DE DURACIÓN: se enviaría al grupo al llegar la solicitud\n\n*📆'); incluye(texto, 'PRUEBA (no se envió nada al grupo)'); incluye(texto, 'Tiempos: buscar la fila '); incluye(texto, ' · historia '); noIncluye(texto, 'mensaje aparte'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*');
 });
 
 prueba('restringido: caso PROA solo si supera 14 d con esta orden; sin listado: solo revision de duracion', function () {
@@ -718,12 +721,11 @@ prueba('restringido: caso PROA solo si supera 14 d con esta orden; sin listado: 
       notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 10:00:00', '888010', 'L031', [['ERTAPENEM', '1000', '24', '7']]));
       assert.strictEqual(envios.length, 1); incluye(envios[0].message, 'Total: *66 d* de antibiótico continuo');
       incluye(ultima()[col('Destino')], 'tiene restringido');
-      // fuera del listado (meropenem) con 3 o mas prescripciones y mas de 10 d: solo la revision, a las 7:00
+      // fuera del listado (meropenem) con 3 o mas prescripciones y mas de 10 d: solo la revision, al momento
       envios.length = 0;
       notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 11:00:00', '888010', 'L031', [['MEROPENEM', '1000', '8', '7']]));
-      assert.strictEqual(envios.length, 0); assert.strictEqual(ultima()[col('Enviado al grupo')], 'PENDIENTE');
-      enviarResumenProlongados();
-      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO · 66 d de antibiótico*');
+      assert.strictEqual(envios.length, 1); assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI');
+      assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION'); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO · 66 d de antibiótico*');
       noIncluye(envios[0].message, 'CASO PROA');
       // restringido que no dispara (vancomicina) cuenta como fuera del listado para la revision
       assert.strictEqual(generaCasoProa(eventoPruebaVancomicinaSola(), filtrarAntimicrobianosRestringidos(eventoPruebaVancomicinaSola())), false);

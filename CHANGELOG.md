@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.31.0] - 2026-11-16
+
+### Cambiado (decisión del referente)
+- **La revisión de duración sale al llegar la solicitud**, como el caso PROA, en lugar de quedar pendiente para las 7:00 (`CONFIG.PROLONGADO_RESUMEN_DIARIO = false`). Siguen los filtros: sin verdes, un paciente como máximo cada 7 días, uno por día. En el registro queda `Enviado al grupo` = SI y `Destino` = PRODUCCION.
+- El activador de las 7:00 ya no hace falta; si queda, solo envía lo que hubiera quedado pendiente de antes. Con `true` vuelve el envío diario.
+- Con la matriz real (01/11–15/11): 12 revisiones en 15 días, una de ellas de noche (00:42).
+
 ## [1.30.0] - 2026-11-16
 
 ### Cambiado (decisión del referente)

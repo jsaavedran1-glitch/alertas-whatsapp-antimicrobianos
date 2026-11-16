@@ -72,14 +72,15 @@ var CONFIG = {
   // una orden solo de vancomicina o linezolid no la genera; con otro antibiotico, sale por el otro. Sus dias
   // se siguen contando en el tratamiento continuo. Para volver a incluirlos, quitarlos de esta lista.
   PROLONGADO_EXCLUIDOS: ['VANCOMICINA', 'LINEZOLID'],
-  // Contra el spam (decision del referente, 2026-11-16): sin verdes, un paciente como maximo cada 7 dias y
-  // todo en un resumen diario a las 7:00 (activador de crearTriggerResumenProlongados).
+  // Contra el spam (decision del referente, 2026-11-16): sin verdes y un paciente como maximo cada 7 dias.
   PROLONGADO_ENVIAR_VERDES: false,
   // Si la solicitud tiene un restringido que dispara alerta, la revision no se envia: va por el caso PROA, que
   // trae la misma lista de prescripciones (decision del referente, 2026-11-16). true la envia tambien.
   PROLONGADO_CON_CASO: false,
   PROLONGADO_REPETIR_DIAS: 7,
-  PROLONGADO_RESUMEN_DIARIO: true,
+  // false (decision del referente, 2026-11-16): la revision sale al llegar la solicitud, como el caso PROA.
+  // true: queda pendiente y sale a las PROLONGADO_RESUMEN_HORA (activador de crearTriggerResumenProlongados).
+  PROLONGADO_RESUMEN_DIARIO: false,
   PROLONGADO_RESUMEN_HORA: 7,
   // Registro de cada revision (indicadores PROA y auditoria del analisis).
   REGISTRO_ACTIVO: true,
