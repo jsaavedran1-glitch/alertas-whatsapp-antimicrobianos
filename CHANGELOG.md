@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.25.0] - 2026-11-16
+
+### Cambiado (nombre elegido por el referente para distinguirlo del caso PROA)
+- La revisión de las 7:00 se llama **`📆 REVISIÓN DE DURACIÓN`** y lleva el total de días en el título: `*📆 REVISIÓN DE DURACIÓN · 66 d de antibiótico*` (o "de antifúngico"). Antes: `⏳ REVISIÓN PROA · Tratamiento prolongado`.
+- La línea de resumen dice `5 prescripciones seguidas · lleva *59 d*, con esta orden *66 d*` (antes "solicitudes"). Las filas pendientes guardadas con el texto anterior salen con el título nuevo.
+- Sin cambios en el criterio ni en los filtros. En el registro la fuente sigue siendo `TRATAMIENTO PROLONGADO`, y las funciones conservan su nombre (`probarUltimoProlongado()`, `enviarResumenProlongados()`), para no romper el activador ni las filas ya guardadas.
+
 ## [1.24.0] - 2026-11-16
 
 ### Eliminado (decisión del referente: el caso lo valora la infectóloga y el análisis automático generaba controversia)

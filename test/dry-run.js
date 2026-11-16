@@ -505,14 +505,18 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   assert.deepStrictEqual(p.nuevos, ['CEFEPIME']);
   var r = revisionProlongado(e, filtrarAntimicrobianosRestringidos(e));
   assert.strictEqual(r.nivel, 2); assert.strictEqual(r.hc, '888001');
-  assert.deepStrictEqual(r.bloque.slice(0, 5), ['HC 888001 · 60 años · J189', '3 solicitudes · lleva 16 d, con esta orden 23 d · se sugiere revaluar',
+  assert.deepStrictEqual(r.bloque.slice(0, 5), ['HC 888001 · 60 años · J189', '3 prescripciones seguidas · lleva 16 d, con esta orden 23 d · se sugiere revaluar',
     '1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · 7 d', '2. MEROPENEM 23/10/2026-01/11/2026 · 9 d',
     '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d · Neumonía (esta orden)']);
   incluye(r.bloque[5], '📏 Neumonía 5-7 d ('); incluye(r.bloque[5], '): 23 d duplica la referencia');
   assert.strictEqual(r.bloque.length, 6);
+  // filas pendientes guardadas por la version anterior ("5 solicitudes · ...") se muestran con el titulo nuevo
+  incluye(mensajeProlongado({ nivel: 2, bloque: ['HC 1 · 60 años · N390', '5 solicitudes · lleva 21 d, con esta orden 35 d · se sugiere revaluar'] }),
+    '*📆 REVISIÓN DE DURACIÓN · 35 d de antibiótico*\n🔴 *HC 1 · 60 años · N390*\n5 solicitudes · lleva *21 d*, con esta orden *35 d*');
   // un mensaje por paciente, sin lineas en blanco y con los dias en negrita
-  incluye(r.mensaje, '*⏳ REVISIÓN PROA · Tratamiento prolongado*\n🔴 *HC 888001 · 60 años · J189*\n' +
-    '3 solicitudes · lleva *16 d*, con esta orden *23 d* · se sugiere revaluar\n1. PIPERACILINA');
+  incluye(r.mensaje, '*📆 REVISIÓN DE DURACIÓN · 23 d de antibiótico*\n🔴 *HC 888001 · 60 años · J189*\n' +
+    '3 prescripciones seguidas · lleva *16 d*, con esta orden *23 d* · se sugiere revaluar\n1. PIPERACILINA');
+  noIncluye(r.mensaje, 'CASO PROA'); noIncluye(r.mensaje, 'prolongado');
   incluye(r.mensaje, '\n1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · *7 d*\n2. MEROPENEM 23/10/2026-01/11/2026 · *9 d*\n');
   incluye(r.mensaje, ': *23 d* duplica la referencia\n💡 Confirmar con el médico tratante el motivo para continuar y la fecha de suspensión.');
   noIncluye(r.mensaje, '\n\n'); noIncluye(r.mensaje, 'CASO PROA'); noIncluye(r.mensaje, '48-72 h');
@@ -610,8 +614,8 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       enviarResumenProlongados();
       // un mensaje por paciente, los rojos primero; la verde no sale
       assert.strictEqual(envios.length, 2);
-      incluye(envios[0].message, '*⏳ REVISIÓN PROA · Tratamiento prolongado*\n🔴 *HC 888001');
-      incluye(envios[1].message, '*⏳ REVISIÓN PROA · Tratamiento prolongado*\n🟡 *HC 888006');
+      incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN · 23 d de antibiótico*\n🔴 *HC 888001');
+      incluye(envios[1].message, '*📆 REVISIÓN DE DURACIÓN · 23 d de antibiótico*\n🟡 *HC 888006');
       envios.forEach(function (x) { noIncluye(x.message, '888007'); assert.strictEqual(x.message.split('💡').length, 2); });
       var pend = reg.filter(function (f) { return f[col('Fuente del análisis')] === 'TRATAMIENTO PROLONGADO' && f[col('Enviado al grupo')] === 'SI'; });
       assert.strictEqual(pend.length, 2); incluye(pend[0][col('Destino')], 'RESUMEN DIARIO ');
@@ -631,7 +635,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       try {
         envios.length = 0;
         notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]));
-        assert.strictEqual(envios.length, 1); incluye(envios[0].message, '🔴 *HC 888003 · 60 años · J189*\n4 solicitudes · lleva *22 d*, con esta orden *36 d*');
+        assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN · 36 d de antibiótico*\n🔴 *HC 888003 · 60 años · J189*\n4 prescripciones seguidas · lleva *22 d*, con esta orden *36 d*');
         // renovaciones seguidas del mismo antimicrobiano en una linea
         incluye(envios[0].message, '\n1-3. MEROPENEM 10/10/2026-01/11/2026 · *22 d*\n4. MEROPENEM 1000 mg IV c/8 h 01/11/2026-15/11/2026 · *14 d* · Neumonía (esta orden)');
         assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION');
@@ -655,7 +659,7 @@ prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolo
     });
   } finally { Logger.log = logReal; filas.pop(); }
   var texto = registro.join('\n');
-  incluye(texto, 'tratamiento prolongado: sí (3 solicitudes seguidas, 16 d)'); incluye(texto, '*⏳ REVISIÓN PROA · Tratamiento prolongado*');
+  incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN · 23 d de antibiótico*');
 });
 
 prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, sin analisis ni modelo', function () {

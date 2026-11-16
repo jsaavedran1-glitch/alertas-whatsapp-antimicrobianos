@@ -1237,7 +1237,8 @@ function revisionProlongado(e, coincidenciasOpt) {
   var codigo = extraerCodigoCIE10(dxActual) || String(dxActual || '-').trim().slice(0, 30);
   var bloque = ['HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
     (servicio !== '-' ? ' · ' + servicio : '') + (cama !== '-' ? ' · Cama ' + cama : '') + ' · ' + codigo];
-  bloque.push(p.solicitudes + ' solicitudes · lleva ' + formatoNumero(p.dias, 0) + ' d' +
+  // "de antifungico" solo cuando lo es: el titulo del mensaje lo toma de aqui (el registro guarda este texto)
+  bloque.push(p.solicitudes + ' prescripciones seguidas' + (p.antifungico ? ' de antifúngico' : '') + ' · lleva ' + formatoNumero(p.dias, 0) + ' d' +
     (p.proyectado > p.dias ? ', con esta orden ' + formatoNumero(p.proyectado, 0) + ' d' : '') + ' · ' + ETIQUETA_NIVEL[nivel]);
   var diasOrden = p.proyectado - p.dias;
   lineasPrescripciones(p.episodio, { texto: actuales.map(function(am) {
@@ -1250,13 +1251,17 @@ function revisionProlongado(e, coincidenciasOpt) {
   return { hc: String(campo('HC')).replace(/\s+/g, ''), nivel: nivel, bloque: bloque, mensaje: mensajeProlongado({ nivel: nivel, bloque: bloque }) };
 }
 
-// Mensaje de un paciente: corto y sin lineas en blanco para que WhatsApp no lo corte con "Leer mas".
-// Los dias que lleva y los proyectados van en negrita. item: { nivel, bloque }.
+// Mensaje de un paciente ("REVISION DE DURACION", nombre elegido por el referente para distinguirlo del caso
+// PROA): corto y sin lineas en blanco para que WhatsApp no lo corte con "Leer mas". El titulo lleva el total de
+// dias con esta orden; los dias van en negrita. item: { nivel, bloque }.
 function mensajeProlongado(item) {
   var E = function(cp) { return String.fromCodePoint(cp); };
   var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
   var nivel = (item.nivel >= 0 && item.nivel <= 2) ? item.nivel : 1;
-  var lineas = ['*' + E(0x23F3) + ' REVISIÓN PROA · Tratamiento prolongado*', color[nivel] + ' *' + item.bloque[0] + '*'];
+  var resumen = String(item.bloque[1] || '');
+  var total = (resumen.match(/con esta orden (\d+) d/) || resumen.match(/lleva (\d+) d/) || [])[1];
+  var lineas = ['*' + E(0x1F4C6) + ' REVISIÓN DE DURACIÓN' + (total ? ' · ' + total + ' d de ' + (/antifúngico/.test(resumen) ? 'antifúngico' : 'antibiótico') : '') + '*',
+    color[nivel] + ' *' + item.bloque[0] + '*'];
   // dias en negrita: los de la linea de resumen, los de cada prescripcion y el total frente a la referencia
   item.bloque.slice(1).forEach(function(l, i) {
     if (i === 0) l = l.replace(/(\d+ d)\b/g, '*$1*');
@@ -1765,11 +1770,11 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
   var revision = revisionProlongado(e, coincidencias);
   var mensajes = [];
   if (debeAlertar(coincidencias)) mensajes.push(construirMensajeDesdeEvento(e, coincidencias));
-  if (revision) mensajes.push('(Revisión por tratamiento prolongado: ' + TEXTO_ACCION_PROLONGADO[accionProlongado(revision, e)] + ')\n' + revision.mensaje);
+  if (revision) mensajes.push('(Revisión de duración: ' + TEXTO_ACCION_PROLONGADO[accionProlongado(revision, e)] + ')\n' + revision.mensaje);
   var p = tratamientoProlongado(e);
-  Logger.log('Fila %s · restringidos: %s · dispara alerta: %s · tratamiento prolongado: %s\n\n%s', fila, coincidencias.length,
-    debeAlertar(coincidencias), p ? 'sí (' + p.solicitudes + ' solicitudes seguidas, ' + p.dias + ' d)' :
-      'no (necesita ' + CONFIG.PROLONGADO_MIN_SOLICITUDES + ' solicitudes seguidas y más de ' + CONFIG.PROLONGADO_DIAS + ' d)',
+  Logger.log('Fila %s · restringidos: %s · dispara alerta: %s · revisión de duración: %s\n\n%s', fila, coincidencias.length,
+    debeAlertar(coincidencias), p ? 'sí (' + p.solicitudes + ' prescripciones seguidas, ' + p.dias + ' d)' :
+      'no (necesita ' + CONFIG.PROLONGADO_MIN_SOLICITUDES + ' prescripciones seguidas y más de ' + CONFIG.PROLONGADO_DIAS + ' d)',
     mensajes.length ? mensajes.join('\n\n----- mensaje aparte -----\n\n') : '(no genera mensaje)');
 }
 
