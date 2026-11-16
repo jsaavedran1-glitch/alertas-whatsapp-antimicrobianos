@@ -7,7 +7,7 @@ Bot de Google Apps Script que avisa por **WhatsApp** (vía [Green-API](https://g
 | Formulario | [FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV](https://docs.google.com/forms/d/1u8XYmynHfAH0EoeyNFFcd8w12IA95J47oItrv34TyGI/edit) |
 | Hoja de respuestas | [MATRIZ FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV (Respuestas)](https://docs.google.com/spreadsheets/d/1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY/edit) |
 | Proyecto Apps Script | [PROA ALERTAS](https://script.google.com/u/1/home/projects/12mUy9SqQGzRnGjkbAsFyycG9RxJxvFePpSuHl4Nv8MokONxKY7kwbIw0/edit) (independiente, no vinculado a la hoja; archivo "Código") |
-| Código en este repo | `Codigo.gs` (archivo "Código") e `IA_PROA.gs` (archivo "IA_PROA": el análisis de pertinencia del modelo, que se incluye en el mismo mensaje) |
+| Código en este repo | `Codigo.gs` (archivo "Código"). El bot no usa IA desde la v1.24.0: el archivo `IA_PROA` se borra del proyecto |
 
 La misma hoja tiene vinculado otro script, **FORMULARIO PROA DOT**, que calcula los días de terapia. Son proyectos separados y este bot no lo toca.
 
@@ -60,7 +60,7 @@ Si se cambia la lista de la pestaña, conviene actualizar también la de respald
 
 ### Datos del mensaje
 
-Desde la v1.23.0 el caso PROA va **solo con datos** (`CONFIG.CASO_ANALISIS = false`): título, `📍` servicio y cama, `📋` diagnóstico, `📄` HC, edad, peso y especialidad, `🦠` aislamiento, cultivos, indicación y origen, interconsulta, cada antimicrobiano con los días en negrita y la lista numerada de prescripciones del tratamiento continuo con su total. Sin veredicto, sin pertinencia y sin modelo; el análisis de las tablas queda en `REGISTRO_REVISIONES`.
+Desde la v1.23.0 el caso PROA va **solo con datos** (`CONFIG.CASO_ANALISIS = false`): título, `📍` servicio y cama, `📋` diagnóstico, `📄` HC, edad, peso y especialidad, `🦠` aislamiento, cultivos, indicación y origen, interconsulta, cada antimicrobiano con los días en negrita y la lista numerada de prescripciones del tratamiento continuo con su total. Sin veredicto, sin pertinencia y sin IA; el análisis de las tablas queda en `REGISTRO_REVISIONES`.
 
 | En el mensaje | Pregunta del formulario (título exacto) |
 |---|---|
@@ -152,6 +152,8 @@ En el editor de Apps Script: **Configuración del proyecto → Propiedades del s
 | `GREENAPI_GROUP_CHATID` | sí | chatId del grupo de destino; siempre termina en `@g.us` |
 | `GREENAPI_BOT_LABEL` | no | Firma en negrita al inicio del mensaje (por defecto `Bot PROA Antimicrobianos HDV`) |
 
+Desde la v1.24.0 el bot no usa IA: `ANTHROPIC_API_KEY`, `IA_PROA_MODO`, `CLAUDE_MODEL`, `IA_DOCS_URL` y `GREENAPI_PRUEBA_CHATID` ya no se leen y conviene borrarlas.
+
 Para encontrar el chatId de un grupo sin riesgo de enviar nada, ejecutar `listarChatsGreenAPI()`: solo lee (`getChats`) y registra los grupos (`@g.us`).
 
 ## Activador
@@ -232,8 +234,8 @@ Programa de Optimización de Antimicrobianos (PROA), Resolución 4816 de 2008, R
 
 ## Ver también
 
-- `docs/microorganismos.md`: fichas de los microorganismos aislados en las solicitudes (resistencia, tratamiento según mecanismo, restringidos que se justifican); referencia de la revisión por IA.
-- Pestaña `REGISTRO_REVISIONES` de la matriz: una fila por solicitud con restringido (semáforo, fuente del análisis, enviado o no, costo); sirve para indicadores PROA.
+- `docs/microorganismos.md`: fichas de los microorganismos aislados en las solicitudes (resistencia, tratamiento según mecanismo, restringidos que se justifican); referencia para el equipo PROA.
+- Pestaña `REGISTRO_REVISIONES` de la matriz: una fila por solicitud con restringido y por revisión de tratamiento prolongado (semáforo de las tablas, enviado, pendiente o no y por qué); sirve para indicadores PROA.
 - `docs/pertinencia.md`: qué verifica el bloque de pertinencia, tabla de duración por síndrome con fuente y estado de verificación, reglas de espectro y límites.
 - `docs/antimicrobianos-restringidos.md`: fichas de las 13 moléculas (clase, AWaRe, dosis adulto/pediatría, ajuste renal, monitoreo, por qué está restringida) con las fuentes que sustentan cada rango de `RANGOS_DOSIS` y su uso en el HDV.
 - `CLAUDE.md` (contexto operativo para asistentes de IA) y `CHANGELOG.md` (historial de cambios).

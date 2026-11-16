@@ -95,8 +95,6 @@ global.UrlFetchApp = { fetch: function () { throw new Error('UrlFetchApp no debe
 global.PropertiesService = { getScriptProperties: function () { return { getProperty: function () { return null; } }; } };
 
 (0, eval)(src);
-var srcIa = fs.readFileSync(path.join(__dirname, '..', 'IA_PROA.gs'), 'utf8');
-(0, eval)(srcIa);
 
 var fallos = 0;
 // En produccion el caso PROA va solo con datos (CONFIG.CASO_ANALISIS = false; tiene su propia prueba). Las demas
@@ -446,9 +444,8 @@ prueba('seguimiento: curso acumulado, solicitud repetida, otros previos y dias v
   incluye(msg, '🔁 Antibiótico continuo, en orden de prescripción:');
   // 7 d ordenados estarian dentro de 5-7 d, pero el curso completo (20 d) supera el doble
   incluye(msg, '🔴 ERTAPENEM · *20 d* de antibiótico continuo: supera la referencia; revaluar duración');
-  incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), 'HISTORIA DEL PACIENTE: solicitudes previas');
-  incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '- 08/11/2026: ERTAPENEM 1000 mg cada 24 h por 7 d');
-  noIncluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '123456');
+  var hist = seguimientoPaciente(e).historia.join('\n');
+  incluye(hist, '08/11/2026: ERTAPENEM 1000 mg cada 24 h por 7 d'); noIncluye(hist, '123456');
   // paciente sin historia: sin seguimiento
   var e2 = eventoSeguimiento('14/11/2026 09:00:00', '555', 'N390', [['ERTAPENEM', '1000', '24', '7']]);
   assert.strictEqual(seguimientoPaciente(e2).lineas.length, 0);
@@ -470,8 +467,7 @@ prueba('seguimiento: tratamiento continuo con cambio de antimicrobiano y renovac
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(msg, '🟢 ERTAPENEM: indicado para el aislamiento registrado');   // BLEE escrita en palabras
   incluye(msg, '🔴 ERTAPENEM · *36 d* de antibiótico continuo: supera la referencia; revaluar duración');
-  var caso = textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(caso, '- 22/10/2026: ERTAPENEM 1000 mg cada 24 h por 21 d'); incluye(caso, 'Cálculo del bot sobre esa historia'); noIncluye(caso, '777001');
+  incluye(seg.historia.join('\n'), '22/10/2026: ERTAPENEM 1000 mg cada 24 h por 21 d');
   // un curso antiguo, ya terminado hace mas de la tolerancia, no se suma
   filas.push(filaMatriz('01/10/2026 08:00:00', '777002', [['ERTAPENEM', '1000', '24', '7']]));
   var e2 = eventoSeguimiento('15/11/2026 09:00:00', '777002', 'N390', [['ERTAPENEM', '1000', '24', '7']]);
@@ -588,7 +584,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   var reg = HOJAS['REGISTRO_REVISIONES']._filas, col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
   var ultima = function () { return reg[reg.length - 1]; };
   try {
-    conApiSimulada(respuestaIa({}), function (llamadas) {
+    conApiSimulada(function (llamadas) {
       notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['CEFEPIME', '2000', '8', '7']]));
       assert.strictEqual(envios.length, 0); assert.strictEqual(llamadas.length, 0);
       assert.deepStrictEqual(reg[0], ENCABEZADOS_REGISTRO);
@@ -653,7 +649,7 @@ prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolo
     registro.push(String(fmt).replace(/%s/g, function () { return String(args.shift()); }));
   };
   try {
-    conApiSimulada(respuestaIa({}), function (llamadas) {
+    conApiSimulada(function (llamadas) {
       probarUltimoProlongado();
       assert.strictEqual(envios.length, 0); assert.strictEqual(llamadas.length, 0);
     });
@@ -685,7 +681,7 @@ prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, s
       ANTHROPIC_API_KEY: 'clave-de-prueba', IA_PROA_MODO: 'PRODUCCION' };
     global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
     HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
-    conApiSimulada(respuestaIa({}), function (llamadas) {
+    conApiSimulada(function (llamadas) {
       notificarNuevaRespuesta({ namedValues: nv });
       assert.strictEqual(llamadas.length, 0); assert.strictEqual(envios.length, 1);
       noIncluye(envios[0].message, 'Se sugiere');
@@ -740,130 +736,28 @@ prueba('calidad de datos: CIE10 en cualquier parte del texto o por descripcion, 
 });
 
 var envios = [];
-// UrlFetchApp simulado para IA_PROA.gs: sirve las fichas reales de docs/ y una respuesta fija de la API.
-function conApiSimulada(respuestaApi, fn) {
+// UrlFetchApp simulado: Green-API responde bien y cualquier otra URL queda en llamadas (el bot no debe
+// llamar a ninguna otra API).
+function conApiSimulada(fn) {
   var real = global.UrlFetchApp, llamadas = []; envios = [];
   global.UrlFetchApp = { fetch: function (url, op) {
-    if (url.indexOf('raw.githubusercontent.com') > -1) {
-      var doc = fs.readFileSync(path.join(__dirname, '..', 'docs', url.split('/').pop()), 'utf8');
-      return { getResponseCode: function () { return 200; }, getContentText: function () { return doc; } };
-    }
     if (url.indexOf('greenapi.test') > -1) {
       envios.push(JSON.parse(op.payload));
       return { getResponseCode: function () { return 200; }, getContentText: function () { return JSON.stringify({ idMessage: 'MSG' + envios.length }); } };
     }
-    assert.ok(/^https:\/\/api\.anthropic\.com\/v1\/messages$/.test(url), 'solo la API de mensajes: ' + url);
-    llamadas.push({ cuerpo: JSON.parse(op.payload), encabezados: op.headers });
-    var r = typeof respuestaApi === 'function' ? respuestaApi(llamadas.length) : respuestaApi;
-    return { getResponseCode: function () { return r.codigo || 200; }, getContentText: function () { return JSON.stringify(r.cuerpo); } };
+    llamadas.push(url);
+    return { getResponseCode: function () { return 404; }, getContentText: function () { return ''; } };
   } };
   try { fn(llamadas); } finally { global.UrlFetchApp = real; }
 }
-function respuestaIa(salida) {
-  return { cuerpo: { model: 'claude-sonnet-5-5', stop_reason: 'end_turn', usage: { input_tokens: 9000, output_tokens: 300 },
-    content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify(salida) }] } };
-}
-
-prueba('revision (IA_PROA.gs): el analisis del modelo va dentro del mensaje unico', function () {
-  var e = eventoPruebaCeftazidimaAvibactam();
-  var co = filtrarAntimicrobianosRestringidos(e);
-  var cfg = { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO };
-  assert.strictEqual(IA_MODELO_DEFECTO, 'claude-sonnet-5-5');
-  var salida = { analisis: 'repaso de factores', historia: '',
-    tratamiento: [{ antimicrobiano: 'Ceftazidima/avibactam', nivel: 'pertinente', motivo: 'El aislamiento registrado (*KPC*) está dentro de su indicación' },
-      { antimicrobiano: 'COLISTINA', nivel: 'no_pertinente', motivo: 'no es de esta solicitud' }],
-    dias: [{ antimicrobiano: 'CEFTAZIDIMA / AVIBACTAM', nivel: 'no_pertinente', motivo: 'supera la referencia; valorar suspender al día 7' }],
-    datos_faltantes: ['antibiograma'] };
-  conApiSimulada(respuestaIa(salida), function (llamadas) {
-    var rev = revisarCasoConIa_(e, co, cfg);
-    assert.strictEqual(llamadas.length, 1);
-    var c = llamadas[0].cuerpo;
-    assert.strictEqual(c.model, 'claude-sonnet-5-5');
-    assert.strictEqual(c.output_config.format.type, 'json_schema');
-    assert.strictEqual(c.fallbacks, 'default');
-    assert.ok(!('thinking' in c) && !('temperature' in c));
-    incluye(c.system, 'antimicrobianos-restringidos.md'); incluye(c.system, 'TABLA DE DURACIÓN POR SÍNDROME');
-    incluye(c.system, 'Infección urinaria complicada / pielonefritis (CIE10 N39, N10, N12, N30): 5-7 días');
-    incluye(c.system, 'médico infectólogo'); incluye(c.system, 'químico farmacéutico clínico');
-    assert.strictEqual(c.output_config.effort, 'high');
-    assert.deepStrictEqual(c.output_config.format.schema.required, ['analisis', 'historia', 'tratamiento', 'dias', 'datos_faltantes']);
-    var caso = c.messages[0].content;
-    incluye(caso, 'Análisis de las tablas del bot'); incluye(caso, 'CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia');
-    incluye(caso, 'HISTORIA DEL PACIENTE: sin solicitudes previas');
-    noIncluye(caso, '88888888'); noIncluye(caso, 'Historia');   // seudonimizado
-    assert.strictEqual(rev.veredicto, 'intervenir');
-    var m = construirMensajeDesdeEvento(e, co, { analisis: analisisDeRevision_(rev) });
-    incluye(m, '*🚨 CASO PROA · Ceftazidima / avibactam*');
-    incluye(m, '🔴 *Se sugiere revaluar*');
-    incluye(m, '💊 CEFTAZIDIMA / AVIBACTAM 750 mg (10,7 mg/kg) IV c/12 h · *14 d* hasta');
-    incluye(m, '🔴 Ceftazidima / avibactam 14 d: supera la referencia; valorar suspender al día 7');
-    incluye(m, '🟢 Lo demás, sin observaciones');
-    incluye(m, '📏 Infección urinaria complicada / pielonefritis: 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)');
-    incluye(m, '_Análisis asistido por IA_');
-    noIncluye(m, 'COLISTINA'); noIncluye(m, 'Pertinencia PROA');   // lo ajeno a la solicitud se descarta
-    var verde = construirMensajeDesdeEvento(e, co, { analisis: analisisDeRevision_({ veredicto: 'pertinente', historia: '',
-      tratamiento: [{ nombre: 'CEFTAZIDIMA / AVIBACTAM', nivel: 0, motivo: '' }], dias: [], encabezadoDias: '' }) });
-    incluye(verde, '🟢 *Acorde con la referencia*'); incluye(verde, '🟢 Tratamiento y días sin observaciones');
-  });
-  assert.ok(fraseIa_(new Array(60).join('palabra ')).length <= IA_MAX_CARACTERES);
-  assert.ok(srcIa.indexOf('sk-ant') === -1);
-});
-
-prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caida de la API', function () {
-  var cfg = { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO };
-  // ertapenem con Pseudomonas: regla de espectro en rojo; el modelo no puede rebajarla
-  var e = eventoPruebaIaErtapenemPseudomonas(), co = filtrarAntimicrobianosRestringidos(e);
-  conApiSimulada(respuestaIa({ analisis: 'a', historia: '', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: 'x' }], dias: [], datos_faltantes: [] }), function () {
-    assert.strictEqual(revisarCasoConIa_(e, co, cfg).veredicto, 'intervenir');
-  });
-  // la API rechaza el parametro fallbacks: se repite sin el
-  conApiSimulada(function (n) {
-    return n === 1 ? { codigo: 400, cuerpo: { error: { message: 'fallbacks: Extra inputs are not permitted' } } }
-      : respuestaIa({ analisis: 'a', historia: '', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'no cubre Pseudomonas' }],
-          dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: 'dentro de la referencia' }], datos_faltantes: [] });
-  }, function (llamadas) {
-    var rev = revisarCasoConIa_(e, co, cfg);
-    assert.strictEqual(rev.veredicto, 'intervenir');
-    assert.strictEqual(llamadas.length, 2); assert.ok(!('fallbacks' in llamadas[1].cuerpo)); assert.ok(!llamadas[1].encabezados['anthropic-beta']);
-    var m = construirMensajeDesdeEvento(e, co, { analisis: analisisDeRevision_(rev) });
-    incluye(m, '🔴 Ertapenem: no cubre Pseudomonas'); noIncluye(m, '7 d:'); noIncluye(m, '📏');   // dias de un tratamiento en rojo: no se mencionan
-  });
-  // API caida o declinacion: sale el analisis de las tablas, y la clave no queda en el registro
-  var registro = []; var logReal = Logger.log; Logger.log = function () { registro.push(Array.prototype.join.call(arguments, ' ')); };
-  try {
-    conApiSimulada({ codigo: 401, cuerpo: { error: { message: 'invalid x-api-key CLAVE-DE-PRUEBA' } } }, function () {
-      assert.strictEqual(revisarCasoConIa_(e, co, cfg), null);
-    });
-    conApiSimulada({ cuerpo: { stop_reason: 'refusal', content: [] } }, function () { assert.strictEqual(revisarCasoConIa_(e, co, cfg), null); });
-  } finally { Logger.log = logReal; }
-  noIncluye(registro.join('\n'), 'CLAVE-DE-PRUEBA');
-  assert.strictEqual(analisisDeRevision_(null), null);
-  var m = construirMensajeDesdeEvento(e, co);
-  incluye(m, '🔴 *Se sugiere revaluar*'); incluye(m, 'ERTAPENEM no tiene actividad frente a Pseudomonas'); noIncluye(m, 'asistido por IA');
-});
-
-prueba('IA: la historia del paciente va al modelo y su interpretacion abre el analisis', function () {
-  var e = eventoSeguimiento('15/11/2026 17:10:18', '777001', 'L031', [['ERTAPENEM', '1000', '24', '7']]);
-  e.namedValues[CAMPOS.MICROORGANISMO] = ['BETALACTAMASA DE AMPLIO ESPECTRO'];
-  var co = filtrarAntimicrobianosRestringidos(e);
-  conApiSimulada(respuestaIa({ analisis: 'a', historia: 'Carbapenémico continuo: meropenem del 17/10 al 22/10 (5 d) y ertapenem desde el 22/10 (24 d); esta orden lo lleva a 36 d',
-    tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: '' }],
-    dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'muy por encima de la referencia; confirmar foco no controlado antes de prolongar' }], datos_faltantes: [] }), function (llamadas) {
-    var rev = revisarCasoConIa_(e, co, { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO });
-    incluye(llamadas[0].cuerpo.messages[0].content, 'Antibiótico continuo, en orden de prescripción:\n- 1. MEROPENEM 17/10/2026-22/10/2026 · 5 d\n- 2. ERTAPENEM 22/10/2026-15/11/2026 · 24 d');
-    var m = construirMensajeDesdeEvento(e, co, { analisis: analisisDeRevision_(rev) });
-    incluye(m, '🧭 Carbapenémico continuo: meropenem del 17/10 al 22/10 (5 d) y ertapenem desde el 22/10 (24 d); esta orden lo lleva a 36 d');
-    incluye(m, '🔴 Ertapenem · *36 d* de antibiótico continuo: muy por encima de la referencia; confirmar foco no controlado antes de prolongar');
-    incluye(m, '📏 Infección de piel y tejidos blandos: 5-7 d (IDSA 2014)');
-    incluye(m, '🟢 Lo demás, sin observaciones');
-  });
-});
 
 prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {
   assert.ok(src.indexOf("getProperty('GREENAPI_API_TOKEN')") > -1);
   assert.ok(!/https:\/\/\d+\.api\.greenapi\.com/.test(src));
   assert.ok(!/@c\.us/.test(src));
   assert.ok(/@g\.us/.test(src));
+  // sin IA: el bot no llama a la API de Anthropic ni lee ANTHROPIC_API_KEY
+  assert.ok(src.indexOf('anthropic') === -1 && src.indexOf('ANTHROPIC_API_KEY') === -1);
 });
 
 console.log();

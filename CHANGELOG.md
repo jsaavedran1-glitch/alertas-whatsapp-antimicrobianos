@@ -2,6 +2,14 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.24.0] - 2026-11-16
+
+### Eliminado (decisión del referente: el caso lo valora la infectóloga y el análisis automático generaba controversia)
+- **Se retira la revisión por IA:** se borra `IA_PROA.gs` (llamada a la API de Anthropic, prompt, fichas leídas desde el repositorio, modo PRUEBA/PRODUCCION y envío a PRUEBA BOT). El bot no llama a ninguna API externa aparte de Green-API; una prueba lo verifica.
+- `construirMensajeDesdeEvento(e, coincidencias)` ya no recibe un análisis externo; `registrarRevision()` deja vacías las columnas Modelo, Tokens y Costo (se conservan para no mover las demás).
+- Sin cambios en los mensajes: el caso PROA ya iba solo con datos (v1.23.0) y la revisión por tratamiento prolongado nunca usó IA.
+- `docs/antimicrobianos-restringidos.md` y `docs/microorganismos.md` quedan como referencia del equipo PROA.
+
 ## [1.23.0] - 2026-11-16
 
 ### Cambiado (decisión del referente: el caso PROA, solo con datos)

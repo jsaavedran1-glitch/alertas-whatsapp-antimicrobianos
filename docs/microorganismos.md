@@ -1,6 +1,6 @@
 # Microorganismos aislados en las solicitudes PROA-HDV: fichas de referencia
 
-Fichas cortas de los microorganismos que aparecen en el campo "Microorganismo aislado" del formulario. Las usa la revisión asistida por IA (`IA_PROA.gs`) como referencia, junto con `antimicrobianos-restringidos.md`. Son apoyo para la revisión del QF: **no reemplazan el antibiograma ni el concepto de Infectología**, y deben ser validadas por el comité PROA.
+Fichas cortas de los microorganismos que aparecen en el campo "Microorganismo aislado" del formulario. Son referencia para el equipo PROA, junto con `antimicrobianos-restringidos.md` (el bot ya no las lee: la revisión por IA se retiró en la v1.24.0). Son apoyo para la revisión del QF: **no reemplazan el antibiograma ni el concepto de Infectología**, y deben ser validadas por el comité PROA.
 
 **Estado de cada ficha.** V = contrastada el 2026-11-14 con la fuente o un resumen de ella; G = conocimiento general de referencia, sin contrastar en esta revisión.
 

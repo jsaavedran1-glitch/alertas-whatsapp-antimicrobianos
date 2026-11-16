@@ -52,9 +52,9 @@ var CONFIG = {
   // Una orden continua el tratamiento anterior si empieza hasta N dias despues de su fin (las renovaciones
   // suelen llegar tarde: con 2 dias se perdio un curso de ertapenem de 24 dias, caso del 2026-11-15).
   SEGUIMIENTO_TOLERANCIA_DIAS: 3,
-  // Caso PROA solo con datos (decision del referente, 2026-11-16): sin el bloque de pertinencia ni el veredicto
-  // y sin llamar al modelo. El analisis de las tablas se sigue guardando en REGISTRO_REVISIONES. true lo
-  // devuelve al mensaje (y, con IA_PROA.gs activo, vuelve a llamar al modelo).
+  // Caso PROA solo con datos (decision del referente, 2026-11-16): sin el bloque de pertinencia ni el veredicto.
+  // El analisis de las tablas se sigue guardando en REGISTRO_REVISIONES; true lo devuelve al mensaje.
+  // El bot no usa IA (se retiro el 2026-11-16 por decision del referente: el caso lo valora Infectologia).
   CASO_ANALISIS: false,
   // Revision por tratamiento prolongado (decision del referente, 2026-11-16): mensaje APARTE del caso PROA
   // cuando la solicitud es al menos la PROLONGADO_MIN_SOLICITUDES-esima del mismo tratamiento continuo (contando
@@ -386,9 +386,6 @@ function notificarNuevaRespuesta(e) {
 }
 
 function notificarCaso_(e, coincidencias) {
-  // IA_PROA.gs: con la revision por IA activa, el modelo analiza el caso y su analisis va en el mismo mensaje.
-  // Sin ANTHROPIC_API_KEY, con IA_PROA_MODO = NO o sin el archivo IA_PROA.gs sigue el flujo de siempre.
-  if (CONFIG.CASO_ANALISIS && coincidencias.length > 0 && typeof notificarConRevisionIa_ === 'function' && notificarConRevisionIa_(e, coincidencias)) return;
   if (!debeAlertar(coincidencias)) {
     if (coincidencias.length > 0) registrarRevision(e, coincidencias, { enviado: false });
     return;
@@ -830,7 +827,7 @@ function evaluarPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, es
 }
 
 // { lineas, nivel (-1 sin criterio, 0 pertinente, 1 verificar, 2 intervenir), espectroRojo (una regla de
-// espectro descarta algun antimicrobiano) }. IA_PROA.gs lo usa como referencia y como piso del veredicto.
+// espectro descarta algun antimicrobiano) }.
 var TEXTO_PROFILAXIS = 'Profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)';
 
 // "5-7"
@@ -895,7 +892,7 @@ function duracionFrenteReferencia(diagnosticos, tipoIndicacion, antifungico, tot
 }
 
 // Datos del tratamiento continuo en cada antimicrobiano de la solicitud: diasAcumulados (dias ya recibidos +
-// los de esta orden) y diagnosticosCurso. Lo usan las tablas y la revision por IA.
+// los de esta orden) y diagnosticosCurso, para el analisis de las tablas.
 function asignarCursos(esquemas, seg) {
   esquemas.forEach(function(am) {
     var curso = seg.porAm[am.nombre];
@@ -1031,7 +1028,7 @@ function fechaCorta(d) {
 }
 
 // Solicitudes previas de la misma historia clinica en los ultimos CONFIG.SEGUIMIENTO_DIAS dias.
-// Devuelve { previas, lineas (para el mensaje), historia (cronologia completa, para el modelo),
+// Devuelve { previas, lineas (para el mensaje), historia (texto de cada solicitud previa, en orden),
 // porAm: { nombre: { inicio, transcurridos, proyectado } } }. La duracion se cuenta sobre el tratamiento
 // continuo del paciente, aunque haya cambiado de antimicrobiano (antibacterianos y antifungicos por separado).
 // Se calcula una vez por evento (queda en e._seguimiento). Solo lee la matriz; si falla, devuelve vacio.
@@ -1377,17 +1374,17 @@ function registrarRevision(e, coincidencias, datos) {
     Object.keys(seg.porAm).forEach(function(k) { if (seg.porAm[k].transcurridos > diasContinuos) diasContinuos = seg.porAm[k].transcurridos; });
     var semaforo = ['VERDE', 'AMARILLO', 'ROJO'];
     var tablas = datos.tablas || analisisPertinenciaDesdeEvento(e, coincidencias);
-    var rev = datos.revision || null;
-    var nivelFinal = rev ? ['pertinente', 'verificar', 'intervenir'].indexOf(rev.veredicto) :
-      (datos.nivelFinal !== undefined ? datos.nivelFinal : tablas.nivel);
+    var nivelFinal = datos.nivelFinal !== undefined ? datos.nivelFinal : tablas.nivel;
     hoja.appendRow([new Date(), c('Marca temporal'), c(CAMPOS.HC), c(CAMPOS.SERVICIO), c(CAMPOS.ESPECIALIDAD),
       diagnosticoCorto(c(CAMPOS.DIAGNOSTICO)), c(CAMPOS.MICROORGANISMO), tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION)),
       coincidencias.map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
       acompanantesNoRestringidos(e).map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
-      tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], datos.fuente || (rev ? 'IA' : 'TABLAS'),
+      tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], datos.fuente || 'TABLAS',
       // el bloque de la revision por tratamiento prolongado es el texto que saldra en el resumen: no se recorta
       String(datos.detalle || tablas.lineas.join(' | ')).replace(/[*_]/g, '').slice(0, datos.fuente === FUENTE_PROLONGADO ? 8000 : 1500), seg.previas,
-      datos.estadoEnvio || (datos.enviado ? 'SI' : 'NO'), datos.destino || '', rev ? rev.modelo : '', rev ? rev.entrada : '', rev ? rev.salida : '', datos.costo || '',
+      datos.estadoEnvio || (datos.enviado ? 'SI' : 'NO'), datos.destino || '',
+      // Modelo, tokens y costo: columnas de cuando el bot usaba IA (retirada el 2026-11-16); quedan vacias
+      '', '', '', '',
       diasContinuos]);
   } catch (err) {
     Logger.log('No se pudo registrar la revision: ' + err);
@@ -1489,11 +1486,9 @@ function lineasPaciente(campo, pesoKg) {
   return lineas;
 }
 
-// Mensaje unico del caso: encabezado con el veredicto, datos del paciente, esquema, seguimiento,
-// analisis de pertinencia y avisos. opciones.analisis = { cuerpo, nivel } del modelo (IA_PROA.gs);
-// si no se pasa, se usa el analisis de las tablas.
-function construirMensajeDesdeEvento(e, coincidenciasOpt, opciones) {
-  opciones = opciones || {};
+// Mensaje del caso PROA: datos del paciente, esquema, prescripciones del tratamiento continuo y avisos; con
+// CONFIG.CASO_ANALISIS, tambien el veredicto y el analisis de pertinencia de las tablas.
+function construirMensajeDesdeEvento(e, coincidenciasOpt) {
   var valores = (e && e.namedValues) ? e.namedValues : {};
   function campo(clave) {
     var v = campoDelEvento(valores, CAMPOS[clave]);
@@ -1515,8 +1510,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, opciones) {
   acompanantes.forEach(function(am) { am.mgKg = (pesoKg !== null && numeroONulo(am.dosis) !== null) ? numeroONulo(am.dosis) / pesoKg : null; });
 
   // Con CONFIG.CASO_ANALISIS = false (decision del referente) el mensaje va solo con datos.
-  var analisis = CONFIG.CASO_ANALISIS ? (opciones.analisis || analisisPertinenciaDesdeEvento(e, coincidencias)) : { cuerpo: [], nivel: -1 };
-  var cuerpoAnalisis = analisis.cuerpo || analisis.lineas.slice(1);
+  var analisis = CONFIG.CASO_ANALISIS ? analisisPertinenciaDesdeEvento(e, coincidencias) : { lineas: [], nivel: -1 };
+  var cuerpoAnalisis = analisis.lineas.slice(1);
   var nivel = (analisis.nivel === undefined || analisis.nivel === null) ? -1 : analisis.nivel;
 
   var lineas = encabezadosDestacados(esquemas);
