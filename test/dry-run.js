@@ -99,6 +99,10 @@ var srcIa = fs.readFileSync(path.join(__dirname, '..', 'IA_PROA.gs'), 'utf8');
 (0, eval)(srcIa);
 
 var fallos = 0;
+// En produccion el caso PROA va solo con datos (CONFIG.CASO_ANALISIS = false; tiene su propia prueba). Las demas
+// pruebas revisan tambien el analisis de pertinencia dentro del mensaje, asi que aqui se activa.
+var CASO_ANALISIS_PRODUCCION = CONFIG.CASO_ANALISIS;
+CONFIG.CASO_ANALISIS = true;
 function prueba(desc, fn) {
   try { fn(); console.log('OK - ' + desc); } catch (e) { fallos++; console.log('FALLO - ' + desc + '\n   ' + e.message); }
 }
@@ -656,6 +660,40 @@ prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolo
   } finally { Logger.log = logReal; filas.pop(); }
   var texto = registro.join('\n');
   incluye(texto, 'tratamiento prolongado: sí (3 solicitudes seguidas, 16 d)'); incluye(texto, '*⏳ REVISIÓN PROA · Tratamiento prolongado*');
+});
+
+prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, sin analisis ni modelo', function () {
+  CONFIG.CASO_ANALISIS = CASO_ANALISIS_PRODUCCION;
+  assert.strictEqual(CONFIG.CASO_ANALISIS, false);
+  var propsReal = global.PropertiesService;
+  try {
+    var nv = eventoBase();
+    nv['Marca temporal'] = ['15/11/2026 17:10:18']; nv[CAMPOS.HC] = ['777009']; nv[CAMPOS.EDAD_ANIOS] = ['62']; nv[CAMPOS.PESO_KG] = ['70'];
+    nv[CAMPOS.SERVICIO] = ['Hospitalización General Adulto (Salud Mental)']; nv[CAMPOS.CAMA] = ['7']; nv[CAMPOS.ESPECIALIDAD] = ['Ortopedia'];
+    nv[CAMPOS.DIAGNOSTICO] = ['L031']; nv[CAMPOS.MICROORGANISMO] = ['BETALACTAMASA DE AMPLIO ESPECTRO']; nv[CAMPOS.CULTIVOS] = ['SECRECIÓN'];
+    nv[CAMPOS.TIPO_INDICACION] = ['Tratamiento Etiológico (En presencia de aislamiento conocido)']; nv[CAMPOS.ORIGEN] = ['COMUNIDAD'];
+    nv[CAMPOS.INTERCONSULTA] = ['No'];
+    nv[SLOTS[0].nombre] = ['ERTAPENEM - UT-1']; nv[SLOTS[0].dosis] = ['1000']; nv[SLOTS[0].via] = ['Intravenoso'];
+    nv[SLOTS[0].frecuencia] = ['24']; nv[SLOTS[0].dias] = ['7'];
+    var e = { namedValues: nv };
+    var m = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
+    incluye(m, '*🚨 CASO PROA · Ertapenem*\n📍 Hospitalización General Adulto (Salud Mental) · Cama 7\n📋 L031');
+    incluye(m, '\n📄 HC 777009 · 62 años · 70 kg · Ortopedia\n🦠 BLEE · SECRECIÓN · Etiológico · COMUNIDAD\n⚠️ Sin interconsulta a Infectología\n\n💊 ERTAPENEM');
+    ['Se sugiere', 'Acorde', '📏', '🟢', 'indicado', '🏥'].forEach(function (x) { noIncluye(m, x); });
+    // no se llama al modelo aunque haya clave; el registro sigue guardando el analisis de las tablas
+    var P = { GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test',
+      ANTHROPIC_API_KEY: 'clave-de-prueba', IA_PROA_MODO: 'PRODUCCION' };
+    global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
+    HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
+    conApiSimulada(respuestaIa({}), function (llamadas) {
+      notificarNuevaRespuesta({ namedValues: nv });
+      assert.strictEqual(llamadas.length, 0); assert.strictEqual(envios.length, 1);
+      noIncluye(envios[0].message, 'Se sugiere');
+    });
+    var fila = HOJAS['REGISTRO_REVISIONES']._filas[1], col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+    assert.strictEqual(fila[col('Fuente del análisis')], 'TABLAS'); assert.strictEqual(fila[col('Semáforo tablas')], 'VERDE');
+    incluye(fila[col('Detalle')], 'ERTAPENEM: indicado para el aislamiento registrado');
+  } finally { CONFIG.CASO_ANALISIS = true; global.PropertiesService = propsReal; }
 });
 
 prueba('registro: una fila por revision en REGISTRO_REVISIONES', function () {

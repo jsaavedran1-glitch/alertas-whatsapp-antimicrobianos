@@ -52,6 +52,10 @@ var CONFIG = {
   // Una orden continua el tratamiento anterior si empieza hasta N dias despues de su fin (las renovaciones
   // suelen llegar tarde: con 2 dias se perdio un curso de ertapenem de 24 dias, caso del 2026-11-15).
   SEGUIMIENTO_TOLERANCIA_DIAS: 3,
+  // Caso PROA solo con datos (decision del referente, 2026-11-16): sin el bloque de pertinencia ni el veredicto
+  // y sin llamar al modelo. El analisis de las tablas se sigue guardando en REGISTRO_REVISIONES. true lo
+  // devuelve al mensaje (y, con IA_PROA.gs activo, vuelve a llamar al modelo).
+  CASO_ANALISIS: false,
   // Revision por tratamiento prolongado (decision del referente, 2026-11-16): mensaje APARTE del caso PROA
   // cuando la solicitud es al menos la PROLONGADO_MIN_SOLICITUDES-esima del mismo tratamiento continuo (contando
   // esta) y el paciente ya lleva mas de PROLONGADO_DIAS dias. Aplica con o sin restringido.
@@ -384,7 +388,7 @@ function notificarNuevaRespuesta(e) {
 function notificarCaso_(e, coincidencias) {
   // IA_PROA.gs: con la revision por IA activa, el modelo analiza el caso y su analisis va en el mismo mensaje.
   // Sin ANTHROPIC_API_KEY, con IA_PROA_MODO = NO o sin el archivo IA_PROA.gs sigue el flujo de siempre.
-  if (coincidencias.length > 0 && typeof notificarConRevisionIa_ === 'function' && notificarConRevisionIa_(e, coincidencias)) return;
+  if (CONFIG.CASO_ANALISIS && coincidencias.length > 0 && typeof notificarConRevisionIa_ === 'function' && notificarConRevisionIa_(e, coincidencias)) return;
   if (!debeAlertar(coincidencias)) {
     if (coincidencias.length > 0) registrarRevision(e, coincidencias, { enviado: false });
     return;
@@ -1466,16 +1470,18 @@ function diagnosticoCorto(diagnosticoCrudo) {
   return m ? m[1] + ' · ' + capitalizar(m[2]) : texto;
 }
 
-// Datos del paciente que encabezan el caso PROA y la revision por tratamiento prolongado.
+// Datos del paciente del caso PROA: primero donde esta (servicio y cama) y su diagnostico.
 // campo(clave) devuelve el valor de CAMPOS[clave] o '-'.
 function lineasPaciente(campo, pesoKg) {
   var E = function(cp) { return String.fromCodePoint(cp); };
   var cama = campo('CAMA'), especialidad = campo('ESPECIALIDAD');
-  var lineas = [E(0x1F4C4) + ' HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
-    ' · ' + ((pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-')];
-  lineas.push(E(0x1F3E5) + ' ' + campo('SERVICIO') + (cama !== '-' ? ' · Cama ' + cama : '') + (especialidad !== '-' ? ' · ' + especialidad : ''));
+  var lineas = [E(0x1F4CD) + ' ' + campo('SERVICIO') + (cama !== '-' ? ' · Cama ' + cama : '')];
   lineas.push(E(0x1F4CB) + ' ' + diagnosticoCorto(campo('DIAGNOSTICO')));
-  lineas.push(E(0x1F9A0) + ' ' + [campo('MICROORGANISMO'), campo('CULTIVOS'), tipoIndicacionTexto(campo('TIPO_INDICACION')), campo('ORIGEN')]
+  lineas.push(E(0x1F4C4) + ' HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
+    ' · ' + ((pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-') + (especialidad !== '-' ? ' · ' + especialidad : ''));
+  // "BETALACTAMASA DE AMPLIO ESPECTRO" -> "BLEE" (solo en el mensaje)
+  var micro = String(campo('MICROORGANISMO')).replace(/beta ?-?lactamasas? de (amplio espectro|espectro extendido|espectro ampliado|espectro amplio)/gi, 'BLEE');
+  lineas.push(E(0x1F9A0) + ' ' + [micro, campo('CULTIVOS'), tipoIndicacionTexto(campo('TIPO_INDICACION')), campo('ORIGEN')]
     .filter(function(x) { return x && x !== '-'; }).join(' · '));
   if (String(campo('INDICACION')).toUpperCase() === 'CAMBIO') lineas.push(E(0x1F504) + ' Cambio: ' + capitalizar(campo('RAZON_CAMBIO')));
   if (esSi(campo('INTERCONSULTA'))) lineas.push(E(0x1F9EA) + ' Interconsulta a Infectología: Sí');
@@ -1508,7 +1514,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, opciones) {
   coincidencias.forEach(function(am) { am.ev = evaluarDosis(am.nombre, am.dosis, pesoKg, reglas); am.mgKg = am.ev.mgKg; });
   acompanantes.forEach(function(am) { am.mgKg = (pesoKg !== null && numeroONulo(am.dosis) !== null) ? numeroONulo(am.dosis) / pesoKg : null; });
 
-  var analisis = opciones.analisis || analisisPertinenciaDesdeEvento(e, coincidencias);
+  // Con CONFIG.CASO_ANALISIS = false (decision del referente) el mensaje va solo con datos.
+  var analisis = CONFIG.CASO_ANALISIS ? (opciones.analisis || analisisPertinenciaDesdeEvento(e, coincidencias)) : { cuerpo: [], nivel: -1 };
   var cuerpoAnalisis = analisis.cuerpo || analisis.lineas.slice(1);
   var nivel = (analisis.nivel === undefined || analisis.nivel === null) ? -1 : analisis.nivel;
 
@@ -1517,8 +1524,6 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, opciones) {
   lineas.push('*' + E(0x1F6A8) + ' CASO PROA · ' +
     (coincidencias.map(function(am) { return capitalizar(am.nombre); }).join(' + ') || 'Antimicrobiano restringido') + '*');
   if (nivel >= 0) lineas.push(color[nivel] + ' *' + capitalizar(ETIQUETA_NIVEL[nivel]) + '*');
-
-  lineas.push('');
   lineasPaciente(campo, pesoKg).forEach(function(l) { lineas.push(l); });
   var tipoIndicacion = tipoIndicacionTexto(campo('TIPO_INDICACION'));
 

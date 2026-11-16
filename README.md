@@ -60,6 +60,8 @@ Si se cambia la lista de la pestaña, conviene actualizar también la de respald
 
 ### Datos del mensaje
 
+Desde la v1.23.0 el caso PROA va **solo con datos** (`CONFIG.CASO_ANALISIS = false`): título, `📍` servicio y cama, `📋` diagnóstico, `📄` HC, edad, peso y especialidad, `🦠` aislamiento, cultivos, indicación y origen, interconsulta, cada antimicrobiano con los días en negrita y la lista numerada de prescripciones del tratamiento continuo con su total. Sin veredicto, sin pertinencia y sin modelo; el análisis de las tablas queda en `REGISTRO_REVISIONES`.
+
 | En el mensaje | Pregunta del formulario (título exacto) |
 |---|---|
 | 📄 Historia Clínica | `Número de Historia Clínica` |

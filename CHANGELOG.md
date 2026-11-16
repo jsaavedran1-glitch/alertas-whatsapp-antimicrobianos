@@ -2,6 +2,15 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.23.0] - 2026-11-16
+
+### Cambiado (decisión del referente: el caso PROA, solo con datos)
+- **Sin análisis en el CASO PROA:** salen el veredicto (`🟡 Se sugiere verificar`) y el bloque de pertinencia (`🟢 indicado…`, `📏 referencia`, días frente a la referencia). La duración la muestran la lista de prescripciones con su total y la revisión por tratamiento prolongado de las 7:00. `CONFIG.CASO_ANALISIS = false`; con `true` vuelve todo como antes.
+- **Sin modelo:** con `CASO_ANALISIS = false` no se llama a la API de Anthropic para el caso PROA (costo cero), aunque `ANTHROPIC_API_KEY` siga configurada.
+- **Ubicación y diagnóstico primero**, bajo el título: `📍 Hospitalización General Adulto (Salud Mental) · Cama 7` y `📋 L031 · Celulitis de otras partes de los miembros`. La especialidad pasa a la línea de la HC (`📄 HC … · 62 años · 70 kg · Ortopedia`); el aislamiento abrevia "betalactamasa de amplio espectro" a `BLEE`.
+- El análisis de las tablas se sigue calculando y guardando en `REGISTRO_REVISIONES` (semáforo y detalle), para auditoría del comité.
+- Fila 7638: de 22 a 16 líneas (unos 820 caracteres con el pie).
+
 ## [1.22.0] - 2026-11-16
 
 ### Cambiado (pedido del referente: orden de las prescripciones y días en negrita)
