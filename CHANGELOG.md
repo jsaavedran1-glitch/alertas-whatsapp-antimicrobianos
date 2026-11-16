@@ -2,6 +2,20 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.18.0] - 2026-11-16
+
+### Agregado (petición del referente: revisar pacientes con más de 14 días de tratamiento cuando se formula un medicamento nuevo)
+- **Revisión por tratamiento prolongado:** si el paciente ya lleva **más de 14 días de antimicrobiano continuo** (sumando los cambios entre fármacos, con la tolerancia de 3 días del seguimiento) y se formula una orden nueva, el bot envía `*⏳ REVISIÓN PROA · Tratamiento prolongado*` **aunque no haya restringido**. Cubre cefepime, piperacilina/tazobactam, meropenem, etc.
+- Línea nueva en todos esos mensajes: `⏳ *Lleva 16 d de antibiótico continuo y se formula CEFEPIME; con esta orden, 23 d*`. Con restringido el caso sigue siendo `🚨 CASO PROA` y suma esta línea.
+- El caso pasa por el modelo con el motivo de la revisión; si las tablas no tienen criterio para el diagnóstico, el veredicto mínimo es `🟡 Se sugiere verificar`.
+- `CONFIG.PROLONGADO_ACTIVO` (true), `PROLONGADO_DIAS` (14) y `PROLONGADO_SOLO_CAMBIO` (false: revisa también las renovaciones del mismo fármaco; true: solo cuando se formula uno que el paciente no venía recibiendo).
+- `REGISTRO_REVISIONES` agrega la columna **Días de tratamiento continuo** (la 22); si la pestaña tiene el encabezado anterior, se amplía sola.
+- Estimación con la matriz real (01/11–15/11): 22 de 359 solicitudes (11 pacientes), la mitad sin restringido; unas 1-2 revisiones al día.
+
+### Corregido
+- `💡 Sugerencia PROA` decía "terapia empírica combinada (CEFEPIME)" con un solo antimicrobiano: "combinada" solo con dos o más.
+- En la revisión por tratamiento prolongado no sale "Revaluar a las 48-72 h con cultivos" (es para el inicio de la terapia empírica).
+
 ## [1.17.1] - 2026-11-16
 
 ### Corregido (primera prueba con la historia real del paciente de la fila 7638)
