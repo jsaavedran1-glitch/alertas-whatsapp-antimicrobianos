@@ -50,9 +50,9 @@ La lista vigente está en la pestaña **`ANTIMICROBIANOS_RESTRINGIDOS`** de la m
 
 Ceftazidima / Avibactam · Anfotericina · Aztreonam · Ertapenem · Caspofungina · Anfotericina B liposomal · Tygeciclina · Doripenem · Rifampicina · Polimixina B · Daptomicina
 
-> **Vancomicina y linezolid no disparan alerta por sí solas** desde el 2026-11-02 (eran el 73 % y el 9 % de las alertas de octubre). Siguen siendo restringidas: si otro antimicrobiano de la misma solicitud dispara la alerta (p. ej. ceftazidima/avibactam en el primero y vancomicina en el segundo), vancomicina sale como "Antimicrobiano restringido 2" con su dosis evaluada, no como acompañante.
+> **Vancomicina y linezolid no disparan alerta por sí solas** desde el 2026-11-02 (eran el 73 % y el 9 % de las alertas de octubre), y **ertapenem** desde el 2026-11-16: lo cubre la `📆 REVISIÓN DE DURACIÓN DE TTO` cuando lleva 3 o más prescripciones seguidas y más de 10 días. Siguen siendo restringidas: si otro antimicrobiano de la misma solicitud dispara la alerta (p. ej. ceftazidima/avibactam en el primero y vancomicina en el segundo), vancomicina sale como "Antimicrobiano restringido 2" con su dosis evaluada, no como acompañante.
 >
-> Esto se controla con la columna **`dispara_alerta`** (SI/NO, vacío = SI) de la pestaña `ANTIMICROBIANOS_RESTRINGIDOS`. Si la pestaña no tiene esa columna, el código agrega las moléculas de `CONFIG.RESTRINGIDOS_SIN_ALERTA_PROPIA` (vancomicina, linezolid) con NO. Para que vuelvan a disparar alerta: escribirlas en la pestaña con `SI` en la columna B.
+> Esto se controla con la columna **`dispara_alerta`** (SI/NO, vacío = SI) de la pestaña `ANTIMICROBIANOS_RESTRINGIDOS`. Si la pestaña no tiene esa columna, el código agrega las moléculas de `CONFIG.RESTRINGIDOS_SIN_ALERTA_PROPIA` (vancomicina, linezolid, ertapenem) con NO. Para que vuelvan a disparar alerta: escribirlas en la pestaña con `SI` en la columna B.
 
 **Para agregar o quitar un antimicrobiano no hay que tocar el código:** basta con editar esa pestaña, una fila por antimicrobiano. Hay que escribirlo como aparece en el formulario (por ejemplo `TYGECICLINA` con Y). Ojo con nombres muy cortos o genéricos: como la comparación es por "contiene", un término como `CEF` alertaría por todas las cefalosporinas.
 

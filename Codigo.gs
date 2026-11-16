@@ -2,12 +2,13 @@ var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
   HOJA_RESPUESTAS: 'Respuestas de formulario 1',
   HOJA_ANTIMICROBIANOS_RESTRINGIDOS: 'ANTIMICROBIANOS_RESTRINGIDOS',
-  ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO: ['CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'CASPOFUNGINA', 'ANFOTERICINA B LIPOSOMAL', 'TYGECICLINA', 'DORIPENEM', 'RIFAMPICINA', 'POLIMIXINA B', 'DAPTOMICINA'],
+  ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO: ['CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'CASPOFUNGINA', 'ANFOTERICINA B LIPOSOMAL', 'TYGECICLINA', 'DORIPENEM', 'RIFAMPICINA', 'POLIMIXINA B', 'DAPTOMICINA'],
   // Restringidos que NO disparan alerta por si solos (decision del Servicio Farmaceutico, 2026-11-02),
   // pero que se muestran como restringidos (con su dosis evaluada) cuando otro antimicrobiano de la
   // misma solicitud si dispara la alerta. Equivale a la columna "dispara_alerta = NO" de la pestana;
-  // si la pestana trae esa columna, la pestana manda.
-  RESTRINGIDOS_SIN_ALERTA_PROPIA: ['VANCOMICINA', 'LINEZOLID'],
+  // si la pestana trae esa columna, la pestana manda. ERTAPENEM desde 2026-11-16 (decision del referente): ya no
+  // genera caso PROA en cada solicitud; lo cubre la revision de duracion (3 o mas prescripciones y mas de 10 d).
+  RESTRINGIDOS_SIN_ALERTA_PROPIA: ['VANCOMICINA', 'LINEZOLID', 'ERTAPENEM'],
   HOJA_CIE10: 'CIE10',
   CACHE_CIE10_SEG: 21600,
   HOJA_RANGOS_DOSIS: 'RANGOS_DOSIS',

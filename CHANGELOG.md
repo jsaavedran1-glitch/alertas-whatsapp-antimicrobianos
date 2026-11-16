@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.28.0] - 2026-11-16
+
+### Cambiado (decisión del referente)
+- **Ertapenem ya no genera `🚨 CASO PROA` en cada solicitud.** Se cambió `dispara_alerta` a `NO` en la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` (fila de ERTAPENEM) y se pasó de `ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO` a `RESTRINGIDOS_SIN_ALERTA_PROPIA` en el código, por si la pestaña no se puede leer. Sigue siendo restringido: sale con 💊 si otro restringido de la misma solicitud dispara el caso.
+- El ertapenem queda cubierto por la **`📆 REVISIÓN DE DURACIÓN DE TTO`**: cuando el paciente lleva 3 o más prescripciones seguidas y más de 10 días, la revisión sale a las 7:00 (como la fila 7638: 66 d).
+- Con la matriz real (01/11–15/11): 21 casos PROA en lugar de 26; las revisiones de duración siguen en 17.
+
 ## [1.27.0] - 2026-11-16
 
 ### Cambiado (pedido del referente)
