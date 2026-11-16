@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.21.1] - 2026-11-16
+
+### Corregido (prueba con la fila 7638 en el proyecto en vivo)
+- El **caso PROA y la revisión por tratamiento prolongado daban veredictos distintos** para los mismos 66 d: el caso comparaba con el diagnóstico actual (piel, 5-7 d → 🔴) y la revisión con la patología más larga del tratamiento (osteomielitis, 42 d → 🟡). Ahora el caso PROA usa la misma regla (`sindromeDeDuracion()`): si el tratamiento continuo pasó por otras patologías, la línea 📏 muestra la de mayor duración y dice "la más larga de sus patologías". Los antifúngicos se siguen comparando con el diagnóstico actual.
+- **Dos órdenes el mismo día con antimicrobianos distintos** salían como combinación (`MEROPENEM + ERTAPENEM 17/09`): la posterior reemplaza a la anterior, como en la línea 🔁 del caso PROA. Si son del mismo formulario (varios antimicrobianos a la vez), se siguen sumando.
+
 ## [1.21.0] - 2026-11-16
 
 ### Cambiado (revisión por tratamiento prolongado, pedido del referente)

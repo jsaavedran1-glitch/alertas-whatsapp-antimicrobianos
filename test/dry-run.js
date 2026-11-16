@@ -531,6 +531,23 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   assert.strictEqual(r7.nivel, 0); incluye(r7.bloque[r7.bloque.length - 1], '📏 Osteomielitis / espondilodiscitis 42 d (');
   incluye(r7.bloque[r7.bloque.length - 1], ', la más larga de sus patologías: 29 d dentro de la referencia');
 
+  // El caso PROA usa la misma referencia: los dos mensajes dicen lo mismo
+  var t7 = analisisPertinenciaDesdeEvento(e7, []);
+  incluye(t7.encabezadoDias, 'Osteomielitis / espondilodiscitis: 42 d ('); incluye(t7.encabezadoDias, ', la más larga de sus patologías');
+  incluye(t7.lineas.join('\n'), '🟢 CEFAZOLINA 29 d continuos: dentro de la referencia');
+  var t6 = analisisPertinenciaDesdeEvento(e6, []);
+  incluye(t6.encabezadoDias, 'Bacteriemia / sepsis: 7-14 d'); incluye(t6.lineas.join('\n'), '🟡 CEFEPIME 23 d continuos: supera la referencia');
+  assert.strictEqual(t6.nivel, r6.nivel);
+  // sin cursos previos, la referencia es la del diagnostico actual
+  incluye(analisisPertinenciaDesdeEvento(eventoSeguimiento('01/11/2026 10:00:00', '888099', 'L031', [['CEFAZOLINA', '2000', '8', '7']]), []).encabezadoDias,
+    'Infección de piel y tejidos blandos: 5-7 d');
+  // Dos ordenes el mismo dia con antimicrobianos distintos: la posterior reemplaza a la anterior (no es combinacion)
+  filas.push(filaMatriz('17/10/2026 08:00:00', '888008', [['MEROPENEM', '1000', '8', '7']]));
+  filas.push(filaMatriz('17/10/2026 20:00:00', '888008', [['ERTAPENEM', '1000', '24', '7']]));
+  filas.push(filaMatriz('24/10/2026 08:00:00', '888008', [['ERTAPENEM', '1000', '24', '7']]));
+  var r8 = revisionProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888008', 'L031', [['ERTAPENEM', '1000', '24', '7']]), []);
+  assert.strictEqual(r8.bloque[2], '1-2. ERTAPENEM 17/10/2026-01/11/2026 · 15 d'); noIncluye(r8.mensaje, 'MEROPENEM');
+
   // No alcanza: 2 solicitudes aunque sean 22 d; 3 solicitudes con solo 7 d; dos ordenes el mismo dia son una
   filas.push(filaMatriz('10/10/2026 08:00:00', '888002', [['MEROPENEM', '1000', '8', '21']]));
   assert.strictEqual(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888002', 'J189', [['MEROPENEM', '1000', '8', '7']])), null);

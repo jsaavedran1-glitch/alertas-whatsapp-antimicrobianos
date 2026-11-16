@@ -890,12 +890,30 @@ function duracionFrenteReferencia(diagnosticos, tipoIndicacion, antifungico, tot
     nivel: nivel, texto: ['dentro de la referencia', 'supera la referencia', 'duplica la referencia'][nivel] };
 }
 
+// Referencia de duracion del caso: la del diagnostico actual o, si el tratamiento continuo de algun
+// antibacteriano paso por otras patologias (am.diagnosticosCurso), la de mayor duracion. Es la misma regla
+// de la revision por tratamiento prolongado, para que los dos mensajes digan lo mismo.
+function sindromeDeDuracion(sindrome, esquemas) {
+  var tabla = obtenerPertinencia(), candidatos = (sindrome && sindrome.max !== null) ? [sindrome] : [];
+  esquemas.forEach(function(am) {
+    if (esAntifungico(am.nombre)) return;
+    (am.diagnosticosCurso || []).forEach(function(dx) {
+      var s = sindromePara(dx, tabla);
+      if (s && s.max !== null) candidatos.push(s);
+    });
+  });
+  if (!candidatos.length) return sindrome;
+  // ante empate gana el diagnostico actual (es el primero)
+  return candidatos.reduce(function(a, b) { return b.max > a.max ? b : a; });
+}
+
 function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, esquemas, contexto) {
   var vacio = { lineas: [], nivel: -1, espectroRojo: false, encabezadoDias: '', rojos: [] };
   if (!CONFIG.PERTINENCIA_ACTIVA) return vacio;
   var E = function(cp) { return String.fromCodePoint(cp); };
   var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
   var sindrome = sindromePara(diagnosticoCrudo, obtenerPertinencia());
+  var sindromeDias = sindromeDeDuracion(sindrome, esquemas);
   var peor = -1, tratamiento = [], dias = [], espectroRojo = false, rojos = [];
   var neutro = E(0x26AA);
   var sinValorar = function(am, n) { dias.push(neutro + ' ' + am.nombre + ' ' + formatoNumero(n, 0) + ' d: ' + TEXTO_DIAS_SIN_VALORAR); };
@@ -925,17 +943,19 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
       if (n > 1) marcar(dias, 2, am.nombre + ' ' + formatoNumero(n, 0) + ' d: supera las 24 h de la profilaxis; revaluar');
       else marcar(dias, 0, am.nombre + ' ' + formatoNumero(n, 0) + ' d: dentro de la referencia');
     });
-  } else if (sindrome && sindrome.max !== null) {
-    encabezadoDias = encabezadoDuracion(sindrome);
+  } else if (sindromeDias && sindromeDias.max !== null) {
+    encabezadoDias = encabezadoDuracion(sindromeDias) + (sindromeDias !== sindrome ? ', la más larga de sus patologías' : '');
     conDias.forEach(function(am) {
       var n = numeroONulo(am.dias);
       if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
-      if (esAntifungico(am.nombre) && CONFIG.SINDROMES_FUNGICOS.indexOf(sindrome.clave) === -1) {
+      // los antifungicos se comparan con el diagnostico actual (sus cursos son aparte de los antibacterianos)
+      var ref = esAntifungico(am.nombre) ? sindrome : sindromeDias;
+      if (esAntifungico(am.nombre) && (!ref || ref.max === null || CONFIG.SINDROMES_FUNGICOS.indexOf(ref.clave) === -1)) {
         dias.push(neutro + ' ' + etiquetaDias(am, n) + ': sin duración de referencia para un antifúngico en este foco');
         soloAntifungico++;
         return;
       }
-      var v = valorarDuracion(sindrome, am.diasAcumulados > n ? am.diasAcumulados : n);
+      var v = valorarDuracion(ref, am.diasAcumulados > n ? am.diasAcumulados : n);
       marcar(dias, v.nivel, etiquetaDias(am, n) + ': ' + v.texto);
     });
   } else if (sindrome && sindrome.nota) {
@@ -1081,9 +1101,14 @@ function seguimientoPaciente(e) {
         previasTipo.filter(function(p) { return p.fecha.getTime() >= inicioEpisodio; })
           .sort(function(a, b) { return a.fecha.getTime() - b.fecha.getTime(); })
           .forEach(function(p) {
-            var d = diaCal(p.fecha.getTime()), ult = solicitudesEp[solicitudesEp.length - 1];
-            if (ult && ult.dia === d) { if (ult.nombres.indexOf(p.nombre) === -1) ult.nombres.push(p.nombre); if (!ult.dx) ult.dx = p.dx; return; }
-            solicitudesEp.push({ dia: d, inicio: p.fecha.getTime(), nombres: [p.nombre], dx: p.dx });
+            var d = diaCal(p.fecha.getTime()), t = p.fecha.getTime(), ult = solicitudesEp[solicitudesEp.length - 1];
+            if (ult && ult.dia === d) {
+              // misma solicitud con varios antimicrobianos: se suman; una orden posterior del mismo dia la reemplaza
+              if (ult.t === t) { if (ult.nombres.indexOf(p.nombre) === -1) ult.nombres.push(p.nombre); }
+              else { ult.t = t; ult.nombres = [p.nombre]; if (p.dx) ult.dx = p.dx; }
+              return;
+            }
+            solicitudesEp.push({ dia: d, t: t, inicio: t, nombres: [p.nombre], dx: p.dx });
           });
         var mismoDia = solicitudesEp.some(function(x) { return x.dia === diaCal(ahora.getTime()); });
         solicitudesEp = solicitudesEp.filter(function(x) { return x.dia !== diaCal(ahora.getTime()); });
@@ -1375,7 +1400,10 @@ function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var seg = seguimientoPaciente(e);
   esquemas.forEach(function(am) {
     var curso = seg.porAm[am.nombre];
-    if (curso && curso.transcurridos >= 1) am.diasAcumulados = curso.proyectado;
+    if (curso && curso.transcurridos >= 1) {
+      am.diasAcumulados = curso.proyectado;
+      am.diagnosticosCurso = curso.episodio.solicitudes.map(function(x) { return x.dx; });
+    }
   });
   return analisisPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
     micro === '-' ? '' : micro, esquemas, { cultivos: campoDelEvento(valores, CAMPOS.CULTIVOS) });
