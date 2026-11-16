@@ -230,7 +230,21 @@ function listaRespaldoRestringidos() {
   return completarSinAlertaPropia(CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO.map(function(n) { return entradaRestringido(n, true); }));
 }
 
+// Cache de la ejecucion: cada pestana de configuracion se lee una sola vez por ejecucion. Cada formulario es una
+// ejecucion nueva de Apps Script, asi que un cambio en la hoja se ve en la siguiente solicitud. Antes se leia en
+// cada uso (decenas de lecturas por solicitud con un paciente de muchas prescripciones: 40-60 s).
+var CACHE_EJECUCION = {};
+function enCacheEjecucion(clave, leer) {
+  if (!Object.prototype.hasOwnProperty.call(CACHE_EJECUCION, clave)) CACHE_EJECUCION[clave] = leer();
+  return CACHE_EJECUCION[clave];
+}
+function limpiarCacheEjecucion() { CACHE_EJECUCION = {}; }
+
 function obtenerAntimicrobianosRestringidos() {
+  return enCacheEjecucion('restringidos', leerAntimicrobianosRestringidos_);
+}
+
+function leerAntimicrobianosRestringidos_() {
   try {
     var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_ANTIMICROBIANOS_RESTRINGIDOS);
     if (!hoja) {
@@ -279,6 +293,10 @@ function filaARegla(fila) {
 }
 
 function obtenerRangosDosis() {
+  return enCacheEjecucion('rangos', leerRangosDosis_);
+}
+
+function leerRangosDosis_() {
   var respaldo = CONFIG.RANGOS_DOSIS_RESPALDO.map(filaARegla).filter(Boolean);
   try {
     var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_RANGOS_DOSIS);
@@ -316,6 +334,7 @@ function reescribirHojaRangosDosis() {
 }
 
 function escribirRangosDosis(hoja) {
+  limpiarCacheEjecucion();
   var enc = ['antimicrobiano', 'min_mg_kg_dosis', 'max_mg_kg_dosis', 'min_mg_dosis', 'max_mg_dosis', 'ajuste_renal', 'nota'];
   hoja.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold');
   hoja.setFrozenRows(1);
@@ -739,6 +758,10 @@ function filaAPertinencia(fila) {
 }
 
 function obtenerPertinencia() {
+  return enCacheEjecucion('pertinencia', leerPertinencia_);
+}
+
+function leerPertinencia_() {
   var respaldo = CONFIG.PERTINENCIA_RESPALDO.map(filaAPertinencia).filter(Boolean);
   try {
     var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_PERTINENCIA);
@@ -771,6 +794,7 @@ function reescribirHojaPertinencia() {
 }
 
 function escribirPertinencia(hoja) {
+  limpiarCacheEjecucion();
   var enc = ['clave', 'cie10_prefijos', 'palabras_clave', 'sindrome', 'dias_min', 'dias_max', 'nota', 'fuente'];
   hoja.getRange(1, 1, 1, enc.length).setValues([enc]).setFontWeight('bold');
   hoja.setFrozenRows(1);

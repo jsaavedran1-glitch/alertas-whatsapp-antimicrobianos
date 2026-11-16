@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.29.2] - 2026-11-16
+
+### Corregido (rendimiento: `probarUltimaSolicitud(7603)` tardaba 46-59 s)
+- Las pestañas `PERTINENCIA_DURACION`, `RANGOS_DOSIS` y `ANTIMICROBIANOS_RESTRINGIDOS` se leían de la hoja en cada uso (la patología de cada prescripción volvía a leer la tabla de duración). Ahora se leen **una vez por ejecución** (`enCacheEjecucion()`): en la réplica de la fila 7638, de 18 lecturas a 3 por solicitud. Cada formulario es una ejecución nueva, así que un cambio en esas pestañas se ve en la siguiente solicitud; `crearHoja…`/`reescribirHoja…` limpian la caché.
+
 ## [1.29.1] - 2026-11-16
 
 ### Cambiado (pedido del referente)

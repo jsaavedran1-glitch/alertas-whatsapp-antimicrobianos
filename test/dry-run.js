@@ -102,6 +102,7 @@ var fallos = 0;
 var CASO_ANALISIS_PRODUCCION = CONFIG.CASO_ANALISIS;
 CONFIG.CASO_ANALISIS = true;
 function prueba(desc, fn) {
+  limpiarCacheEjecucion();
   try { fn(); console.log('OK - ' + desc); } catch (e) { fallos++; console.log('FALLO - ' + desc + '\n   ' + e.message); }
 }
 function incluye(texto, parte) { assert.ok(texto.indexOf(parte) > -1, 'falta "' + parte + '" en:\n' + texto); }
@@ -132,9 +133,11 @@ prueba('filtro: restringidos si, no restringidos no', function () {
   // hoja sin columna B y sin vancomicina: el CONFIG la agrega como "sin alerta propia"
   var original = HOJAS['ANTIMICROBIANOS_RESTRINGIDOS'];
   HOJAS['ANTIMICROBIANOS_RESTRINGIDOS'] = hojaDeFilas([['Antimicrobiano']].concat(RESTRINGIDOS.map(function (a) { return [a]; })));
+  limpiarCacheEjecucion();   // otra ejecucion con la pestana cambiada
   var cv = filtrarAntimicrobianosRestringidos(eventoPruebaVancomicinaSola());
   assert.strictEqual(cv.length, 1); assert.strictEqual(cv[0].dispara, false);
   HOJAS['ANTIMICROBIANOS_RESTRINGIDOS'] = original;
+  limpiarCacheEjecucion();
   ['CASPOFUNGINA 50, 70 - UT-1', 'ANFOTERICINA B LIPOSOMAL - UT-1', 'TYGECICLINA - UT-1', 'DORIPENEM - UT-1', 'RIFAMPICINA - UT-1',
     'POLIMIXINA B - UT-1', 'DAPTOMICINA - UT-1'].forEach(function (n) {
     var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = [n];
@@ -825,6 +828,21 @@ function conApiSimulada(fn) {
   } };
   try { fn(llamadas); } finally { global.UrlFetchApp = real; }
 }
+
+prueba('cache de la ejecucion: cada pestana de configuracion se lee una sola vez', function () {
+  var lecturas = {}, realOpen = SpreadsheetApp.openById;
+  SpreadsheetApp.openById = function (id) {
+    var ss = realOpen(id);
+    return { getSheetByName: function (n) { lecturas[n] = (lecturas[n] || 0) + 1; return ss.getSheetByName(n); }, insertSheet: ss.insertSheet };
+  };
+  try {
+    for (var i = 0; i < 5; i++) { obtenerPertinencia(); obtenerAntimicrobianosRestringidos(); obtenerRangosDosis(); }
+    assert.strictEqual(lecturas['PERTINENCIA_DURACION'] || 0, 1, 'pertinencia'); assert.strictEqual(lecturas['ANTIMICROBIANOS_RESTRINGIDOS'], 1);
+    assert.strictEqual(lecturas['RANGOS_DOSIS'], 1);
+    limpiarCacheEjecucion(); obtenerPertinencia();
+    assert.strictEqual(lecturas['PERTINENCIA_DURACION'] || 0, 2, 'nueva ejecucion: se vuelve a leer');
+  } finally { SpreadsheetApp.openById = realOpen; }
+});
 
 prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {
   assert.ok(src.indexOf("getProperty('GREENAPI_API_TOKEN')") > -1);
