@@ -1139,12 +1139,23 @@ function seguimientoPaciente(e) {
     var desde = ahora.getTime() - CONFIG.SEGUIMIENTO_DIAS * dia;
     var celdas = hoja.getRange(2, cHc + 1, ultima - 1, 1).createTextFinder(hc).matchEntireCell(true).findAll() || [];
     var previas = [], solicitudes = [];
-    celdas.slice(-40).forEach(function(celda) {
-      var f = celda.getRow();
-      if (f === filaActual) return;
-      var fila = hoja.getRange(f, 1, 1, columnas).getValues()[0];
+    // Dos lecturas en bloque en vez de una por fila (cada lectura a la hoja tarda): primero la columna de fechas
+    // del tramo donde esta la HC, despues solo las filas que caen en la ventana de SEGUIMIENTO_DIAS.
+    var enVentana = [], filasHc = celdas.slice(-40).map(function(c) { return c.getRow(); }).filter(function(f) { return f !== filaActual; });
+    if (filasHc.length) {
+      var r0 = Math.min.apply(null, filasHc), r1 = Math.max.apply(null, filasHc);
+      var fechas = hoja.getRange(r0, 1, r1 - r0 + 1, 1).getValues();
+      enVentana = filasHc.filter(function(f) {
+        var fecha = fechaDe(fechas[f - r0][0]);
+        return fecha && fecha.getTime() < ahora.getTime() - 1000 && fecha.getTime() >= desde;
+      });
+    }
+    var v0 = enVentana.length ? Math.min.apply(null, enVentana) : 0;
+    var filasBloque = enVentana.length ? hoja.getRange(v0, 1, Math.max.apply(null, enVentana) - v0 + 1, columnas).getValues() : [];
+    enVentana.forEach(function(f) {
+      var fila = filasBloque[f - v0];
       var fecha = fechaDe(fila[0]);
-      if (!fecha || fecha.getTime() >= ahora.getTime() - 1000 || fecha.getTime() < desde) return;
+      if (!fecha) return;
       var dato = function(nombre) { var c = col(nombre); return c < 0 ? '' : String(fila[c] === null || fila[c] === undefined ? '' : fila[c]).trim(); };
       var items = [];
       SLOTS.forEach(function(slot) {

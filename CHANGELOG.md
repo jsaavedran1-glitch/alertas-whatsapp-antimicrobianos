@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.29.3] - 2026-11-16
+
+### Corregido (rendimiento, segunda parte: `probarUltimaSolicitud(7603)` seguía en 37 s)
+- `seguimientoPaciente()` leía de la hoja **cada fila** donde aparece la HC (hasta 40, incluso las que quedan fuera de los 60 días). Ahora hace dos lecturas en bloque: la columna de fechas del tramo donde está la HC y, después, solo las filas dentro de la ventana. El resultado es el mismo (la reproducción de 01/11–15/11 da los mismos 12 casos PROA y 17 revisiones).
+
 ## [1.29.2] - 2026-11-16
 
 ### Corregido (rendimiento: `probarUltimaSolicitud(7603)` tardaba 46-59 s)
