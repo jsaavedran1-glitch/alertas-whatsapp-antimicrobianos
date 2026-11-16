@@ -215,7 +215,7 @@ prueba('mensaje: daptomicina con interconsulta, meropenem como acompanante, fech
   noIncluye(t, 'Ajuste renal');
   incluye(t, '💊 DAPTOMICINA');
   incluye(t, '420 mg (6 mg/kg) IV c/24 h');
-  assert.ok(/· \*14 d\* hasta \d\d\/\d\d\/\d{4}/.test(t), t);
+  assert.ok(/· \*14 d\* hasta \d\d\/\d\d(\n| )/.test(t) && !/hasta \d\d\/\d\d\/\d{4}/.test(t), t);
   noIncluye(t, 'fuera del rango');
   incluye(t, '➕ MEROPENEM 1000 mg (14,3 mg/kg) IV c/8 h · *7 d* hasta');
   assert.strictEqual(t.split('💊').length - 1, 1, 'un solo restringido');
@@ -490,7 +490,7 @@ prueba('seguimiento: dias calendario que cuadran con las fechas y sin tramos de 
   noIncluye(t, ' 0 d');
   var m = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(m, '🔴 ERTAPENEM · *66 d* de antibiótico continuo: supera la referencia');
-  incluye(m, '💊 ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · *7 d* hasta 22/11/2026');   // fin contado desde la solicitud
+  incluye(m, '💊 ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · *7 d* hasta 22/11\n');   // fin contado desde la solicitud
 });
 
 prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resumen diario sin verdes ni repetidos', function () {
@@ -597,10 +597,11 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       assert.strictEqual(ultima()[col('Fuente del análisis')], 'TRATAMIENTO PROLONGADO'); assert.strictEqual(ultima()[col('Enviado al grupo')], 'PENDIENTE');
       assert.strictEqual(ultima()[col('Semáforo final')], 'ROJO'); assert.strictEqual(ultima()[col('Días de tratamiento continuo')], 16);
       incluye(ultima()[col('Detalle')], '2. MEROPENEM 23/10/2026-01/11/2026 · 9 d\n3. CEFEPIME');
-      // con restringido: el caso PROA sale de inmediato; la revision del mismo paciente ya esta pendiente
+      // con restringido: el caso PROA sale de inmediato con la lista de prescripciones; la revision no se repite
       notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['ERTAPENEM', '1000', '24', '7']]));
-      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*'); noIncluye(envios[0].message, '⏳');
-      assert.strictEqual(ultima()[col('Enviado al grupo')], 'NO'); incluye(ultima()[col('Destino')], 'ya tuvo revisión');
+      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*'); noIncluye(envios[0].message, '📆');
+      incluye(envios[0].message, 'Total: *23 d* de antibiótico continuo');
+      assert.strictEqual(ultima()[col('Enviado al grupo')], 'NO'); incluye(ultima()[col('Destino')], 'ya va en el caso PROA');
       notificarNuevaRespuesta(e6);
       assert.strictEqual(ultima()[col('Enviado al grupo')], 'PENDIENTE'); assert.strictEqual(ultima()[col('Semáforo final')], 'AMARILLO');
       notificarNuevaRespuesta(e7);
@@ -648,6 +649,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
 
 prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolongado sin enviar nada', function () {
   var filas = HOJAS['Respuestas de formulario 1']._filas;
+  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);   // sin revisiones previas del paciente
   filas.push(filaMatriz('01/11/2026 10:00:00', '888001', [['CEFEPIME', '2000', '8', '7']]));
   var registro = [], logReal = Logger.log;
   Logger.log = function (fmt) {   // como Apps Script: sustituye cada %s por el argumento siguiente
@@ -661,7 +663,7 @@ prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolo
     });
   } finally { Logger.log = logReal; filas.pop(); }
   var texto = registro.join('\n');
-  incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*');
+  incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '(Revisión de duración: queda pendiente para el resumen diario)\n*📆'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*');
 });
 
 prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, sin analisis ni modelo', function () {

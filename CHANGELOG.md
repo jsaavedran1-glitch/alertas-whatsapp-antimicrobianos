@@ -2,6 +2,14 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.27.0] - 2026-11-16
+
+### Cambiado (pedido del referente)
+- **Sin mensajes repetidos:** si la solicitud ya genera `🚨 CASO PROA` (restringido), la revisión de duración no se envía, porque el caso trae la misma lista de prescripciones con el total. Queda en el registro con `Destino` = "no se envía: la lista de prescripciones ya va en el caso PROA". La revisión sale para los antibióticos no restringidos (cefepime, piperacilina/tazobactam, meropenem…). `CONFIG.PROLONGADO_CON_CASO = true` la vuelve a enviar también con caso.
+- La fecha de fin de la línea 💊 va **sin año** (`*7 d* hasta 22/11`), igual que la lista de prescripciones.
+- `probarUltimaSolicitud(fila)` muestra la revisión solo si de verdad saldría (si no, dice por qué); `probarUltimoProlongado()` busca la última revisión que se enviaría.
+- Con la matriz real (01/11–15/11): 17 revisiones en 11 días (3 no se envían por ir ya en el caso PROA y 4 por repetidas), de 426 a 562 caracteres y como máximo 10 líneas.
+
 ## [1.26.0] - 2026-11-16
 
 ### Cambiado (pedido del referente)

@@ -67,6 +67,9 @@ var CONFIG = {
   // Contra el spam (decision del referente, 2026-11-16): sin verdes, un paciente como maximo cada 7 dias y
   // todo en un resumen diario a las 7:00 (activador de crearTriggerResumenProlongados).
   PROLONGADO_ENVIAR_VERDES: false,
+  // Si la solicitud ya genera caso PROA (restringido), la revision no se envia: el caso trae la misma lista de
+  // prescripciones con el total (decision del referente, 2026-11-16). true la envia tambien.
+  PROLONGADO_CON_CASO: false,
   PROLONGADO_REPETIR_DIAS: 7,
   PROLONGADO_RESUMEN_DIARIO: true,
   PROLONGADO_RESUMEN_HORA: 7,
@@ -402,7 +405,7 @@ function notificarTratamientoProlongado(e, coincidencias) {
   try {
     var revision = revisionProlongado(e, coincidencias);
     if (!revision) return;
-    var accion = accionProlongado(revision, e), envio = null;
+    var accion = accionProlongado(revision, e, coincidencias), envio = null;
     if (accion === 'ENVIAR') envio = enviarAlertaWhatsApp(revision.mensaje, { sinFirma: true });
     registrarRevision(e, coincidencias, { fuente: FUENTE_PROLONGADO, nivelFinal: revision.nivel, detalle: revision.bloque.join('\n'),
       estadoEnvio: accion === 'RESUMEN' ? 'PENDIENTE' : (envio && envio.ok ? 'SI' : 'NO'),
@@ -1273,16 +1276,19 @@ function mensajeProlongado(item) {
   return lineas.join('\n');
 }
 
-// Que se hace con la revision: 'RESUMEN' (queda pendiente para el resumen diario), 'ENVIAR' (sin resumen
+// Que se hace con la revision: 'CASO' (la solicitud ya genera caso PROA, que trae la misma lista de
+// prescripciones: no se repite), 'RESUMEN' (queda pendiente para el resumen diario), 'ENVIAR' (sin resumen
 // diario), 'VERDE' (dentro de la referencia: no se envia) o 'REPETIDO' (el paciente ya tuvo revision en los
 // ultimos CONFIG.PROLONGADO_REPETIR_DIAS dias).
-function accionProlongado(revision, e) {
+function accionProlongado(revision, e, coincidencias) {
+  if (!CONFIG.PROLONGADO_CON_CASO && debeAlertar(coincidencias || filtrarAntimicrobianosRestringidos(e))) return 'CASO';
   if (revision.nivel === 0 && !CONFIG.PROLONGADO_ENVIAR_VERDES) return 'VERDE';
   if (prolongadoRevisadoReciente(revision.hc, fechaDe(campoDelEvento(e.namedValues || {}, 'Marca temporal')) || new Date())) return 'REPETIDO';
   return CONFIG.PROLONGADO_RESUMEN_DIARIO ? 'RESUMEN' : 'ENVIAR';
 }
 
 var TEXTO_ACCION_PROLONGADO = {
+  CASO: 'no se envía: la lista de prescripciones ya va en el caso PROA',
   RESUMEN: 'queda pendiente para el resumen diario',
   ENVIAR: 'se envía al grupo',
   VERDE: 'no se envía: dentro de la referencia de sus patologías',
@@ -1462,7 +1468,8 @@ function diasCorto(valor, desde) {
   var n = numeroONulo(valor);
   if (n === null) return String(valor || '-').trim() || '-';
   var fin = fechaFin(n, desde);
-  return formatoNumero(n, 0) + ' d' + (fin ? ' hasta ' + fin : '');
+  // sin el ano, igual que las fechas de la lista de prescripciones (15/11-22/11)
+  return formatoNumero(n, 0) + ' d' + (fin ? ' hasta ' + String(fin).replace(/\/\d{4}$/, '') : '');
 }
 
 // "L031 · Celulitis de otras partes de los miembros"
@@ -1757,7 +1764,10 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
     var bloque = hoja.getRange(desde, 1, ultima - desde + 1, columnas).getDisplayValues();
     for (var i = bloque.length - 1; i >= 0 && !e; i--) {
       var candidato = eventoDeFila(desde + i, bloque[i]);
-      var dispara = buscarProlongado ? !!tratamientoProlongado(candidato) : debeAlertar(filtrarAntimicrobianosRestringidos(candidato));
+      // revision de duracion que saldria: sin caso PROA en la misma solicitud (salvo PROLONGADO_CON_CASO)
+      var dispara = buscarProlongado
+        ? !!revisionProlongado(candidato) && (CONFIG.PROLONGADO_CON_CASO || !debeAlertar(filtrarAntimicrobianosRestringidos(candidato)))
+        : debeAlertar(filtrarAntimicrobianosRestringidos(candidato));
       if (dispara) { e = candidato; fila = desde + i; }
     }
     if (!e) {
@@ -1770,7 +1780,12 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
   var revision = revisionProlongado(e, coincidencias);
   var mensajes = [];
   if (debeAlertar(coincidencias)) mensajes.push(construirMensajeDesdeEvento(e, coincidencias));
-  if (revision) mensajes.push('(Revisión de duración: ' + TEXTO_ACCION_PROLONGADO[accionProlongado(revision, e)] + ')\n' + revision.mensaje);
+  if (revision) {
+    var accion = accionProlongado(revision, e, coincidencias);
+    // el mensaje solo se muestra si de verdad saldria
+    mensajes.push('(Revisión de duración: ' + TEXTO_ACCION_PROLONGADO[accion] + ')' +
+      (accion === 'RESUMEN' || accion === 'ENVIAR' ? '\n' + revision.mensaje : ''));
+  }
   var p = tratamientoProlongado(e);
   Logger.log('Fila %s · restringidos: %s · dispara alerta: %s · revisión de duración: %s\n\n%s', fila, coincidencias.length,
     debeAlertar(coincidencias), p ? 'sí (' + p.solicitudes + ' prescripciones seguidas, ' + p.dias + ' d)' :
