@@ -682,7 +682,7 @@ prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolo
     });
   } finally { Logger.log = logReal; filas.pop(); }
   var texto = registro.join('\n');
-  incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '▶ REVISIÓN DE DURACIÓN: se enviaría al día siguiente, a las 7:00\n\n*📆'); incluye(texto, 'PRUEBA (no se envió nada al grupo)'); noIncluye(texto, 'mensaje aparte'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*');
+  incluye(texto, 'revisión de duración: sí (3 prescripciones seguidas, 16 d)'); incluye(texto, '▶ REVISIÓN DE DURACIÓN: se enviaría al día siguiente, a las 7:00\n\n*📆'); incluye(texto, 'PRUEBA (no se envió nada al grupo)'); incluye(texto, 'Tiempos: buscar la fila '); incluye(texto, ' · historia '); noIncluye(texto, 'mensaje aparte'); incluye(texto, '*📆 REVISIÓN DE DURACIÓN DE TTO · 23 d de antibiótico*');
 });
 
 prueba('restringido: caso PROA solo si supera 14 d con esta orden; sin listado: solo revision de duracion', function () {

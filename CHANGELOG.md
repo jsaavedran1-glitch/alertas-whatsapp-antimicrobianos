@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.29.4] - 2026-11-16
+
+### Cambiado (rendimiento, tercera parte: la prueba de la fila 7603 seguía en 48 s)
+- La matriz se abre **una vez por ejecución** (`libroProa()`): antes 16 funciones llamaban a `SpreadsheetApp.openById` por su cuenta, y cada apertura es una llamada a Google.
+- `probarUltimaSolicitud()` y `probarUltimoProlongado()` escriben al final cuánto tardó cada parte (`Tiempos: abrir la matriz y leer la fila · restringidos · historia · revisión · caso PROA · registro (7 d)`), para ubicar con datos dónde se va el tiempo.
+
 ## [1.29.3] - 2026-11-16
 
 ### Corregido (rendimiento, segunda parte: `probarUltimaSolicitud(7603)` seguía en 37 s)

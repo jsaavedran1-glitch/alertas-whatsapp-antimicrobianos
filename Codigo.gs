@@ -240,13 +240,18 @@ function enCacheEjecucion(clave, leer) {
 }
 function limpiarCacheEjecucion() { CACHE_EJECUCION = {}; }
 
+// La matriz se abre una vez por ejecucion (cada apertura es una llamada a Google).
+function libroProa() {
+  return enCacheEjecucion('libro', function() { return SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID); });
+}
+
 function obtenerAntimicrobianosRestringidos() {
   return enCacheEjecucion('restringidos', leerAntimicrobianosRestringidos_);
 }
 
 function leerAntimicrobianosRestringidos_() {
   try {
-    var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_ANTIMICROBIANOS_RESTRINGIDOS);
+    var hoja = libroProa().getSheetByName(CONFIG.HOJA_ANTIMICROBIANOS_RESTRINGIDOS);
     if (!hoja) {
       Logger.log('No se encontro la hoja "' + CONFIG.HOJA_ANTIMICROBIANOS_RESTRINGIDOS + '", se usa la lista de respaldo.');
       return listaRespaldoRestringidos();
@@ -299,7 +304,7 @@ function obtenerRangosDosis() {
 function leerRangosDosis_() {
   var respaldo = CONFIG.RANGOS_DOSIS_RESPALDO.map(filaARegla).filter(Boolean);
   try {
-    var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_RANGOS_DOSIS);
+    var hoja = libroProa().getSheetByName(CONFIG.HOJA_RANGOS_DOSIS);
     if (!hoja || hoja.getLastRow() < 2) {
       Logger.log('Sin hoja "' + CONFIG.HOJA_RANGOS_DOSIS + '" (o vacia); se usan los rangos de respaldo. Ejecute crearHojaRangosDosis() para crearla.');
       return respaldo;
@@ -314,7 +319,7 @@ function leerRangosDosis_() {
 
 // Crea la pestana RANGOS_DOSIS con la propuesta inicial. No toca la pestana si ya existe.
 function crearHojaRangosDosis() {
-  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var ss = libroProa();
   if (ss.getSheetByName(CONFIG.HOJA_RANGOS_DOSIS)) {
     Logger.log('La pestana ' + CONFIG.HOJA_RANGOS_DOSIS + ' ya existe; no se modifica.');
     return;
@@ -326,7 +331,7 @@ function crearHojaRangosDosis() {
 // Reemplaza el contenido de la pestana RANGOS_DOSIS por la tabla del codigo (por ejemplo, tras
 // actualizar los rangos o las fuentes). Borra lo que el QF haya editado en la pestana: usar a conciencia.
 function reescribirHojaRangosDosis() {
-  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var ss = libroProa();
   var hoja = ss.getSheetByName(CONFIG.HOJA_RANGOS_DOSIS) || ss.insertSheet(CONFIG.HOJA_RANGOS_DOSIS);
   hoja.clearContents();
   escribirRangosDosis(hoja);
@@ -486,7 +491,7 @@ function codigoCIE10PorDescripcion(texto) {
   try { cache = CacheService.getScriptCache(); var enCache = cache.get(clave); if (enCache !== null) return enCache; } catch (err) { cache = null; }
   var codigo = '';
   try {
-    var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_CIE10);
+    var hoja = libroProa().getSheetByName(CONFIG.HOJA_CIE10);
     var ultima = hoja ? hoja.getLastRow() : 0;
     if (ultima >= 2) {
       var celda = hoja.getRange(2, 2, ultima - 1, 1).createTextFinder(texto).matchEntireCell(true).matchCase(false).findNext();
@@ -522,7 +527,7 @@ function buscarDescripcionCIE10(codigo) {
   }
   var descripcion = '';
   try {
-    var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_CIE10);
+    var hoja = libroProa().getSheetByName(CONFIG.HOJA_CIE10);
     if (hoja) {
       descripcion = buscarEnColumnaA(hoja, codigo);
       if (!descripcion && codigo.length === 3) descripcion = buscarEnColumnaA(hoja, codigo + 'X');
@@ -764,7 +769,7 @@ function obtenerPertinencia() {
 function leerPertinencia_() {
   var respaldo = CONFIG.PERTINENCIA_RESPALDO.map(filaAPertinencia).filter(Boolean);
   try {
-    var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_PERTINENCIA);
+    var hoja = libroProa().getSheetByName(CONFIG.HOJA_PERTINENCIA);
     if (!hoja || hoja.getLastRow() < 2) return respaldo;
     var filas = hoja.getRange(2, 1, hoja.getLastRow() - 1, 8).getValues().map(filaAPertinencia).filter(Boolean);
     return filas.length ? filas : respaldo;
@@ -776,7 +781,7 @@ function leerPertinencia_() {
 
 // Crea la pestana PERTINENCIA_DURACION con la tabla del codigo. No la toca si ya existe.
 function crearHojaPertinencia() {
-  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var ss = libroProa();
   if (ss.getSheetByName(CONFIG.HOJA_PERTINENCIA)) {
     Logger.log('La pestana ' + CONFIG.HOJA_PERTINENCIA + ' ya existe; no se modifica.');
     return;
@@ -787,7 +792,7 @@ function crearHojaPertinencia() {
 
 // Reemplaza la pestana por la tabla del codigo (borra lo editado a mano en ella).
 function reescribirHojaPertinencia() {
-  var ss = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var ss = libroProa();
   var hoja = ss.getSheetByName(CONFIG.HOJA_PERTINENCIA) || ss.insertSheet(CONFIG.HOJA_PERTINENCIA);
   hoja.clearContents();
   escribirPertinencia(hoja);
@@ -1125,7 +1130,7 @@ function seguimientoPaciente(e) {
     var valores = e.namedValues || {};
     var hc = String(campoDelEvento(valores, CAMPOS.HC) || '').replace(/\s+/g, '');
     if (!hc || hc === '-' || /^0+$/.test(hc)) return res;
-    var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_RESPUESTAS);
+    var hoja = libroProa().getSheetByName(CONFIG.HOJA_RESPUESTAS);
     if (!hoja) return res;
     var ultima = hoja.getLastRow(), columnas = hoja.getLastColumn();
     if (ultima < 2) return res;
@@ -1394,7 +1399,7 @@ var TEXTO_ACCION_PROLONGADO = {
 function prolongadoRevisadoReciente(hc, fecha) {
   var dias = CONFIG.PROLONGADO_REPETIR_DIAS;
   if (!dias || !hc) return false;
-  var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_REGISTRO);
+  var hoja = libroProa().getSheetByName(CONFIG.HOJA_REGISTRO);
   if (!hoja || hoja.getLastRow() < 2) return false;
   var col = function(n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
   var celdas = hoja.getRange(2, col('Historia clínica') + 1, hoja.getLastRow() - 1, 1).createTextFinder(hc).matchEntireCell(true).findAll() || [];
@@ -1433,7 +1438,7 @@ function probarResumenProlongados() {
 }
 
 function resumenProlongadosPendiente_() {
-  var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_REGISTRO);
+  var hoja = libroProa().getSheetByName(CONFIG.HOJA_REGISTRO);
   if (!hoja || hoja.getLastRow() < 2) return null;
   var col = function(n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
   var datos = hoja.getRange(2, 1, hoja.getLastRow() - 1, ENCABEZADOS_REGISTRO.length).getValues();
@@ -1471,7 +1476,7 @@ function registrarRevision(e, coincidencias, datos) {
     datos = datos || {};
     var valores = (e && e.namedValues) ? e.namedValues : {};
     var c = function(nombre) { return campoDelEvento(valores, nombre) || ''; };
-    var libro = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+    var libro = libroProa();
     var hoja = libro.getSheetByName(CONFIG.HOJA_REGISTRO);
     if (!hoja) { hoja = libro.insertSheet(CONFIG.HOJA_REGISTRO); hoja.appendRow(ENCABEZADOS_REGISTRO); }
     else if (hoja.getLastColumn() < ENCABEZADOS_REGISTRO.length) hoja.getRange(1, 1, 1, ENCABEZADOS_REGISTRO.length).setValues([ENCABEZADOS_REGISTRO]);
@@ -1725,7 +1730,7 @@ function listarChatsGreenAPI() {
 }
 
 function crearTriggerFormSubmit() {
-  var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID);
+  var hoja = libroProa();
   ScriptApp.newTrigger('notificarNuevaRespuesta')
     .forSpreadsheet(hoja)
     .onFormSubmit()
@@ -1738,7 +1743,7 @@ function crearTriggerFormSubmit() {
    usada por el mensaje se encuentre con campoDelEvento().
    ===================================================================== */
 function verificarEncabezados() {
-  var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_RESPUESTAS);
+  var hoja = libroProa().getSheetByName(CONFIG.HOJA_RESPUESTAS);
   var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0];
   var simulado = {};
   encabezados.forEach(function(h) { if (String(h).trim()) simulado[String(h)] = ['x']; });
@@ -1841,7 +1846,10 @@ function probarUltimaSolicitud(filaOpcional) { probarSolicitud_(filaOpcional, fa
 function probarUltimoProlongado() { probarSolicitud_(null, true); }
 
 function probarSolicitud_(filaOpcional, buscarProlongado) {
-  var hoja = SpreadsheetApp.openById(CONFIG.SPREADSHEET_ID).getSheetByName(CONFIG.HOJA_RESPUESTAS);
+  // Tiempos de cada parte, para saber donde se va el tiempo de una solicitud
+  var t0 = Date.now(), tiempos = [];
+  var marca = function(nombre) { var t = Date.now(); tiempos.push(nombre + ' ' + ((t - t0) / 1000).toFixed(1) + ' s'); t0 = t; };
+  var hoja = libroProa().getSheetByName(CONFIG.HOJA_RESPUESTAS);
   var ultima = hoja.getLastRow(), columnas = hoja.getLastColumn();
   var encabezados = hoja.getRange(1, 1, 1, columnas).getValues()[0];
   var eventoDeFila = function(fila, datos) {
@@ -1870,8 +1878,13 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
       return;
     }
   }
+  marca(filaOpcional ? 'abrir la matriz y leer la fila' : 'buscar la fila');
   var coincidencias = filtrarAntimicrobianosRestringidos(e);
+  marca('restringidos');
+  seguimientoPaciente(e);
+  marca('historia');
   var revision = revisionProlongado(e, coincidencias);
+  marca('revisión');
   // Cada bloque dice que pasaria con ese mensaje; las lineas con ▶ son solo de esta prueba, nunca van al grupo.
   var bloques = [];
   if (generaCasoProa(e, coincidencias)) {
@@ -1880,18 +1893,20 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
     bloques.push('▶ CASO PROA: no se enviaría (' + formatoNumero(diasCasoProa(e, coincidencias), 0) + ' d con esta orden; sale desde más de ' +
       CONFIG.CASO_DIAS_MINIMOS + ' d)');
   }
+  marca('caso PROA');
   if (revision) {
     var accion = accionProlongado(revision, e, coincidencias);
     if (accion === 'RESUMEN') bloques.push('▶ REVISIÓN DE DURACIÓN: se enviaría al día siguiente, a las 7:00\n\n' + revision.mensaje);
     else if (accion === 'ENVIAR') bloques.push('▶ REVISIÓN DE DURACIÓN: se enviaría al grupo al llegar la solicitud\n\n' + revision.mensaje);
     else bloques.push('▶ REVISIÓN DE DURACIÓN: ' + TEXTO_ACCION_PROLONGADO[accion].replace(/^no se envía: /, 'no se enviaría (') + ')');
+    marca('registro (7 d)');
   }
   var p = tratamientoProlongado(e);
   Logger.log('PRUEBA (no se envió nada al grupo) · fila %s · restringidos: %s · caso PROA: %s · revisión de duración: %s\n\n%s', fila,
     coincidencias.length, generaCasoProa(e, coincidencias) ? 'sí' : 'no',
     p ? 'sí (' + p.solicitudes + ' prescripciones seguidas, ' + p.dias + ' d)' :
       'no (necesita ' + CONFIG.PROLONGADO_MIN_SOLICITUDES + ' prescripciones seguidas y más de ' + CONFIG.PROLONGADO_DIAS + ' d)',
-    bloques.length ? bloques.join('\n\n') : '▶ No generaría ningún mensaje.');
+    (bloques.length ? bloques.join('\n\n') : '▶ No generaría ningún mensaje.') + '\n\nTiempos: ' + tiempos.join(' · '));
 }
 
 function testCruceCIE10() {
