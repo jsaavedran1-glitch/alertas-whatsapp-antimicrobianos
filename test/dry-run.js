@@ -465,6 +465,21 @@ prueba('seguimiento: tratamiento continuo con cambio de antimicrobiano y renovac
   assert.strictEqual(normalizarAislamiento('E. coli productora de betalactamasas de espectro extendido'), 'E. COLI PRODUCTORA DE BLEE');
 });
 
+prueba('seguimiento: dias calendario que cuadran con las fechas y sin tramos de 0 dias (caso real del 2026-11-15)', function () {
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  filas.push(filaMatriz('17/09/2026 09:00:00', '777003', [['MEROPENEM', '1000', '8', '7']]));
+  filas.push(filaMatriz('17/09/2026 16:00:00', '777003', [['ERTAPENEM', '1000', '24', '21']]));   // el mismo dia: 0 d de meropenem
+  filas.push(filaMatriz('08/10/2026 03:00:00', '777003', [['MEROPENEM', '1000', '8', '14']]));    // de madrugada
+  filas.push(filaMatriz('22/10/2026 19:47:19', '777003', [['ERTAPENEM', '1000', '24', '21']]));   // de noche: son 14 d, no 15
+  var e = eventoSeguimiento('15/11/2026 17:10:18', '777003', 'L031', [['ERTAPENEM', '1000', '24', '7']]);
+  var t = seguimientoPaciente(e).lineas.join('\n');
+  incluye(t, '🔁 Antibiótico continuo: ERTAPENEM 17/09/2026-08/10/2026 21 d → MEROPENEM 08/10/2026-22/10/2026 14 d → ERTAPENEM 22/10/2026-15/11/2026 24 d → esta orden 15/11/2026-22/11/2026 7 d = 66 d');
+  noIncluye(t, ' 0 d');
+  var m = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
+  incluye(m, '🔴 ERTAPENEM 66 d continuos: supera la referencia');
+  incluye(m, '💊 ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · 7 d hasta 22/11/2026');   // fin contado desde la solicitud
+});
+
 prueba('registro: una fila por revision en REGISTRO_REVISIONES', function () {
   delete HOJAS['REGISTRO_REVISIONES'];
   var e = eventoSeguimiento('14/11/2026 08:00:00', '123456', 'N390', [['ERTAPENEM', '1000', '24', '7']]);

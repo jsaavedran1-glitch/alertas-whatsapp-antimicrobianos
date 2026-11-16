@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.17.1] - 2026-11-16
+
+### Corregido (primera prueba con la historia real del paciente de la fila 7638)
+- Los días de cada tramo del tratamiento continuo se cuentan en **días calendario**, para que cuadren con las fechas que se muestran (08/10 a 22/10 salía como 15 d por la hora de las solicitudes; ahora 14 d).
+- Un tramo de **0 días** (dos órdenes distintas el mismo día) ya no se muestra.
+- La fecha de fin de la línea 💊 se cuenta **desde la fecha de la solicitud**, igual que la de "esta orden" en el seguimiento.
+
 ## [1.17.0] - 2026-11-16
 
 ### Cambiado (optimización del mensaje al grupo, decisión del referente)

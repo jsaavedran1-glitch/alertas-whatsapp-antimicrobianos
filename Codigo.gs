@@ -556,10 +556,12 @@ function frecuenciaTexto(valor) {
   return s;
 }
 
-function fechaFin(dias) {
+// Fecha de fin de una orden: desde la fecha de la solicitud (o desde hoy si no se pasa) mas los dias.
+function fechaFin(dias, desde) {
   var n = numeroONulo(dias);
   if (n === null || n <= 0) return '';
-  var fin = new Date(Date.now() + Math.round(n) * 24 * 3600 * 1000);
+  var base = (desde instanceof Date && !isNaN(desde.getTime())) ? desde.getTime() : Date.now();
+  var fin = new Date(base + Math.round(n) * 24 * 3600 * 1000);
   return Utilities.formatDate(fin, 'America/Bogota', 'dd/MM/yyyy');
 }
 
@@ -945,7 +947,10 @@ function seguimientoPaciente(e) {
       }
       return inicio;
     };
-    var diasDesde = function(inicio) { return Math.round((ahora.getTime() - inicio) / dia); };
+    // Dias calendario (hora de Colombia, la del script): asi los dias coinciden con las fechas que se
+    // muestran (08/10 a 22/10 son 14 d aunque la primera orden sea de madrugada y la segunda de noche).
+    var diaCal = function(t) { var d = new Date(t); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / dia); };
+    var diasDesde = function(inicio) { return diaCal(ahora.getTime()) - diaCal(inicio); };
 
     var E = function(cp) { return String.fromCodePoint(cp); };
     var actuales = leerSlots(e);
@@ -970,11 +975,9 @@ function seguimientoPaciente(e) {
           var esquema = porFecha[k].sort().join(' + ');
           if (!tramos.length || tramos[tramos.length - 1].esquema !== esquema) tramos.push({ esquema: esquema, inicio: k });
         });
-        var suma = 0;
         tramos.forEach(function(tr, i) {
           tr.fin = (i < tramos.length - 1) ? tramos[i + 1].inicio : ahora.getTime();
-          tr.dias = (i < tramos.length - 1) ? Math.round((tr.fin - tr.inicio) / dia) : Math.max(transcurridosEpisodio - suma, 0);
-          suma += tr.dias;
+          tr.dias = diaCal(tr.fin) - diaCal(tr.inicio);
         });
       }
       var tramoTexto = function(tr) { return tr.esquema + ' ' + fechaCorta(new Date(tr.inicio)) + '-' + fechaCorta(new Date(tr.fin)) + ' ' + formatoNumero(tr.dias, 0) + ' d'; };
@@ -999,7 +1002,8 @@ function seguimientoPaciente(e) {
       // Una sola linea con el tratamiento continuo: tramos por antimicrobiano, esta orden y el total.
       if (transcurridosEpisodio >= 1) {
         previasTipo.forEach(function(p) { if (p.fecha.getTime() >= inicioEpisodio) enEpisodio[p.nombre] = true; });
-        continuos.push((antifungico ? 'Antifúngico' : 'Antibiótico') + ' continuo: ' + tramos.map(tramoTexto).join(' → ') +
+        continuos.push((antifungico ? 'Antifúngico' : 'Antibiótico') + ' continuo: ' +
+          tramos.filter(function(tr) { return tr.dias > 0; }).map(tramoTexto).join(' → ') +
           (maxDias > 0 ? ' → ' + ordenTexto(maxDias) + ' = ' + formatoNumero(transcurridosEpisodio + maxDias, 0) + ' d' : ''));
       }
     });
@@ -1117,10 +1121,10 @@ function esquemaCorto(am) {
 }
 
 // "7 d hasta 23/11/2026"
-function diasCorto(valor) {
+function diasCorto(valor, desde) {
   var n = numeroONulo(valor);
   if (n === null) return String(valor || '-').trim() || '-';
-  var fin = fechaFin(n);
+  var fin = fechaFin(n, desde);
   return formatoNumero(n, 0) + ' d' + (fin ? ' hasta ' + fin : '');
 }
 
@@ -1146,6 +1150,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, opciones) {
   var reglas = obtenerRangosDosis();
   var pesoKg = pesoKgDesde(campo('PESO_KG'), campo('PESO_G'));
   var esquemas = coincidencias.concat(acompanantes);
+  // la fecha de fin se cuenta desde la solicitud, igual que en la linea de seguimiento
+  var fechaSolicitud = fechaDe(campoDelEvento(valores, 'Marca temporal'));
 
   var E = function(cp) { return String.fromCodePoint(cp); };
   var adv = E(0x26A0) + E(0xFE0F), color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
@@ -1195,13 +1201,13 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, opciones) {
 
   lineas.push('');
   coincidencias.forEach(function(am) {
-    lineas.push(E(0x1F48A) + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias));
+    lineas.push(E(0x1F48A) + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias, fechaSolicitud));
     if (am.ev.revisar) lineas.push('   ' + adv + ' Dosis fuera del rango de referencia (' + am.ev.referencia + ')');
     var avisoDosis = avisoDosisEspecifico(am, pesoKg, esquemas);
     if (avisoDosis) lineas.push('   ' + adv + ' ' + avisoDosis);
   });
   acompanantes.forEach(function(am) {
-    lineas.push(E(0x2795) + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias));
+    lineas.push(E(0x2795) + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias, fechaSolicitud));
   });
   seguimientoPaciente(e).lineas.forEach(function(l) { lineas.push(l); });
 
