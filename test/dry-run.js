@@ -194,33 +194,33 @@ prueba('rangos de dosis: acepta si cumple alguna regla, marca si falla en todas'
 prueba('mensaje: daptomicina con interconsulta, meropenem como acompanante, fecha fin', function () {
   var e = eventoPruebaDaptomicina();
   var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(t, 'Edad: 54 años · ⚖️ Peso: 70 kg');
-  incluye(t, 'Servicio: Unidad de Cuidado Crítico UCI C · Cama: C13');
-  incluye(t, 'A419 - SEPSIS, NO ESPECIFICADA');
-  incluye(t, 'Indicación: Etiológico · Cultivos: HEMOCULTIVO · Origen: IAAS');
-  incluye(t, 'Interconsulta Infectología (Dinámica Gerencial): Sí');
+  incluye(t, '· 54 años · 70 kg');
+  incluye(t, 'Unidad de Cuidado Crítico UCI C · Cama C13');
+  incluye(t, 'A419 · Sepsis, no especificada');
+  incluye(t, '· HEMOCULTIVO · Etiológico · IAAS');
+  incluye(t, 'Interconsulta a Infectología: Sí');
   noIncluye(t, 'Sin interconsulta');
   noIncluye(t, 'Cambio de antimicrobiano');
   noIncluye(t, 'Ajuste renal');
-  incluye(t, 'Antimicrobiano restringido 1: DAPTOMICINA');
-  incluye(t, 'Dosis: 420 mg (6 mg/kg) · Intravenoso · cada 24 horas');
-  assert.ok(/Días ordenados: 14 días · hasta \d\d\/\d\d\/\d{4}/.test(t), t);
+  incluye(t, '💊 DAPTOMICINA');
+  incluye(t, '420 mg (6 mg/kg) IV c/24 h');
+  assert.ok(/· 14 d hasta \d\d\/\d\d\/\d{4}/.test(t), t);
   noIncluye(t, 'fuera del rango');
-  incluye(t, '➕ Acompañante: MEROPENEM · 1000 mg (14,3 mg/kg) · Intravenoso · cada 8 horas · 7 días · hasta');
-  noIncluye(t, 'Antimicrobiano restringido 2');
+  incluye(t, '➕ MEROPENEM 1000 mg (14,3 mg/kg) IV c/8 h · 7 d hasta');
+  assert.strictEqual(t.split('💊').length - 1, 1, 'un solo restringido');
 });
 
 prueba('mensaje: ceftazidima/avibactam 750 mg, cambio, ajuste renal, sin interconsulta, N39.0', function () {
   var e = eventoPruebaCeftazidimaAvibactam();
   var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(t, 'N390 - INFECCION DE VIAS URINARIAS');
-  incluye(t, 'Indicación: Empírico · Cultivos: UROCULTIVO · Origen: IAAS');
-  incluye(t, '🔄 Cambio de antimicrobiano: Por antibiograma');
+  incluye(t, 'N390 · Infeccion de vias urinarias');
+  incluye(t, '· UROCULTIVO · Empírico · IAAS');
+  incluye(t, '🔄 Cambio: Por antibiograma');
   incluye(t, '⚠️ Sin interconsulta a Infectología');
   incluye(t, '💧 Ajuste renal: Sí');
   noIncluye(t, 'no requiere ajuste renal');
-  incluye(t, 'Dosis: 750 mg (10,7 mg/kg) · Intravenoso · cada 12 horas');
-  incluye(t, '⚠️ Dosis fuera del rango de referencia (940-2500 mg/dosis o 30-65 mg/kg/dosis): revisar');
+  incluye(t, '750 mg (10,7 mg/kg) IV c/12 h');
+  incluye(t, '⚠️ Dosis fuera del rango de referencia (940-2500 mg/dosis o 30-65 mg/kg/dosis)');
   noIncluye(t, 'Acompañante');
 });
 
@@ -231,10 +231,10 @@ prueba('vancomicina en 2.o lugar con ceftazidima/avibactam: se muestra como rest
   var c = filtrarAntimicrobianosRestringidos({ namedValues: nv });
   assert.strictEqual(c.length, 2); assert.strictEqual(debeAlertar(c), true);
   var t = construirMensajeDesdeEvento({ namedValues: nv }, c);
-  incluye(t, 'Antimicrobiano restringido 1: CEFTAZIDIMA / AVIBACTAM');
-  incluye(t, 'Antimicrobiano restringido 2: VANCOMICINA');
-  incluye(t, 'Dosis: 500 mg (7,1 mg/kg) · Intravenoso · cada 12 horas');
-  incluye(t, '(10-35 mg/kg/dosis): revisar');
+  incluye(t, '💊 CEFTAZIDIMA / AVIBACTAM');
+  incluye(t, '💊 VANCOMICINA');
+  incluye(t, 'VANCOMICINA 500 mg (7,1 mg/kg) IV c/12 h');
+  incluye(t, '(10-35 mg/kg/dosis)');
   noIncluye(t, 'Acompañante: VANCOMICINA');
   // vancomicina sola: ni mensaje ni envio
   var sola = eventoPruebaVancomicinaSola();
@@ -244,11 +244,11 @@ prueba('vancomicina en 2.o lugar con ceftazidima/avibactam: se muestra como rest
 prueba('mensaje: pediatrico con peso en gramos, caspofungina en dosis unica', function () {
   var e = eventoPruebaPediatrico();
   var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(t, 'Edad: 4 meses · ⚖️ Peso: 7,5 kg');
-  incluye(t, 'Servicio: Hospitalización Pediatría · Cama: 208');
-  incluye(t, 'B377 - CANDIDIASIS, NO ESPECIFICADA');
-  incluye(t, 'Dosis: 27 mg (3,6 mg/kg) · Intravenoso · Dosis única');
-  incluye(t, 'Días ordenados: Dosis Unica');
+  incluye(t, '· 4 meses · 7,5 kg');
+  incluye(t, 'Hospitalización Pediatría · Cama 208');
+  incluye(t, 'B377 · Candidiasis, no especificada');
+  incluye(t, '27 mg (3,6 mg/kg) IV Dosis única');
+  incluye(t, 'Dosis Unica');
   noIncluye(t, 'cada Dosis');
   noIncluye(t, 'fuera del rango');
   noIncluye(t, 'Verificar');
@@ -312,25 +312,25 @@ prueba('pertinencia: sindrome por CIE10 y por texto libre', function () {
 prueba('pertinencia: veredicto de dias (referencia, exceso, doble, profilaxis)', function () {
   var am = function (n, d) { return { nombre: n, dias: d }; };
   var l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '14')]).join('\n');
-  incluye(l, '🔴 *Pertinencia PROA: se sugiere revaluar*');
-  incluye(l, '📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)');
+  incluye(l, '🔴 *Se sugiere revaluar*');
+  incluye(l, '📏 Infección urinaria complicada / pielonefritis: 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)');
   incluye(l, '🔴 ERTAPENEM 14 d: supera la referencia; revaluar duración'); noIncluye(l, 'fluoroquinolona');   // el doble: rojo, sin la nota
   l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '10')]).join('\n');
-  incluye(l, '🟡 *Pertinencia PROA: se sugiere verificar*'); incluye(l, '🟡 ERTAPENEM 10 d: supera la referencia; revaluar duración · 7 d si no es fluoroquinolona');   // amarillo: con la nota
+  incluye(l, '🟡 *Se sugiere verificar*'); incluye(l, '🟡 ERTAPENEM 10 d: supera la referencia; revaluar duración · 7 d si no es fluoroquinolona');   // amarillo: con la nota
   l = evaluarPertinencia('N390', 'Empírico', 'E. coli BLEE', [am('ERTAPENEM', '7')]).join('\n');
-  incluye(l, '🟢 *Pertinencia PROA: acorde con la referencia*');
+  incluye(l, '🟢 *Acorde con la referencia*');
   incluye(l, '🟢 ERTAPENEM: indicado para el aislamiento registrado');
   incluye(l, '🟢 ERTAPENEM 7 d: dentro de la referencia'); noIncluye(l, 'supera');
   l = evaluarPertinencia('M869', 'Etiológico', 'S. aureus', [am('DAPTOMICINA', '14')]).join('\n');
-  incluye(l, 'Osteomielitis / espondilodiscitis: referencia 42 d'); noIncluye(l, 'supera');   // por debajo del minimo no se marca
+  incluye(l, 'Osteomielitis / espondilodiscitis: 42 d'); noIncluye(l, 'supera');   // por debajo del minimo no se marca
   l = evaluarPertinencia('D70X', 'Empírico', 'Ninguno', [am('CASPOFUNGINA 50, 70', '14')]).join('\n');
-  incluye(l, '📏 Días · Neutropenia febril: sin foco'); noIncluye(l, 'supera'); noIncluye(l, 'dentro de la referencia');
+  incluye(l, '📏 Neutropenia febril: sin foco'); noIncluye(l, 'supera'); noIncluye(l, 'dentro de la referencia');
   incluye(l, '🟢 CASPOFUNGINA 50, 70: indicado para el foco; sin aislamiento, revaluar con cultivos');
   l = evaluarPertinencia('C169', 'Empírico', 'Ninguno', [am('MEROPENEM', '14')]);
   assert.strictEqual(l.length, 0, 'sin sindrome ni antimicrobiano con ficha: sin lineas');
   l = evaluarPertinencia('S720', 'Profiláctico', 'Ninguno', [am('ERTAPENEM', '5')]).join('\n');
   incluye(l, '🔴 ERTAPENEM 5 d: supera las 24 h de la profilaxis; revaluar');
-  incluye(l, 'Días · profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)');
+  incluye(l, 'Profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)');
   l = evaluarPertinencia('N390', 'Empírico', 'Ninguno', [am('ERTAPENEM', 'Dosis Unica')]).join('\n');
   noIncluye(l, 'dentro de la referencia'); noIncluye(l, 'supera');
 });
@@ -342,7 +342,7 @@ prueba('pertinencia: veredicto de tratamiento (fichas y reglas de espectro)', fu
   incluye(ev('A419', 'Etiológico', 'SAMR', ['DAPTOMICINA']), '🟢 DAPTOMICINA: indicado');
   incluye(ev('A419', 'Etiológico', 'Klebsiella KPC', ['TYGECICLINA']), '🔴 TYGECICLINA: TIGECICLINA');
   incluye(ev('N390', 'Etiológico', 'Klebsiella KPC', ['TYGECICLINA']), 'TIGECICLINA no se sugiere en bacteriemia ni en infección urinaria (IDSA 2026)');
-  incluye(ev('N390', 'Etiológico', 'CANDIDA AURIS', ['CASPOFUNGINA 50, 70']), 'acorde');   // sin dato de cultivos no aplica la regla de orina
+  incluye(ev('N390', 'Etiológico', 'CANDIDA AURIS', ['CASPOFUNGINA 50, 70']), 'indicado');   // sin dato de cultivos no aplica la regla de orina
   incluye(ev('N390', 'Etiológico', 'Pseudomonas aeruginosa', ['ERTAPENEM']), 'ERTAPENEM no tiene actividad frente a Pseudomonas');
   noIncluye(ev('N390', 'Etiológico', 'E. coli BLEE', ['ERTAPENEM']), 'se sugiere revaluar ·');
   incluye(ev('G060', 'Etiológico', 'Cryptococcus neoformans', ['CASPOFUNGINA 50, 70']), 'CASPOFUNGINA no tiene actividad frente a Cryptococcus');
@@ -372,7 +372,7 @@ prueba('pertinencia: veredicto de tratamiento (fichas y reglas de espectro)', fu
 prueba('pertinencia en el mensaje completo (ceftazidima/avibactam 14 d en ITU por KPC)', function () {
   var e = eventoPruebaCeftazidimaAvibactam();
   var t = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(t, '🔴 *Pertinencia PROA: se sugiere revaluar*');
+  incluye(t, '🔴 *Se sugiere revaluar*');
   incluye(t, '🟢 CEFTAZIDIMA / AVIBACTAM: indicado para el aislamiento registrado');
   incluye(t, '🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia; revaluar duración');
   noIncluye(t, 'undefined');
@@ -382,10 +382,10 @@ prueba('mensaje: campos ausentes salen como "-" y nunca como undefined', functio
   var nv = eventoBase(); nv['Nombre Antimicrobiano 1'] = ['ERTAPENEM - UT-1'];
   var t = construirMensajeDesdeEvento({ namedValues: nv });
   noIncluye(t, 'undefined'); noIncluye(t, 'NaN');
-  incluye(t, 'Historia Clínica: -');
-  incluye(t, 'Edad: - · ⚖️ Peso: -');
-  incluye(t, 'Dosis: - · - · -');
-  incluye(t, 'Días ordenados: -');
+  incluye(t, 'HC -');
+  incluye(t, 'HC - · - · -');
+  incluye(t, '💊 ERTAPENEM - - -');
+  incluye(t, '· -');
   incluye(t, '⚠️ Sin interconsulta a Infectología');
 });
 
@@ -423,15 +423,15 @@ prueba('seguimiento: curso acumulado, solicitud repetida, otros previos y dias v
   var seg = seguimientoPaciente(e);
   assert.strictEqual(seg.previas, 3);
   var t = seg.lineas.join('\n');
-  incluye(t, '🔁 Seguimiento (60 días): 3 solicitudes previas');
+  incluye(t, '🔁 Antibiótico continuo:');
   incluye(t, 'ERTAPENEM: también solicitado hace 2 h (500 mg cada 24 h, 3 d); posible solicitud repetida');
   incluye(t, 'Antibiótico continuo: ERTAPENEM + VANCOMICINA 01/11/2026-08/11/2026 7 d → ERTAPENEM 08/11/2026-14/11/2026 6 d → esta orden 14/11/2026-21/11/2026 7 d = 20 d');
   incluye(t, 'ERTAPENEM: también solicitado hace 2 h');
   noIncluye(t, 'DAPTOMICINA');
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
-  incluye(msg, '🔁 Seguimiento (60 días): 3 solicitudes previas');
+  incluye(msg, '🔁 Antibiótico continuo:');
   // 7 d ordenados estarian dentro de 5-7 d, pero el curso completo (20 d) supera el doble
-  incluye(msg, '🔴 ERTAPENEM: 20 d continuos (ERTAPENEM + VANCOMICINA 01/11/2026-08/11/2026 7 d + ERTAPENEM 08/11/2026-14/11/2026 6 d + esta orden 14/11/2026-21/11/2026 7 d): supera la referencia; revaluar duración');
+  incluye(msg, '🔴 ERTAPENEM 20 d continuos: supera la referencia; revaluar duración');
   incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), 'HISTORIA DEL PACIENTE: solicitudes previas');
   incluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '- 08/11/2026: ERTAPENEM 1000 mg cada 24 h por 7 d');
   noIncluye(textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e)), '123456');
@@ -454,7 +454,7 @@ prueba('seguimiento: tratamiento continuo con cambio de antimicrobiano y renovac
   assert.strictEqual(seg.historia.length, 2); incluye(seg.historia[0], '17/10/2026: MEROPENEM 1000 mg cada 8 h por 7 d');
   var msg = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(msg, '🟢 ERTAPENEM: indicado para el aislamiento registrado');   // BLEE escrita en palabras
-  incluye(msg, '🔴 ERTAPENEM: 36 d continuos (MEROPENEM 17/10/2026-22/10/2026 5 d + ERTAPENEM 22/10/2026-15/11/2026 24 d + esta orden 15/11/2026-22/11/2026 7 d): supera la referencia; revaluar duración');
+  incluye(msg, '🔴 ERTAPENEM 36 d continuos: supera la referencia; revaluar duración');
   var caso = textoCasoIa_(e, filtrarAntimicrobianosRestringidos(e));
   incluye(caso, '- 22/10/2026: ERTAPENEM 1000 mg cada 24 h por 21 d'); incluye(caso, 'Cálculo del bot sobre esa historia'); noIncluye(caso, '777001');
   // un curso antiguo, ya terminado hace mas de la tolerancia, no se suma
@@ -475,7 +475,7 @@ prueba('registro: una fila por revision en REGISTRO_REVISIONES', function () {
   var r = {}; ENCABEZADOS_REGISTRO.forEach(function (h, i) { r[h] = filas[1][i]; });
   assert.strictEqual(r['Semáforo tablas'], 'ROJO'); assert.strictEqual(r['Fuente del análisis'], 'TABLAS'); assert.strictEqual(r['Enviado al grupo'], 'SI');
   assert.strictEqual(r['Antimicrobianos restringidos'], 'ERTAPENEM 7 d'); assert.strictEqual(r['Solicitudes previas (30 d)'], 3);
-  incluye(r['Diagnóstico'], 'N390 - INFECCION DE VIAS URINARIAS');
+  incluye(r['Diagnóstico'], 'N390 · Infeccion de vias urinarias');
 });
 
 prueba('tablas: Candida solo en orina, antifungico en foco bacteriano y caspofungina 70 mg de mantenimiento', function () {
@@ -502,7 +502,7 @@ prueba('calidad de datos: CIE10 en cualquier parte del texto o por descripcion, 
   assert.strictEqual(codigoCIE10Resuelto('Infección de vías urinarias, sitio no especificado'), 'N390');   // descripcion exacta de la pestana
   assert.strictEqual(codigoCIE10Resuelto('CA PAPILAR DE OVARIO + FISTULA'), '');
   assert.strictEqual(codigoCIE10Resuelto('PACIENTE CON Z999 INEXISTENTE'), '');                            // token que no esta en la pestana
-  incluye(formatearDiagnosticoCIE10('SEPSIS DE ORIGEN URINARIO A419'), 'A419 - SEPSIS, NO ESPECIFICADA');
+  incluye(diagnosticoCorto('SEPSIS DE ORIGEN URINARIO A419'), 'A419 · Sepsis, no especificada');
   assert.strictEqual(edadTexto('58', '695', '21170'), '58 años');
   assert.strictEqual(edadTexto('0', '4', '0'), '4 meses');
   assert.strictEqual(edadTexto('2', '6', ''), '2 años 6 meses');
@@ -533,15 +533,15 @@ function respuestaIa(salida) {
     content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify(salida) }] } };
 }
 
-prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y las tablas como referencia', function () {
+prueba('revision (IA_PROA.gs): el analisis del modelo va dentro del mensaje unico', function () {
   var e = eventoPruebaCeftazidimaAvibactam();
   var co = filtrarAntimicrobianosRestringidos(e);
   var cfg = { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO };
   assert.strictEqual(IA_MODELO_DEFECTO, 'claude-sonnet-5-5');
-  var salida = { analisis: 'repaso de factores',
+  var salida = { analisis: 'repaso de factores', historia: '',
     tratamiento: [{ antimicrobiano: 'Ceftazidima/avibactam', nivel: 'pertinente', motivo: 'El aislamiento registrado (*KPC*) está dentro de su indicación' },
       { antimicrobiano: 'COLISTINA', nivel: 'no_pertinente', motivo: 'no es de esta solicitud' }],
-    dias: [{ antimicrobiano: 'CEFTAZIDIMA / AVIBACTAM', nivel: 'no_pertinente', motivo: 'supera la referencia · hasta 10-14 d si hay absceso u obstrucción' }],
+    dias: [{ antimicrobiano: 'CEFTAZIDIMA / AVIBACTAM', nivel: 'no_pertinente', motivo: 'supera la referencia; valorar suspender al día 7' }],
     datos_faltantes: ['antibiograma'] };
   conApiSimulada(respuestaIa(salida), function (llamadas) {
     var rev = revisarCasoConIa_(e, co, cfg);
@@ -551,30 +551,30 @@ prueba('revision (IA_PROA.gs): analisis del modelo, conciso, con las fichas y la
     assert.strictEqual(c.output_config.format.type, 'json_schema');
     assert.strictEqual(c.fallbacks, 'default');
     assert.ok(!('thinking' in c) && !('temperature' in c));
-    incluye(c.system, 'antimicrobianos-restringidos.md'); incluye(c.system, 'Candida auris'); incluye(c.system, 'TABLA DE DURACIÓN POR SÍNDROME');
+    incluye(c.system, 'antimicrobianos-restringidos.md'); incluye(c.system, 'TABLA DE DURACIÓN POR SÍNDROME');
     incluye(c.system, 'Infección urinaria complicada / pielonefritis (CIE10 N39, N10, N12, N30): 5-7 días');
+    incluye(c.system, 'médico infectólogo'); incluye(c.system, 'químico farmacéutico clínico');
+    assert.strictEqual(c.output_config.effort, 'high');
+    assert.deepStrictEqual(c.output_config.format.schema.required, ['analisis', 'historia', 'tratamiento', 'dias', 'datos_faltantes']);
     var caso = c.messages[0].content;
-    incluye(caso, 'Análisis de las tablas del bot'); incluye(caso, 'CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia; revaluar duración');
+    incluye(caso, 'Análisis de las tablas del bot'); incluye(caso, 'CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia');
+    incluye(caso, 'HISTORIA DEL PACIENTE: sin solicitudes previas');
     noIncluye(caso, '88888888'); noIncluye(caso, 'Historia');   // seudonimizado
     assert.strictEqual(rev.veredicto, 'intervenir');
-    var r = mensajeRevision_(e, co, rev);
-    assert.strictEqual(r, ['🔎 *Revisión PROA · Ceftazidima / avibactam*',
-      '🔴 *Se sugiere revaluar*',
-      '🔴 Ceftazidima / avibactam 14 d: supera la referencia · hasta 10-14 d si hay absceso u obstrucción',
-      '🟢 Lo demás, sin observaciones',
-      '📏 Infección urinaria complicada / pielonefritis: 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)',
-      '_Análisis asistido por IA_'].join('\n'));   // directo: solo observaciones; lo verde resumido; lo ajeno a la solicitud se descarta
-    var verde = mensajeRevision_(e, co, { veredicto: 'pertinente', tratamiento: [{ nombre: 'CEFTAZIDIMA / AVIBACTAM', nivel: 0, motivo: '' }], dias: [], encabezadoDias: '' });
-    assert.strictEqual(verde.split('\n').slice(1).join('|'), '🟢 *Acorde con la referencia*|🟢 Tratamiento y días sin observaciones|_Análisis asistido por IA_');
-    incluye(c.system, 'médico infectólogo'); incluye(c.system, 'químico farmacéutico clínico'); assert.strictEqual(c.output_config.effort, 'high');
-    assert.deepStrictEqual(c.output_config.format.schema.required, ['analisis', 'historia', 'tratamiento', 'dias', 'datos_faltantes']);
-    incluye(c.system, 'La HISTORIA DEL PACIENTE es parte central del análisis'); incluye(caso, 'HISTORIA DEL PACIENTE: sin solicitudes previas');
-    assert.ok(r.split('\n').length <= 7, 'respuesta concisa');
+    var m = construirMensajeDesdeEvento(e, co, { analisis: analisisDeRevision_(rev) });
+    incluye(m, '*🚨 CASO PROA · Ceftazidima / avibactam*');
+    incluye(m, '🔴 *Se sugiere revaluar*');
+    incluye(m, '💊 CEFTAZIDIMA / AVIBACTAM 750 mg (10,7 mg/kg) IV c/12 h · 14 d hasta');
+    incluye(m, '🔴 Ceftazidima / avibactam 14 d: supera la referencia; valorar suspender al día 7');
+    incluye(m, '🟢 Lo demás, sin observaciones');
+    incluye(m, '📏 Infección urinaria complicada / pielonefritis: 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)');
+    incluye(m, '_Análisis asistido por IA_');
+    noIncluye(m, 'COLISTINA'); noIncluye(m, 'Pertinencia PROA');   // lo ajeno a la solicitud se descarta
+    var verde = construirMensajeDesdeEvento(e, co, { analisis: analisisDeRevision_({ veredicto: 'pertinente', historia: '',
+      tratamiento: [{ nombre: 'CEFTAZIDIMA / AVIBACTAM', nivel: 0, motivo: '' }], dias: [], encabezadoDias: '' }) });
+    incluye(verde, '🟢 *Acorde con la referencia*'); incluye(verde, '🟢 Tratamiento y días sin observaciones');
   });
-  // frases largas se recortan
   assert.ok(fraseIa_(new Array(60).join('palabra ')).length <= IA_MAX_CARACTERES);
-  var base = construirMensajeDesdeEvento(e, co, true);
-  noIncluye(base, 'Pertinencia PROA'); noIncluye(base, 'Sugerencia PROA');
   assert.ok(srcIa.indexOf('sk-ant') === -1);
 });
 
@@ -582,18 +582,20 @@ prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caid
   var cfg = { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO };
   // ertapenem con Pseudomonas: regla de espectro en rojo; el modelo no puede rebajarla
   var e = eventoPruebaIaErtapenemPseudomonas(), co = filtrarAntimicrobianosRestringidos(e);
-  conApiSimulada(respuestaIa({ analisis: 'a', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: 'x' }], dias: [], datos_faltantes: [] }), function () {
+  conApiSimulada(respuestaIa({ analisis: 'a', historia: '', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: 'x' }], dias: [], datos_faltantes: [] }), function () {
     assert.strictEqual(revisarCasoConIa_(e, co, cfg).veredicto, 'intervenir');
   });
   // la API rechaza el parametro fallbacks: se repite sin el
   conApiSimulada(function (n) {
     return n === 1 ? { codigo: 400, cuerpo: { error: { message: 'fallbacks: Extra inputs are not permitted' } } }
-      : respuestaIa({ analisis: 'a', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'x' }], dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: 'dentro de la referencia' }], datos_faltantes: [] });
+      : respuestaIa({ analisis: 'a', historia: '', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'no cubre Pseudomonas' }],
+          dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: 'dentro de la referencia' }], datos_faltantes: [] });
   }, function (llamadas) {
-    assert.strictEqual(revisarCasoConIa_(e, co, cfg).veredicto, 'intervenir');
-    var corto = mensajeRevision_(e, co, revisarCasoConIa_(e, co, cfg));
-    incluye(corto, '🔴 Ertapenem: X'); noIncluye(corto, '7 d'); noIncluye(corto, '📏');   // dias de un tratamiento en rojo: no se mencionan
-    assert.ok(!('fallbacks' in llamadas[1].cuerpo)); assert.ok(!llamadas[1].encabezados['anthropic-beta']);
+    var rev = revisarCasoConIa_(e, co, cfg);
+    assert.strictEqual(rev.veredicto, 'intervenir');
+    assert.strictEqual(llamadas.length, 2); assert.ok(!('fallbacks' in llamadas[1].cuerpo)); assert.ok(!llamadas[1].encabezados['anthropic-beta']);
+    var m = construirMensajeDesdeEvento(e, co, { analisis: analisisDeRevision_(rev) });
+    incluye(m, '🔴 Ertapenem: no cubre Pseudomonas'); noIncluye(m, '7 d:'); noIncluye(m, '📏');   // dias de un tratamiento en rojo: no se mencionan
   });
   // API caida o declinacion: sale el analisis de las tablas, y la clave no queda en el registro
   var registro = []; var logReal = Logger.log; Logger.log = function () { registro.push(Array.prototype.join.call(arguments, ' ')); };
@@ -604,65 +606,26 @@ prueba('revision (IA_PROA.gs): piso de las tablas, respaldo sin fallbacks y caid
     conApiSimulada({ cuerpo: { stop_reason: 'refusal', content: [] } }, function () { assert.strictEqual(revisarCasoConIa_(e, co, cfg), null); });
   } finally { Logger.log = logReal; }
   noIncluye(registro.join('\n'), 'CLAVE-DE-PRUEBA');
-  var r = mensajeRevision_(e, co, null);
-  incluye(r, '⚪ ERTAPENEM 7 d: la duración no se valora mientras se revalúa el tratamiento'); noIncluye(r, 'dentro de la referencia');
-  incluye(r, '🔴 *Pertinencia PROA: se sugiere revaluar*'); incluye(r, 'ERTAPENEM no tiene actividad frente a Pseudomonas'); noIncluye(r, 'asistido por IA');
+  assert.strictEqual(analisisDeRevision_(null), null);
+  var m = construirMensajeDesdeEvento(e, co);
+  incluye(m, '🔴 *Se sugiere revaluar*'); incluye(m, 'ERTAPENEM no tiene actividad frente a Pseudomonas'); noIncluye(m, 'asistido por IA');
 });
 
-prueba('IA: la historia del paciente va al modelo y su interpretacion abre el mensaje', function () {
+prueba('IA: la historia del paciente va al modelo y su interpretacion abre el analisis', function () {
   var e = eventoSeguimiento('15/11/2026 17:10:18', '777001', 'L031', [['ERTAPENEM', '1000', '24', '7']]);
   e.namedValues[CAMPOS.MICROORGANISMO] = ['BETALACTAMASA DE AMPLIO ESPECTRO'];
   var co = filtrarAntimicrobianosRestringidos(e);
-  conApiSimulada(respuestaIa({ analisis: 'a', historia: 'Carbapenémico continuo desde el 17/10: meropenem 5 d y luego ertapenem 24 d; esta orden lo lleva a 36 d',
+  conApiSimulada(respuestaIa({ analisis: 'a', historia: 'Carbapenémico continuo: meropenem del 17/10 al 22/10 (5 d) y ertapenem desde el 22/10 (24 d); esta orden lo lleva a 36 d',
     tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'pertinente', motivo: '' }],
     dias: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'muy por encima de la referencia; confirmar foco no controlado antes de prolongar' }], datos_faltantes: [] }), function (llamadas) {
     var rev = revisarCasoConIa_(e, co, { clave: 'CLAVE-DE-PRUEBA', modelo: IA_MODELO_DEFECTO });
     incluye(llamadas[0].cuerpo.messages[0].content, 'Antibiótico continuo: MEROPENEM 17/10/2026-22/10/2026 5 d → ERTAPENEM 22/10/2026-15/11/2026 24 d');
-    assert.strictEqual(mensajeRevision_(e, co, rev), ['🔎 *Revisión PROA · Ertapenem*',
-      '🔴 *Se sugiere revaluar*',
-      '🧭 Carbapenémico continuo desde el 17/10: meropenem 5 d y luego ertapenem 24 d; esta orden lo lleva a 36 d',
-      '🔴 Ertapenem 7 d: muy por encima de la referencia; confirmar foco no controlado antes de prolongar',
-      '🟢 Lo demás, sin observaciones',
-      '📏 Infección de piel y tejidos blandos: 5-7 d (IDSA 2014 piel y tejidos blandos)',
-      '_Análisis asistido por IA_'].join('\n'));
+    var m = construirMensajeDesdeEvento(e, co, { analisis: analisisDeRevision_(rev) });
+    incluye(m, '🧭 Carbapenémico continuo: meropenem del 17/10 al 22/10 (5 d) y ertapenem desde el 22/10 (24 d); esta orden lo lleva a 36 d');
+    incluye(m, '🔴 Ertapenem 36 d continuos: muy por encima de la referencia; confirmar foco no controlado antes de prolongar');
+    incluye(m, '📏 Infección de piel y tejidos blandos: 5-7 d (IDSA 2014)');
+    incluye(m, '🟢 Lo demás, sin observaciones');
   });
-});
-
-prueba('IA: solo las fichas del caso, sin llamada al modelo en vancomicina sola, y registro del flujo', function () {
-  var e = eventoPruebaIaErtapenemPseudomonas();
-  conApiSimulada(respuestaIa({}), function () {
-    var ref = referenciaProa_(e);
-    incluye(ref, '### 7. Ertapenem'); incluye(ref, '### 3. *Pseudomonas aeruginosa*');
-    noIncluye(ref, '### 1. Vancomicina'); noIncluye(ref, '### 10. *Candida auris*'); noIncluye(ref, '## Hallazgos para el comité');
-    var sinGermen = referenciaProa_(eventoPruebaIaCeftazidimaComunidad());
-    incluye(sinGermen, '### 9. Ceftazidima/avibactam'); noIncluye(sinGermen, '### 1. *Klebsiella');
-    assert.ok(ref.length < 0.5 * referenciaProa_(null).length, 'la referencia del caso es menos de la mitad');
-  });
-  var propsReal = global.PropertiesService, utilReal = global.Utilities.sleep;
-  var P = { ANTHROPIC_API_KEY: 'CLAVE-DE-PRUEBA', GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test' };
-  global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
-  global.Utilities.sleep = function () {};
-  delete HOJAS['REGISTRO_REVISIONES'];
-  try {
-    // vancomicina sola, tablas en amarillo: ni modelo ni mensajes, pero queda registrada
-    conApiSimulada(respuestaIa({}), function (llamadas) {
-      var v = eventoPruebaVancomicinaSola();
-      assert.strictEqual(notificarConRevisionIa_(v, filtrarAntimicrobianosRestringidos(v)), true);
-      assert.strictEqual(llamadas.length, 0); assert.strictEqual(envios.length, 0);
-    });
-    // caso con alerta en modo PRUEBA: produccion recibe el mensaje de tablas; PRUEBA BOT, base + revision citada
-    conApiSimulada(respuestaIa({ analisis: 'a', tratamiento: [{ antimicrobiano: 'ERTAPENEM', nivel: 'no_pertinente', motivo: 'no cubre Pseudomonas' }], dias: [], datos_faltantes: [] }), function (llamadas) {
-      notificarNuevaRespuesta(e);
-      assert.strictEqual(llamadas.length, 1); assert.strictEqual(envios.length, 3);
-      assert.strictEqual(envios[0].chatId, '111@g.us'); assert.strictEqual(envios[1].chatId, IA_CHAT_PRUEBA);
-      assert.strictEqual(envios[2].chatId, IA_CHAT_PRUEBA); assert.strictEqual(envios[2].quotedMessageId, 'MSG2');
-    });
-    var filas = HOJAS['REGISTRO_REVISIONES']._filas, col = function (h) { return ENCABEZADOS_REGISTRO.indexOf(h); };
-    assert.strictEqual(filas.length, 3);
-    assert.strictEqual(filas[1][col('Enviado al grupo')], 'NO'); assert.strictEqual(filas[1][col('Fuente del análisis')], 'TABLAS');
-    assert.strictEqual(filas[2][col('Fuente del análisis')], 'IA'); assert.strictEqual(filas[2][col('Semáforo final')], 'ROJO');
-    assert.strictEqual(filas[2][col('Modelo')], 'claude-sonnet-5-5'); assert.ok(filas[2][col('Costo aproximado USD')] > 0);
-  } finally { global.PropertiesService = propsReal; global.Utilities.sleep = utilReal; }
 });
 
 prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {

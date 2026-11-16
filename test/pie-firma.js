@@ -40,15 +40,25 @@ global.SpreadsheetApp = { openById: function () { throw new Error('sin hoja en l
 
 (0, eval)(src);
 
-var PIE = '_Ecosistema de Vigilancia Digital del Servicio Farmac\u00e9utico HDV \u00b7 Desarrollado por el QF Juan Pablo Saavedra_';
+var PIE = '_Ecosistema de Vigilancia Digital Servicio Farmac\u00e9utico \u00b7 QF JPSN_';
 
 enviarAlertaWhatsApp('Cuerpo de prueba');
 assert.strictEqual(enviados.length, 1, 'debe intentar exactamente un envio');
 var texto = enviados[0].message;
 assert.ok(texto.indexOf('Cuerpo de prueba') > -1, 'el cuerpo del mensaje debe conservarse');
+// sinFirma: sin la linea de titulo del bot, pero el pie siempre va
+var conFirma = texto;
 assert.ok(texto.slice(-PIE.length) === PIE, 'el mensaje debe terminar con el pie de firma');
 assert.ok(texto.indexOf('Cuerpo de prueba\n\n' + PIE) > -1, 'el pie va separado del cuerpo por una linea en blanco');
 assert.ok(/@g\.us$/.test(enviados[0].chatId), 'solo se envia a grupos (@g.us)');
+enviados.length = 0;
+enviarAlertaWhatsApp('Cuerpo de prueba', { sinFirma: true });
+var sinFirma = enviados[0].message;
+assert.ok(sinFirma.indexOf('Bot PROA') === -1, 'sinFirma quita la linea de titulo del bot');
+assert.ok(conFirma.indexOf('Bot PROA') > -1, 'sin la opcion, el titulo del bot sigue');
+assert.ok(sinFirma.slice(-PIE.length) === PIE, 'el pie va tambien con sinFirma');
+assert.strictEqual(sinFirma, 'Cuerpo de prueba\n\n' + PIE);
+enviados.length = 1;
 console.log('OK - el mensaje termina con: ' + PIE);
 
 // Filtro con la lista de respaldo (la hoja no existe en la prueba en seco):

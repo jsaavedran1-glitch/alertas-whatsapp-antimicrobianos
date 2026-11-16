@@ -28,10 +28,12 @@ El bloque abre con un veredicto global, que es el peor de los individuales:
 | 🔴 intervenir | una regla de espectro lo descarta (p. ej. daptomicina en neumonía) | el doble o más de la referencia; profilaxis de más de 24 h |
 
 ```
-🔴 *Pertinencia PROA: intervenir*
-🟢 CEFTAZIDIMA / AVIBACTAM: pertinente · el aislamiento registrado está dentro de su indicación
-📏 Días · Infección urinaria complicada / pielonefritis: referencia 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)
-🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia · hasta 10-14 d si hay absceso, obstrucción, prostatitis o respuesta lenta
+*🚨 CASO PROA · Ceftazidima / avibactam*
+🔴 *Se sugiere revaluar*
+...
+🟢 CEFTAZIDIMA / AVIBACTAM: indicado para el aislamiento registrado
+📏 Infección urinaria complicada / pielonefritis: 5-7 d (IDSA 2025 ITU complicada; ACIN Infectio 2023)
+🔴 CEFTAZIDIMA / AVIBACTAM 14 d: supera la referencia; revaluar duración
 ```
 
 Para qué está reservado cada antimicrobiano sale de `docs/antimicrobianos-restringidos.md` y está en `CONFIG.INDICACIONES` (aislamientos y focos que lo sustentan). El formulario no trae antibiograma: "pertinente" significa que el germen o el foco registrados corresponden a la indicación de la ficha, no que la sensibilidad esté confirmada. Sobre las solicitudes reales de abril-mayo y octubre de 2026 (60 alertas con la lista actual): 21 pertinente, 27 verificar, 12 intervenir.

@@ -72,7 +72,7 @@ var CONFIG = {
     ['NEUMONIA', 'J12,J13,J14,J15,J16,J17,J18,J22', 'NEUMONIA,BRONCONEUMONIA,NAC', 'Neumonía', 5, 7, 'comunitaria: mínimo 5 d y hasta la estabilidad clínica; 7 d si es por SARM o Pseudomonas; nosocomial o asociada a ventilador: 7 d', 'ATS/IDSA 2019; IDSA/ATS 2016; ACIN NAC 2022'],
     ['EMPIEMA', 'J85,J86', 'EMPIEMA,ABSCESO PULMONAR', 'Empiema / absceso pulmonar', 14, 42, '2-3 semanas pueden bastar con drenaje y buena evolución (ensayo SLIM); más si la evolución es lenta', 'SLIM, ERJ Open Res 2023; BTS 2023'],
     ['INTRAABDOMINAL', 'K35,K36,K37,K57,K63,K65,K80,K81,K83', 'PERITONITIS,APENDICITIS,COLANGITIS,COLECISTITIS,INTRAABDOMINAL,DIVERTICULITIS', 'Infección intraabdominal', 4, 7, '4 d completos después del control del foco dieron el mismo resultado que 8 d', 'STOP-IT, NEJM 2015; SIS 2017'],
-    ['PIEL', 'L01,L02,L03,L08,A46', 'CELULITIS,ERISIPELA,PIEL Y TEJIDOS BLANDOS,TEJIDOS BLANDOS,ABSCESO CUTANEO', 'Infección de piel y tejidos blandos', 5, 7, 'extender solo si no hay mejoría; fascitis necrosante: hasta 48-72 h después del último desbridamiento', 'IDSA 2014 piel y tejidos blandos'],
+    ['PIEL', 'L01,L02,L03,L08,A46', 'CELULITIS,ERISIPELA,PIEL Y TEJIDOS BLANDOS,TEJIDOS BLANDOS,ABSCESO CUTANEO', 'Infección de piel y tejidos blandos', 5, 7, 'extender solo si no hay mejoría; fascitis necrosante: hasta 48-72 h después del último desbridamiento', 'IDSA 2014'],
     ['PIE_DIABETICO', '', 'PIE DIABETICO', 'Pie diabético', 7, 14, 'partes blandas 1-2 semanas; osteomielitis 6 semanas sin resección y hasta 3 tras amputación menor con margen positivo', 'IWGDF/IDSA 2023'],
     ['OSTEOMIELITIS', 'M86,M46', 'OSTEOMIELITIS,ESPONDILODISCITIS,DISCITIS', 'Osteomielitis / espondilodiscitis', 42, 42, '6 semanas en total, por vía parenteral u oral de alta biodisponibilidad', 'IDSA 2015 vertebral; OVIVA, NEJM 2019'],
     ['ARTRITIS', 'M00', 'ARTRITIS SEPTICA', 'Artritis séptica', 14, 28, '2 semanas no fueron inferiores a 4 tras el drenaje, en un ensayo con predominio de mano y muñeca; en articulaciones grandes se usan 4 semanas o más', 'Gjika, Ann Rheum Dis 2019'],
@@ -369,8 +369,8 @@ function notificarNuevaRespuesta(e) {
     if (coincidencias.length > 0) registrarRevision(e, coincidencias, { enviado: false });
     return;
   }
-  var mensaje = construirMensajeDesdeEvento(e, coincidencias);
-  var envio = enviarAlertaWhatsApp(mensaje);
+  // El mensaje ya se encabeza con "CASO PROA": no lleva la linea de titulo del bot.
+  var envio = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias), { sinFirma: true });
   registrarRevision(e, coincidencias, { enviado: !!(envio && envio.ok), destino: 'PRODUCCION' });
 }
 
@@ -798,10 +798,8 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   var sinValorar = function(am, n) { dias.push(neutro + ' ' + am.nombre + ' ' + formatoNumero(n, 0) + ' d: ' + TEXTO_DIAS_SIN_VALORAR); };
   // Con seguimiento (am.diasAcumulados), la duracion que se compara es la del curso completo.
   var etiquetaDias = function(am, n) {
-    if (!(am.diasAcumulados > n)) return am.nombre + ' ' + formatoNumero(n, 0) + ' d';
-    // desglose por antimicrobiano, para que no se lea que todos los dias fueron del actual
-    return am.nombre + ': ' + formatoNumero(am.diasAcumulados, 0) + ' d continuos (' +
-      (am.desgloseCurso ? am.desgloseCurso + ' + ' : '') + (am.textoOrden || 'esta orden ' + formatoNumero(n, 0) + ' d') + ')';
+    // el desglose por fechas va en la linea de seguimiento; aqui solo el total del tratamiento continuo
+    return am.nombre + ' ' + formatoNumero(am.diasAcumulados > n ? am.diasAcumulados : n, 0) + ' d' + (am.diasAcumulados > n ? ' continuos' : '');
   };
   var marcar = function(lista, nivel, texto) { lista.push(color[nivel] + ' ' + texto); if (nivel > peor) peor = nivel; };
 
@@ -817,7 +815,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
   var conDias = esquemas.filter(function(am) { var n = numeroONulo(am.dias); return n !== null && n > 0; });
   var encabezadoDias = '';
   if (tipoIndicacion === 'Profiláctico') {
-    encabezadoDias = 'Días · profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)';
+    encabezadoDias = 'Profilaxis quirúrgica: máximo 24 h (OMS 2018; CDC 2017)';
     conDias.forEach(function(am) {
       var n = numeroONulo(am.dias);
       if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
@@ -826,7 +824,7 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
     });
   } else if (sindrome && sindrome.max !== null) {
     var rango = (sindrome.min !== null && sindrome.min !== sindrome.max) ? formatoNumero(sindrome.min, 0) + '-' + formatoNumero(sindrome.max, 0) : formatoNumero(sindrome.max, 0);
-    encabezadoDias = 'Días · ' + sindrome.sindrome + ': referencia ' + rango + ' d (' + sindrome.fuente + ')';
+    encabezadoDias = sindrome.sindrome + ': ' + rango + ' d (' + sindrome.fuente + ')';
     conDias.forEach(function(am) {
       var n = numeroONulo(am.dias);
       if (rojos.indexOf(am.nombre) > -1) { sinValorar(am, n); return; }
@@ -846,14 +844,14 @@ function analisisPertinencia(diagnosticoCrudo, tipoIndicacion, microorganismo, e
       }
     });
   } else if (sindrome && sindrome.nota) {
-    encabezadoDias = 'Días · ' + sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')';
+    encabezadoDias = sindrome.sindrome + ': ' + sindrome.nota + ' (' + sindrome.fuente + ')';
   }
 
   // Si ninguna linea de dias se comparo con la referencia bacteriana, esa referencia no se muestra.
   if (soloAntifungico > 0 && soloAntifungico === dias.length) encabezadoDias = '';
   if (peor < 0 && !encabezadoDias && dias.length === 0) return vacio;
-  var titulo = ETIQUETA_NIVEL[Math.max(peor, 0)];
-  var lineas = [color[Math.max(peor, 0)] + ' *Pertinencia PROA: ' + titulo + '*'];
+  // lineas[0] es el titulo con el semaforo, el mismo que encabeza el mensaje; el resto es el cuerpo.
+  var lineas = [color[Math.max(peor, 0)] + ' *' + capitalizar(ETIQUETA_NIVEL[Math.max(peor, 0)]) + '*'];
   tratamiento.forEach(function(l) { lineas.push(l); });
   if (encabezadoDias) lineas.push(E(0x1F4CF) + ' ' + encabezadoDias);
   dias.forEach(function(l) { lineas.push(l); });
@@ -951,7 +949,7 @@ function seguimientoPaciente(e) {
 
     var E = function(cp) { return String.fromCodePoint(cp); };
     var actuales = leerSlots(e);
-    var detalle = [], enEpisodio = {};
+    var detalle = [], continuos = [], enEpisodio = {};
     [false, true].forEach(function(antifungico) {
       var delTipo = actuales.filter(function(am) { return esAntifungico(am.nombre) === antifungico; });
       if (delTipo.length === 0) return;
@@ -982,14 +980,12 @@ function seguimientoPaciente(e) {
       var tramoTexto = function(tr) { return tr.esquema + ' ' + fechaCorta(new Date(tr.inicio)) + '-' + fechaCorta(new Date(tr.fin)) + ' ' + formatoNumero(tr.dias, 0) + ' d'; };
       // Periodo de la orden actual: desde la fecha de la solicitud y por los dias ordenados.
       var ordenTexto = function(n) { return 'esta orden ' + fechaCorta(ahora) + '-' + fechaCorta(new Date(ahora.getTime() + n * dia)) + ' ' + formatoNumero(n, 0) + ' d'; };
-      var desglose = tramos.map(tramoTexto).join(' + ');
       delTipo.forEach(function(am) {
         var n = numeroONulo(am.dias);
         if (n !== null && n > maxDias) maxDias = n;
         var mismas = previas.filter(function(p) { return p.nombre === am.nombre; });
         res.porAm[am.nombre] = { inicio: fechaCorta(new Date(inicioEpisodio)), transcurridos: transcurridosEpisodio,
-          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0), desglose: desglose,
-          textoOrden: (n !== null && n > 0) ? ordenTexto(n) : '' };
+          proyectado: transcurridosEpisodio + ((n !== null && n > 0) ? n : 0) };
         if (mismas.length === 0) return;
         var horas = (ahora.getTime() - mismas[0].fecha.getTime()) / 3600000;
         if (horas < 12) {
@@ -1003,7 +999,7 @@ function seguimientoPaciente(e) {
       // Una sola linea con el tratamiento continuo: tramos por antimicrobiano, esta orden y el total.
       if (transcurridosEpisodio >= 1) {
         previasTipo.forEach(function(p) { if (p.fecha.getTime() >= inicioEpisodio) enEpisodio[p.nombre] = true; });
-        detalle.push('   ' + (antifungico ? 'Antifúngico' : 'Antibiótico') + ' continuo: ' + tramos.map(tramoTexto).join(' → ') +
+        continuos.push((antifungico ? 'Antifúngico' : 'Antibiótico') + ' continuo: ' + tramos.map(tramoTexto).join(' → ') +
           (maxDias > 0 ? ' → ' + ordenTexto(maxDias) + ' = ' + formatoNumero(transcurridosEpisodio + maxDias, 0) + ' d' : ''));
       }
     });
@@ -1015,7 +1011,9 @@ function seguimientoPaciente(e) {
       otros.push(p.nombre + ' (' + fechaCorta(p.fecha) + (p.dias ? ', ' + formatoNumero(p.dias, 0) + ' d' : '') + ')');
     });
     if (otros.length) detalle.push('   Otros previos: ' + otros.slice(0, 4).join('; '));
-    res.lineas = [E(0x1F501) + ' Seguimiento (' + CONFIG.SEGUIMIENTO_DIAS + ' días): ' + res.previas + (res.previas === 1 ? ' solicitud previa' : ' solicitudes previas')].concat(detalle);
+    res.lineas = continuos.length
+      ? continuos.map(function(l, i) { return (i === 0 ? E(0x1F501) + ' ' : '   ') + l; }).concat(detalle)
+      : [E(0x1F501) + ' ' + res.previas + (res.previas === 1 ? ' solicitud previa' : ' solicitudes previas') + ' en ' + CONFIG.SEGUIMIENTO_DIAS + ' d'].concat(detalle);
   } catch (err) {
     Logger.log('Seguimiento por paciente no disponible: ' + err);
   }
@@ -1042,7 +1040,7 @@ function registrarRevision(e, coincidencias, datos) {
     var rev = datos.revision || null;
     var nivelFinal = rev ? ['pertinente', 'verificar', 'intervenir'].indexOf(rev.veredicto) : tablas.nivel;
     hoja.appendRow([new Date(), c('Marca temporal'), c(CAMPOS.HC), c(CAMPOS.SERVICIO), c(CAMPOS.ESPECIALIDAD),
-      formatearDiagnosticoCIE10(c(CAMPOS.DIAGNOSTICO)), c(CAMPOS.MICROORGANISMO), tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION)),
+      diagnosticoCorto(c(CAMPOS.DIAGNOSTICO)), c(CAMPOS.MICROORGANISMO), tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION)),
       coincidencias.map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
       acompanantesNoRestringidos(e).map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
       tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], rev ? 'IA' : 'TABLAS',
@@ -1078,7 +1076,7 @@ function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var seg = seguimientoPaciente(e);
   esquemas.forEach(function(am) {
     var curso = seg.porAm[am.nombre];
-    if (curso && curso.transcurridos >= 1) { am.diasAcumulados = curso.proyectado; am.inicioCurso = curso.inicio; am.desgloseCurso = curso.desglose; am.textoOrden = curso.textoOrden; }
+    if (curso && curso.transcurridos >= 1) am.diasAcumulados = curso.proyectado;
   });
   return analisisPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
     micro === '-' ? '' : micro, esquemas, { cultivos: campoDelEvento(valores, CAMPOS.CULTIVOS) });
@@ -1092,8 +1090,52 @@ function encabezadosDestacados(esquemas) {
   }).map(function(par) { return '*' + alerta + par[1] + alerta + '*'; });
 }
 
-// sinSugerencia (IA_PROA.gs): sin la linea de sugerencia PROA, que va en el mensaje de revision.
-function construirMensajeDesdeEvento(e, coincidenciasOpt, sinSugerencia) {
+// Via abreviada para el mensaje (Intravenoso -> IV).
+function viaCorta(via) {
+  var v = normalizarTexto(via);
+  if (/INTRAVEN/.test(v)) return 'IV';
+  if (/ORAL|^VO$/.test(v)) return 'VO';
+  if (/INTRAMUSCUL/.test(v)) return 'IM';
+  if (/SUBCUT/.test(v)) return 'SC';
+  if (/INHAL|NEBULIZ/.test(v)) return 'INH';
+  return String(via || '-').trim();
+}
+
+function frecuenciaCorta(valor) {
+  var s = String(valor || '').trim();
+  if (!s || s === '-') return '-';
+  var m = s.match(/^(?:cada\s+)?(\d+(?:[.,]\d+)?)\s*(?:h|hr|hrs|hora|horas)?\.?$/i);
+  return m ? 'c/' + m[1].replace('.', ',') + ' h' : s;
+}
+
+// "1000 mg (14,3 mg/kg) IV c/24 h"
+function esquemaCorto(am) {
+  var dosisNum = numeroONulo(am.dosis);
+  var dosis = (dosisNum !== null) ? formatoNumero(dosisNum, 2) + ' mg' : am.dosis;
+  if (am.mgKg !== null && am.mgKg !== undefined) dosis += ' (' + formatoNumero(am.mgKg, 1) + ' mg/kg)';
+  return dosis + ' ' + viaCorta(am.via) + ' ' + frecuenciaCorta(am.frecuencia);
+}
+
+// "7 d hasta 23/11/2026"
+function diasCorto(valor) {
+  var n = numeroONulo(valor);
+  if (n === null) return String(valor || '-').trim() || '-';
+  var fin = fechaFin(n);
+  return formatoNumero(n, 0) + ' d' + (fin ? ' hasta ' + fin : '');
+}
+
+// "L031 · Celulitis de otras partes de los miembros"
+function diagnosticoCorto(diagnosticoCrudo) {
+  var texto = formatearDiagnosticoCIE10(diagnosticoCrudo);
+  var m = String(texto).match(/^([A-Z]\d{2}[0-9X]?) - (.+)$/);
+  return m ? m[1] + ' · ' + capitalizar(m[2]) : texto;
+}
+
+// Mensaje unico del caso: encabezado con el veredicto, datos del paciente, esquema, seguimiento,
+// analisis de pertinencia y avisos. opciones.analisis = { cuerpo, nivel } del modelo (IA_PROA.gs);
+// si no se pasa, se usa el analisis de las tablas.
+function construirMensajeDesdeEvento(e, coincidenciasOpt, opciones) {
+  opciones = opciones || {};
   var valores = (e && e.namedValues) ? e.namedValues : {};
   function campo(clave) {
     var v = campoDelEvento(valores, CAMPOS[clave]);
@@ -1103,43 +1145,38 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, sinSugerencia) {
   var acompanantes = acompanantesNoRestringidos(e);
   var reglas = obtenerRangosDosis();
   var pesoKg = pesoKgDesde(campo('PESO_KG'), campo('PESO_G'));
+  var esquemas = coincidencias.concat(acompanantes);
 
   var E = function(cp) { return String.fromCodePoint(cp); };
-  var emojiAlerta = E(0x1F6A8), emojiHistoria = E(0x1F4C4), emojiEdad = E(0x1F382), emojiPeso = E(0x2696) + E(0xFE0F),
-      emojiServicio = E(0x1F3E5), emojiEspecialidad = E(0x1FA7A), emojiDiagnostico = E(0x1F4CB),
-      emojiMicro = E(0x1F9A0), emojiIndicacion = E(0x1F9EB), emojiInterconsulta = E(0x1F9EA),
-      emojiRenal = E(0x1F4A7), emojiMedicamento = E(0x1F48A), emojiMas = E(0x2795),
-      emojiAdvertencia = E(0x26A0) + E(0xFE0F), emojiCambio = E(0x1F504), emojiIdea = E(0x1F4A1);
+  var adv = E(0x26A0) + E(0xFE0F), color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
 
-  var edad = edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS'));
-  var pesoTexto = (pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-';
-  var cama = campo('CAMA');
-  var interconsulta = campo('INTERCONSULTA');
-  var indicacion = String(campo('INDICACION')).toUpperCase();
+  // mg/kg de cada antimicrobiano: lo usan la linea del esquema y los avisos de coherencia
+  coincidencias.forEach(function(am) { am.ev = evaluarDosis(am.nombre, am.dosis, pesoKg, reglas); am.mgKg = am.ev.mgKg; });
+  acompanantes.forEach(function(am) { am.mgKg = (pesoKg !== null && numeroONulo(am.dosis) !== null) ? numeroONulo(am.dosis) / pesoKg : null; });
+
+  var analisis = opciones.analisis || analisisPertinenciaDesdeEvento(e, coincidencias);
+  var cuerpoAnalisis = analisis.cuerpo || analisis.lineas.slice(1);
+  var nivel = (analisis.nivel === undefined || analisis.nivel === null) ? -1 : analisis.nivel;
+
+  var lineas = encabezadosDestacados(esquemas);
+  if (lineas.length) lineas.push('');
+  lineas.push('*' + E(0x1F6A8) + ' CASO PROA · ' +
+    (coincidencias.map(function(am) { return capitalizar(am.nombre); }).join(' + ') || 'Antimicrobiano restringido') + '*');
+  if (nivel >= 0) lineas.push(color[nivel] + ' *' + capitalizar(ETIQUETA_NIVEL[nivel]) + '*');
+
+  var cama = campo('CAMA'), especialidad = campo('ESPECIALIDAD'), cultivos = campo('CULTIVOS');
+  lineas.push('', E(0x1F4C4) + ' HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
+    ' · ' + ((pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-'));
+  lineas.push(E(0x1F3E5) + ' ' + campo('SERVICIO') + (cama !== '-' ? ' · Cama ' + cama : '') + (especialidad !== '-' ? ' · ' + especialidad : ''));
+  lineas.push(E(0x1F4CB) + ' ' + diagnosticoCorto(campo('DIAGNOSTICO')));
   var tipoIndicacion = tipoIndicacionTexto(campo('TIPO_INDICACION'));
+  lineas.push(E(0x1F9A0) + ' ' + [campo('MICROORGANISMO'), cultivos, tipoIndicacion, campo('ORIGEN')]
+    .filter(function(x) { return x && x !== '-'; }).join(' · '));
+  if (String(campo('INDICACION')).toUpperCase() === 'CAMBIO') lineas.push(E(0x1F504) + ' Cambio: ' + capitalizar(campo('RAZON_CAMBIO')));
 
-  var lineas = [
-    emojiAlerta + ' NUEVO CASO PROA - ANTIMICROBIANO RESTRINGIDO ' + emojiAlerta,
-    '',
-    emojiHistoria + ' Historia Clínica: ' + campo('HC'),
-    emojiEdad + ' Edad: ' + edad + ' · ' + emojiPeso + ' Peso: ' + pesoTexto,
-    emojiServicio + ' Servicio: ' + campo('SERVICIO') + (cama !== '-' ? ' · Cama: ' + cama : ''),
-    emojiEspecialidad + ' Especialidad que prescribe: ' + campo('ESPECIALIDAD'),
-    emojiDiagnostico + ' Diagnóstico CIE10: ' + formatearDiagnosticoCIE10(campo('DIAGNOSTICO')),
-    emojiMicro + ' Microorganismo aislado: ' + campo('MICROORGANISMO'),
-    emojiIndicacion + ' Indicación: ' + tipoIndicacion +
-      ' · Cultivos: ' + campo('CULTIVOS') + ' · Origen: ' + campo('ORIGEN')
-  ];
-  var destacados = encabezadosDestacados(coincidencias.concat(acompanantes));
-  if (destacados.length) lineas = destacados.concat([''], lineas);
-  if (indicacion === 'CAMBIO') {
-    lineas.push(emojiCambio + ' Cambio de antimicrobiano: ' + capitalizar(campo('RAZON_CAMBIO')));
-  }
-  if (esSi(interconsulta)) {
-    lineas.push(emojiInterconsulta + ' Interconsulta Infectología (Dinámica Gerencial): Sí');
-  } else {
-    lineas.push(emojiAdvertencia + ' Sin interconsulta a Infectología');
-  }
+  if (esSi(campo('INTERCONSULTA'))) lineas.push(E(0x1F9EA) + ' Interconsulta a Infectología: Sí');
+  else lineas.push(adv + ' Sin interconsulta a Infectología');
+
   if (esSi(campo('AJUSTE_RENAL')) || esSi(campo('FALLA_HEPATICA'))) {
     var extras = [];
     if (esSi(campo('AJUSTE_RENAL'))) {
@@ -1153,41 +1190,29 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, sinSugerencia) {
       extras.push(texto);
     }
     if (esSi(campo('FALLA_HEPATICA'))) extras.push('Falla hepática: Sí');
-    lineas.push(emojiRenal + ' ' + extras.join(' · '));
+    lineas.push(E(0x1F4A7) + ' ' + extras.join(' · '));
   }
 
-  coincidencias.forEach(function(am, idx) {
-    var ev = evaluarDosis(am.nombre, am.dosis, pesoKg, reglas);
-    am.mgKg = ev.mgKg;
-    lineas.push('', emojiMedicamento + ' Antimicrobiano restringido ' + (idx + 1) + ': ' + am.nombre,
-      '   Dosis: ' + lineaEsquema(am),
-      '   Días ordenados: ' + diasTexto(am.dias));
-    if (ev.revisar) {
-      lineas.push('   ' + emojiAdvertencia + ' Dosis fuera del rango de referencia (' + ev.referencia + '): revisar');
-    }
-    var avisoDosis = avisoDosisEspecifico(am, pesoKg, coincidencias.concat(acompanantes));
-    if (avisoDosis) lineas.push('   ' + emojiAdvertencia + ' ' + avisoDosis);
+  lineas.push('');
+  coincidencias.forEach(function(am) {
+    lineas.push(E(0x1F48A) + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias));
+    if (am.ev.revisar) lineas.push('   ' + adv + ' Dosis fuera del rango de referencia (' + am.ev.referencia + ')');
+    var avisoDosis = avisoDosisEspecifico(am, pesoKg, esquemas);
+    if (avisoDosis) lineas.push('   ' + adv + ' ' + avisoDosis);
   });
-
   acompanantes.forEach(function(am) {
-    am.mgKg = (pesoKg !== null && numeroONulo(am.dosis) !== null) ? numeroONulo(am.dosis) / pesoKg : null;
-    lineas.push('', emojiMas + ' Acompañante: ' + am.nombre + ' · ' + lineaEsquema(am) + ' · ' + diasTexto(am.dias));
+    lineas.push(E(0x2795) + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias));
   });
+  seguimientoPaciente(e).lineas.forEach(function(l) { lineas.push(l); });
 
-  var seguimiento = seguimientoPaciente(e).lineas;
-  if (seguimiento.length) lineas.push('');
-  seguimiento.forEach(function(l) { lineas.push(l); });
+  if (cuerpoAnalisis.length) lineas.push('');
+  cuerpoAnalisis.forEach(function(l) { lineas.push(l); });
 
-  // Con sinSugerencia (flujo de dos mensajes, IA_PROA.gs) la pertinencia va en el mensaje de revision.
-  var pertinencia = sinSugerencia ? [] : pertinenciaDesdeEvento(e, coincidencias);
-  if (pertinencia.length) lineas.push('');
-  pertinencia.forEach(function(l) { lineas.push(l); });
-
-  var avisos = advertenciasCoherencia(pesoKg, campo('EDAD_ANIOS'), campo('EDAD_MESES'), coincidencias.concat(acompanantes));
-  var sugerencia = sinSugerencia ? '' : sugerenciaPROA(tipoIndicacion, coincidencias, acompanantes);
+  var avisos = advertenciasCoherencia(pesoKg, campo('EDAD_ANIOS'), campo('EDAD_MESES'), esquemas);
+  var sugerencia = sugerenciaPROA(tipoIndicacion, coincidencias, acompanantes);
   if (avisos.length || sugerencia) lineas.push('');
-  avisos.forEach(function(av) { lineas.push(emojiAdvertencia + ' ' + av); });
-  if (sugerencia) lineas.push(emojiIdea + ' ' + sugerencia);
+  avisos.forEach(function(av) { lineas.push(adv + ' ' + av); });
+  if (sugerencia) lineas.push(E(0x1F4A1) + ' ' + sugerencia);
 
   return lineas.join('\n');
 }
@@ -1195,8 +1220,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt, sinSugerencia) {
 /* =====================================================================
    Envio (solo al grupo configurado)
    ===================================================================== */
-// opciones (IA_PROA.gs): chatId (otro grupo, p. ej. PRUEBA BOT), quotedMessageId (responde citando un
-// mensaje del mismo chat) y sinFirma (sin la firma de arriba ni el pie). Devuelve { ok, idMessage }.
+// opciones: chatId (otro grupo, p. ej. PRUEBA BOT), quotedMessageId (responde citando un mensaje del
+// mismo chat) y sinFirma (sin la linea de titulo del bot; el pie siempre va). Devuelve { ok, idMessage }.
 function enviarAlertaWhatsApp(mensaje, opciones) {
   opciones = opciones || {};
   var props = PropertiesService.getScriptProperties();
@@ -1212,8 +1237,8 @@ function enviarAlertaWhatsApp(mensaje, opciones) {
     return { ok: false };
   }
   var firmaBot = props.getProperty('GREENAPI_BOT_LABEL') || 'Bot PROA Antimicrobianos HDV';
-  var pieBot = '_Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado por el QF Juan Pablo Saavedra_';
-  var mensajeFirmado = opciones.sinFirma ? mensaje : '*' + firmaBot + '*' + '\n\n' + mensaje + '\n\n' + pieBot;
+  var pieBot = '_Ecosistema de Vigilancia Digital Servicio Farmacéutico · QF JPSN_';
+  var mensajeFirmado = (opciones.sinFirma ? mensaje : '*' + firmaBot + '*' + '\n\n' + mensaje) + '\n\n' + pieBot;
   var url = props.getProperty('GREENAPI_API_URL') + '/waInstance' + idInstance + '/sendMessage/' + apiToken;
   var payload = { chatId: chatId, message: mensajeFirmado };
   if (opciones.quotedMessageId) payload.quotedMessageId = opciones.quotedMessageId;

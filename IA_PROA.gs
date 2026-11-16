@@ -2,11 +2,9 @@
 // IA_PROA.gs - Analisis de pertinencia asistido por IA (API de Claude, modelo Sonnet 5.5) de cada solicitud
 // con antimicrobiano restringido. Servicio Farmaceutico - Hospital Departamental de Villavicencio E.S.E.
 //
-// Cada caso sale en dos mensajes al mismo grupo:
-//   1. el mensaje base de siempre, sin la linea de sugerencia PROA ni el bloque de pertinencia;
-//   2. segundos despues, la revision como RESPUESTA CITADA al mensaje 1 (quotedMessageId de Green-API):
-//      un mensaje directo: titulo con el semaforo, una linea corta por cada observacion y, si la
-//      observacion es sobre los dias, la duracion de referencia con su fuente.
+// Cada caso sale en UN mensaje (decision del referente, 2026-11-16): el bot espera la respuesta del
+// modelo (unos 15 s) y la incluye en el mismo mensaje, debajo de los datos del caso. Si el modelo falla
+// o declina, el mensaje sale igual con el analisis de las tablas.
 // El modelo recibe como referencia: las fichas de docs/ que aplican al caso (antimicrobianos de la
 // solicitud y microorganismo aislado), la tabla de duracion por sindrome (PERTINENCIA_DURACION) y el analisis de las tablas de
 // Codigo.gs para ese caso. Si una regla de espectro de las tablas descarta un antimicrobiano, el veredicto
@@ -41,7 +39,6 @@ var IA_ALERTA_SI_ALTA_SIN_DISPARO = true;
 var IA_DOCS_URL = "https://raw.githubusercontent.com/jsaavedran1-glitch/alertas-whatsapp-antimicrobianos/main/docs/";
 var IA_DOCS = ["antimicrobianos-restringidos.md", "microorganismos.md"];
 var IA_FICHAS_CACHE_SEG = 21600;
-var IA_ESPERA_RESPUESTA_MS = 1500;               // entre el mensaje base y la revision citada
 var IA_NIVELES = ["pertinente", "verificar", "intervenir"];
 
 // USD por millon de tokens (entrada, salida), solo para el costo aproximado del registro.
@@ -128,95 +125,63 @@ function notificarConRevisionIa_(e, coincidencias) {
     registrarRevision(e, coincidencias, { tablas: tablas, enviado: false });
     return true;
   }
-  var revision, base, envio;
+  var revision = revisarCasoConIa_(e, coincidencias, cfg);
+  var analisis = analisisDeRevision_(revision);
+  var mensaje = construirMensajeDesdeEvento(e, coincidencias, analisis ? { analisis: analisis } : {});
+  var envio = null, destino;
 
   if (cfg.modo === "PRODUCCION") {
-    base = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, true));
-    revision = revisarCasoConIa_(e, coincidencias, cfg);
-    responderConRevision_(e, coincidencias, revision, base, null);
-    registrarRevisionIa_(e, coincidencias, tablas, revision, cfg, !!(base && base.ok), "PRODUCCION");
-    return true;
+    envio = enviarAlertaWhatsApp(mensaje, { sinFirma: true });
+    destino = "PRODUCCION";
+  } else {
+    // PRUEBA: produccion recibe el mensaje con el analisis de las tablas; PRUEBA BOT, el del modelo.
+    if (alerta) envio = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias), { sinFirma: true });
+    enviarAlertaWhatsApp(mensaje, { chatId: cfg.chatPrueba, sinFirma: true });
+    destino = alerta ? "PRODUCCION (tablas) + PRUEBA BOT" : "PRUEBA BOT";
   }
-
-  // PRUEBA: produccion igual que hoy; PRUEBA BOT recibe la copia base + la revision citada.
-  if (alerta) envio = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias));
-  revision = revisarCasoConIa_(e, coincidencias, cfg);
-  if (mensajeRevision_(e, coincidencias, revision)) {
-    base = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, true), { chatId: cfg.chatPrueba });
-    responderConRevision_(e, coincidencias, revision, base, cfg.chatPrueba);
-  }
-  registrarRevisionIa_(e, coincidencias, tablas, revision, cfg, !!(envio && envio.ok), alerta ? "PRODUCCION (tablas) + PRUEBA BOT" : "PRUEBA BOT");
+  registrarRevisionIa_(e, coincidencias, tablas, revision, analisis, cfg, !!(envio && envio.ok), destino);
   return true;
 }
 
-function registrarRevisionIa_(e, coincidencias, tablas, revision, cfg, enviado, destino) {
+function registrarRevisionIa_(e, coincidencias, tablas, revision, analisis, cfg, enviado, destino) {
   var p = revision ? IA_PRECIOS_MTOK[cfg.modelo] : null;
   registrarRevision(e, coincidencias, {
     tablas: tablas, revision: revision, enviado: enviado, destino: destino,
-    detalle: revision ? mensajeRevision_(e, coincidencias, revision) : "",
+    detalle: analisis ? analisis.cuerpo.join(" | ") : "",
     costo: p ? Number(((revision.entrada * p[0] + revision.salida * p[1]) / 1e6).toFixed(4)) : ""
   });
-}
-
-function responderConRevision_(e, coincidencias, revision, base, chatId) {
-  var respuesta = mensajeRevision_(e, coincidencias, revision);
-  if (!respuesta) return;
-  if (!base || !base.ok || !base.idMessage) {
-    Logger.log("Revision IA no enviada: el mensaje base no salio o no devolvio idMessage.");
-    return;
-  }
-  Utilities.sleep(IA_ESPERA_RESPUESTA_MS);
-  var opciones = { quotedMessageId: base.idMessage, sinFirma: true };
-  if (chatId) opciones.chatId = chatId;
-  enviarAlertaWhatsApp(respuesta, opciones);
 }
 
 function hayHallazgoAlto_(revision) {
   return !!revision && IA_ALERTA_SI_ALTA_SIN_DISPARO && revision.veredicto === "intervenir";
 }
 
-// Mensaje de revision: sugerencia PROA (48-72 h) + analisis del modelo; sin revision del modelo, el
-// analisis de las tablas. "" si no hay nada que decir.
-function mensajeRevision_(e, coincidencias, revision) {
-  var valores = (e && e.namedValues) ? e.namedValues : {};
-  var tipo = tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION));
-  var sugerencia = sugerenciaPROA(tipo, coincidencias, acompanantesNoRestringidos(e));
+// Bloque de pertinencia del modelo para el mensaje: { cuerpo, nivel }, con la misma forma que el de las
+// tablas (Codigo.gs). null si el modelo no respondio: entonces el mensaje lleva el de las tablas.
+function analisisDeRevision_(revision) {
+  if (!revision) return null;
   var E = function(cp) { return String.fromCodePoint(cp); };
-  var cuerpo = [];
-  if (revision) {
-    // Mensaje directo: titulo, una linea por cada observacion (amarillo o rojo), lo verde resumido en una
-    // sola linea y la duracion de referencia solo si hay una observacion sobre los dias.
-    var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
-    var titulos = ["Acorde con la referencia", "Se sugiere verificar", "Se sugiere revaluar"];
-    cuerpo.push(color[IA_NIVELES.indexOf(revision.veredicto)] + " *" + titulos[IA_NIVELES.indexOf(revision.veredicto)] + "*");
-    if (revision.historia) cuerpo.push(E(0x1F9ED) + " " + revision.historia);
-    var observaciones = 0, verdes = 0, diasObservados = false;
-    revision.tratamiento.forEach(function(t) {
-      if (t.nivel === 0) { verdes++; return; }
-      observaciones++;
-      cuerpo.push(color[t.nivel] + " " + capitalizar(t.nombre) + ": " + t.motivo);
-    });
-    revision.dias.forEach(function(d) {
-      if (d.nivel === 0) { verdes++; return; }
-      if (d.nivel < 0) return;   // tratamiento en rojo: sus dias no se valoran ni se mencionan
-      observaciones++; diasObservados = true;
-      cuerpo.push(color[d.nivel] + " " + capitalizar(d.nombre) + " " + d.dias + " d: " + d.motivo);
-    });
-    if (observaciones === 0) cuerpo.push(color[0] + " Tratamiento y d\u00edas sin observaciones");
-    else if (verdes > 0) cuerpo.push(color[0] + " Lo dem\u00e1s, sin observaciones");
-    if (diasObservados && revision.encabezadoDias) {
-      cuerpo.push(E(0x1F4CF) + " " + revision.encabezadoDias.replace(/^D\u00edas \u00b7 /, "").replace(": referencia ", ": "));
-    }
-    cuerpo.push("_An\u00e1lisis asistido por IA_");
-  } else {
-    cuerpo = pertinenciaDesdeEvento(e, coincidencias);
+  var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
+  var cuerpo = [], observaciones = 0, verdes = 0, diasObservados = false;
+  if (revision.historia) cuerpo.push(E(0x1F9ED) + " " + revision.historia);
+  revision.tratamiento.forEach(function(t) {
+    if (t.nivel === 0) { verdes++; return; }
+    observaciones++;
+    cuerpo.push(color[t.nivel] + " " + capitalizar(t.nombre) + ": " + t.motivo);
+  });
+  revision.dias.forEach(function(d) {
+    if (d.nivel === 0) { verdes++; return; }
+    if (d.nivel < 0) return;   // tratamiento en rojo: sus dias no se valoran ni se mencionan
+    observaciones++; diasObservados = true;
+    cuerpo.push(color[d.nivel] + " " + capitalizar(d.nombre) + " " + d.dias + ": " + d.motivo);
+  });
+  if (observaciones === 0) cuerpo.push(color[0] + " Tratamiento y días sin observaciones");
+  else if (verdes > 0) cuerpo.push(color[0] + " Lo demás, sin observaciones");
+  if (diasObservados && revision.encabezadoDias) {
+    cuerpo.push(E(0x1F4CF) + " " + revision.encabezadoDias.replace(/^Días · /, "").replace(": referencia ", ": "));
   }
-  if (!sugerencia && cuerpo.length === 0) return "";
-
-  var nombres = coincidencias.map(function(am) { return capitalizar(am.nombre); }).join(" + ");
-  var lineas = [E(0x1F50E) + " *Revisión PROA · " + nombres + "*"];
-  if (sugerencia) lineas.push(E(0x1F4A1) + " " + sugerencia.replace(/^Sugerencia PROA:\s*/, "").replace(/^./, function(c) { return c.toUpperCase(); }));
-  return lineas.concat(cuerpo).join("\n");
+  cuerpo.push("_Análisis asistido por IA_");
+  return { cuerpo: cuerpo, nivel: IA_NIVELES.indexOf(revision.veredicto) };
 }
 
 // Pide el analisis a la API. Devuelve { veredicto, tratamiento[], dias[], encabezadoDias, ... } o null
@@ -259,7 +224,11 @@ function revisarCasoConIa_(e, coincidencias, cfg) {
     }
     var bloque = (datos.content || []).filter(function(b) { return b.type === "text" && b.text; })[0];
     var salida = JSON.parse(bloque.text);
-    var esquemas = leerSlots(e);
+    var esquemas = leerSlots(e), seg = seguimientoPaciente(e);
+    esquemas.forEach(function(am) {
+      var curso = seg.porAm[am.nombre];
+      if (curso && curso.transcurridos >= 1) am.diasAcumulados = curso.proyectado;
+    });
     var tratamiento = itemsIa_(salida.tratamiento, esquemas);
     var diasIa = tablas.encabezadoDias ? itemsIa_(salida.dias, esquemas).filter(function(d) { return d.dias; }) : [];
     if (tratamiento.length === 0 && diasIa.length === 0) { Logger.log("Revision IA sin resultado: respuesta sin antimicrobianos de la solicitud."); return null; }
@@ -347,7 +316,7 @@ function textoCasoIa_(e, coincidencias) {
     lineas.push("", "HISTORIA DEL PACIENTE: solicitudes previas de antimicrobianos, de la m\u00e1s antigua a la m\u00e1s reciente (fecha de la orden: esquema \u00b7 diagn\u00f3stico \u00b7 aislamiento \u00b7 tipo de indicaci\u00f3n \u00b7 inicio o cambio \u00b7 servicio):");
     seg.historia.forEach(function(l) { lineas.push("- " + l); });
     lineas.push("", "C\u00e1lculo del bot sobre esa historia (d\u00edas de tratamiento continuo; \u00fasalo tal cual, no sumes por tu cuenta):");
-    seg.lineas.slice(1).forEach(function(l) { lineas.push(l.replace(/^\s+/, "- ")); });
+    seg.lineas.forEach(function(l) { lineas.push("- " + l.replace(/^[\s\u{1F501}]+/u, "")); });
   } else {
     lineas.push("", "HISTORIA DEL PACIENTE: sin solicitudes previas en la matriz en los \u00faltimos " + CONFIG.SEGUIMIENTO_DIAS + " d\u00edas.");
   }
@@ -442,7 +411,8 @@ function itemsIa_(lista, esquemas) {
     esquemas.forEach(function(q) { var c = clave(q.nombre); if (!am && (c === nombre || c.indexOf(nombre) > -1 || nombre.indexOf(c) > -1)) am = q; });
     if (!am) return;
     var n = numeroONulo(am.dias);
-    salida.push({ nombre: am.nombre, nivel: nivel, motivo: fraseIa_(x.motivo).replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ ])/, function(c) { return c.toLowerCase(); }), dias: (n !== null && n > 0) ? formatoNumero(n, 0) : "" });
+    var dias = (am.diasAcumulados > n) ? formatoNumero(am.diasAcumulados, 0) + " d continuos" : ((n !== null && n > 0) ? formatoNumero(n, 0) + " d" : "");
+    salida.push({ nombre: am.nombre, nivel: nivel, motivo: fraseIa_(x.motivo).replace(/^[A-ZÁÉÍÓÚÑ](?=[a-záéíóúñ ])/, function(c) { return c.toLowerCase(); }), dias: dias });
   });
   return salida;
 }
@@ -480,10 +450,10 @@ function probarRevisionIa() {
    ["Vancomicina sola (no dispara alerta)", eventoPruebaVancomicinaSola()]].forEach(function(caso) {
     var coincidencias = filtrarAntimicrobianosRestringidos(caso[1]);
     var revision = revisarCasoConIa_(caso[1], coincidencias, cfg);
+    var analisis = analisisDeRevision_(revision);
     var sale = debeAlertar(coincidencias) || hayHallazgoAlto_(revision);
-    Logger.log("=== %s ===\nSe enviaria: %s\n\n--- Mensaje 1 (base) ---\n%s\n\n--- Mensaje 2 (respuesta citada) ---\n%s",
-      caso[0], sale ? "si" : "no", construirMensajeDesdeEvento(caso[1], coincidencias, true),
-      mensajeRevision_(caso[1], coincidencias, revision) || "(sin mensaje de revision)");
+    Logger.log("=== %s ===\nSe enviaria: %s\n\n%s", caso[0], sale ? "si" : "no",
+      construirMensajeDesdeEvento(caso[1], coincidencias, analisis ? { analisis: analisis } : {}));
   });
 }
 
@@ -538,15 +508,16 @@ function eventoPruebaIaCeftazidimaComunidad() {
 }
 
 // Envia SOLO a PRUEBA BOT (IA_CHAT_PRUEBA fijo; no usa GREENAPI_GROUP_CHATID ni toca produccion) el
-// flujo completo de dos casos de prueba: mensaje base + revision de la IA citada. Unos USD 0,05 por caso.
+// mensaje completo de dos casos de prueba, con la revision de la IA. Unos USD 0,04 por caso.
 function enviarPruebaIaAPruebaBot() {
   var cfg = iaConfigProa_();
   if (!cfg.clave) { Logger.log("Falta ANTHROPIC_API_KEY en Propiedades del script."); return; }
   [eventoPruebaIaCeftazidimaComunidad(), eventoPruebaIaCeftazidimaMeropenem()].forEach(function(e) {
     var coincidencias = filtrarAntimicrobianosRestringidos(e);
     var revision = revisarCasoConIa_(e, coincidencias, cfg);
-    var base = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, true), { chatId: IA_CHAT_PRUEBA });
-    responderConRevision_(e, coincidencias, revision, base, IA_CHAT_PRUEBA);
-    Logger.log("PRUEBA BOT: base " + JSON.stringify(base) + " · veredicto " + (revision ? revision.veredicto : "sin revision (tablas)"));
+    var analisis = analisisDeRevision_(revision);
+    var r = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias, analisis ? { analisis: analisis } : {}),
+      { chatId: IA_CHAT_PRUEBA, sinFirma: true });
+    Logger.log("PRUEBA BOT: " + JSON.stringify(r) + " · veredicto " + (revision ? revision.veredicto : "sin revision (tablas)"));
   });
 }

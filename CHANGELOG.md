@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.17.0] - 2026-11-16
+
+### Cambiado (optimización del mensaje al grupo, decisión del referente)
+- **Un solo mensaje por caso** en vez de dos: el bot espera la respuesta del modelo (~15 s) y la incluye debajo de los datos. Si el modelo falla o declina, el mensaje sale igual con el análisis de las tablas. Desaparecen `mensajeRevision_()` y la respuesta citada; `construirMensajeDesdeEvento(e, coincidencias, { analisis })` arma todo.
+- **744 caracteres y 17 líneas** frente a 1.294 en dos mensajes: el veredicto va en la segunda línea, el esquema en una línea por antimicrobiano (`ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · 7 d hasta 23/11`), microorganismo, cultivos, indicación y origen en una sola línea, y el desglose de días ya no se repite en la línea de pertinencia.
+- **Pie más corto:** `_Ecosistema de Vigilancia Digital Servicio Farmacéutico · QF JPSN_`. La línea de título del bot se omite en este bot (`sinFirma`), porque el mensaje ya empieza con `*🚨 CASO PROA · ...*`; el pie va siempre.
+
 ## [1.16.0] - 2026-11-16
 
 ### Cambiado
