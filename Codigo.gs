@@ -421,9 +421,21 @@ function notificarTratamientoProlongado(e, coincidencias) {
   }
 }
 
+// Nombre del antimicrobiano sin el codigo interno del formulario (" - UT-...") ni la presentacion (pedido del
+// referente, 2026-11-16): "CIPROFLOXACINO AMPOLLA 100, 200" y "CIPROFLOXACINO TABLETA" -> "CIPROFLOXACINO";
+// "CASPOFUNGINA 50, 70" -> "CASPOFUNGINA". Se corta en la primera palabra de presentacion o en el primer numero
+// (nunca la primera palabra), asi que "ANFOTERICINA B" y "CEFTAZIDIMA / AVIBACTAM" no cambian. Como el nombre
+// es el mismo, las presentaciones de un medicamento se suman juntas en el seguimiento.
+var PRESENTACIONES = /^(AMPOLLAS?|AMP|TABLETAS?|TAB|CAPSULAS?|CAP|VIAL|VIALES|FRASCOS?|SOLUCION|SUSPENSION|POLVO|INYECTABLE|JARABE|GRAGEAS?|SOBRES?|ORAL|BOLSAS?)$/;
+
 function nombreLimpio(valor) {
   if (!valor) return '-';
-  return String(valor).split(' - UT-')[0].trim();
+  var palabras = String(valor).split(' - UT-')[0].trim().split(/\s+/), fin = palabras.length;
+  for (var i = 1; i < palabras.length; i++) {
+    var w = normalizarTexto(palabras[i]).replace(/[^A-Z0-9]/g, '');
+    if (/^\d/.test(w) || PRESENTACIONES.test(w)) { fin = i; break; }
+  }
+  return palabras.slice(0, fin).join(' ').replace(/[\s,;\/+-]+$/, '');
 }
 
 // Primer token del diagnostico, solo letras y numeros, 4 caracteres (A41.9 -> A419, G06.0 -> G060).

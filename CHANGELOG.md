@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.29.1] - 2026-11-16
+
+### Cambiado (pedido del referente)
+- **Nombres sin la presentación del formulario:** `nombreLimpio()` corta en la primera palabra de presentación (ampolla, tableta, cápsula, vial, frasco…) o en el primer número: `CIPROFLOXACINO AMPOLLA 100, 200` → `CIPROFLOXACINO`, `CASPOFUNGINA 50, 70` → `CASPOFUNGINA`. `ANFOTERICINA B`, `POLIMIXINA B` y `CEFTAZIDIMA / AVIBACTAM` no cambian. Vale para todos los mensajes, la sugerencia y el ajuste renal.
+- Como el nombre es el mismo, la ampolla y la tableta de un medicamento se suman juntas en la lista de prescripciones y en los días por antimicrobiano. La lista de restringidos y los rangos de dosis siguen funcionando, porque se buscan por nombre contenido.
+
 ## [1.29.0] - 2026-11-16
 
 ### Agregado (pedido del referente: sumar los días de cada antimicrobiano)

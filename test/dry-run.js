@@ -142,6 +142,20 @@ prueba('filtro: restringidos si, no restringidos no', function () {
   });
 });
 
+prueba('nombre del antimicrobiano sin la presentacion del formulario', function () {
+  [['CIPROFLOXACINO AMPOLLA 100, 200 - UT-1', 'CIPROFLOXACINO'], ['CIPROFLOXACINO TABLETA - UT-1', 'CIPROFLOXACINO'],
+   ['CASPOFUNGINA 50, 70 - UT-19974012-1', 'CASPOFUNGINA'], ['TRIMETOPRIM SULFAMETOXAZOL 160/800 - UT-1', 'TRIMETOPRIM SULFAMETOXAZOL'],
+   ['ANFOTERICINA B - UT-1', 'ANFOTERICINA B'], ['ANFOTERICINA B LIPOSOMAL - UT-1', 'ANFOTERICINA B LIPOSOMAL'], ['POLIMIXINA B - UT-1', 'POLIMIXINA B'],
+   ['CEFTAZIDIMA / AVIBACTAM - UT-1', 'CEFTAZIDIMA / AVIBACTAM'], ['PIPERACILINA / TAZOBACTAM - UT-1', 'PIPERACILINA / TAZOBACTAM'], ['', '-']]
+    .forEach(function (x) { assert.strictEqual(nombreLimpio(x[0]), x[1], x[0]); });
+  // la ampolla y la tableta del mismo medicamento se suman juntas en el seguimiento
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  filas.push(filaMatriz('05/11/2026 08:00:00', '888020', [['CIPROFLOXACINO AMPOLLA 100, 200', '400', '12', '5']]));
+  filas.push(filaMatriz('10/11/2026 08:00:00', '888020', [['CIPROFLOXACINO TABLETA', '500', '12', '5']]));
+  var t = seguimientoPaciente(eventoSeguimiento('15/11/2026 10:00:00', '888020', 'N390', [['CEFEPIME', '2000', '8', '7']])).lineas.join('\n');
+  incluye(t, '1-2. CIPROFLOXACINO 05/11/2026-15/11/2026 · *10 d*'); incluye(t, 'CIPROFLOXACINO *10 d*'); noIncluye(t, 'AMPOLLA'); noIncluye(t, 'TABLETA');
+});
+
 prueba('CIE10: punto, 3 caracteres (+X), minusculas, sin codigo y cache', function () {
   assert.strictEqual(formatearDiagnosticoCIE10('G06.0'), 'G060 - ' + CIE10.G060);
   assert.strictEqual(formatearDiagnosticoCIE10('M46.3:'), 'M46.3:'); // no esta en el catalogo simulado
@@ -278,7 +292,7 @@ prueba('sugerencia PROA: empirico combinado, empirico solo, etiologico sin suger
   nv['Nombre Antimicrobiano 1'] = ['CASPOFUNGINA 50, 70 - UT-19974012-1']; nv['Dosis en miligramos o UI AB1'] = ['70'];
   nv['Nombre Antimicrobiano 2'] = ['MEROPENEM - UT-19973890-3']; nv['Dosis en miligramos o UI AM2'] = ['1000'];
   nv['Vía de adminsitración de  AM2'] = ['Intravenoso']; nv['Frecuencia AM 2 (En horas)'] = ['8']; nv['Días ordenados AM2'] = ['7'];
-  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💡 Sugerencia PROA: terapia empírica combinada (CASPOFUNGINA 50, 70 + MEROPENEM). Revaluar a las 48-72 h con el resultado de cultivos para desescalar.');
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💡 Sugerencia PROA: terapia empírica combinada (CASPOFUNGINA + MEROPENEM). Revaluar a las 48-72 h con el resultado de cultivos para desescalar.');
   var e3 = eventoPruebaDaptomicina(); // etiologico con meropenem
   noIncluye(construirMensajeDesdeEvento(e3, filtrarAntimicrobianosRestringidos(e3)), 'Sugerencia PROA');
 });
@@ -296,7 +310,7 @@ prueba('coherencia: peso implausible, peso vs edad, dosis/kg absurda; ajuste ren
   noIncluye(construirMensajeDesdeEvento(ok, filtrarAntimicrobianosRestringidos(ok)), 'Verificar');
   // ajuste renal marcado Si con caspofungina (no requiere ajuste renal)
   nv = eventoPruebaPediatrico().namedValues; nv[CAMPOS.AJUSTE_RENAL] = ['Sí']; nv[CAMPOS.DEP_CREATININA] = ['25'];
-  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💧 Ajuste renal: Sí · CASPOFUNGINA 50, 70 no requiere ajuste renal');
+  incluye(construirMensajeDesdeEvento({ namedValues: nv }), '💧 Ajuste renal: Sí · CASPOFUNGINA no requiere ajuste renal');
   var v = eventoPruebaCeftazidimaAvibactam(); // requiere ajuste renal: sin coletilla
   noIncluye(construirMensajeDesdeEvento(v, filtrarAntimicrobianosRestringidos(v)), 'no requiere ajuste renal');
 });
