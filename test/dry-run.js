@@ -17,7 +17,16 @@ var srcIa = fs.readFileSync(path.join(__dirname, '..', 'IA_PROA.gs'), 'utf8');
 // ---- Hoja simulada --------------------------------------------------------
 var CIE10 = { B377: 'CANDIDIASIS, NO ESPECIFICADA', A419: 'SEPSIS, NO ESPECIFICADA', N390: 'INFECCION DE VIAS URINARIAS, SITIO NO ESPECIFICADO',
   G060: 'ABSCESO Y GRANULOMA INTRACRANEAL', J40X: 'BRONQUITIS, NO ESPECIFICADA COMO AGUDA O CRONICA',
-  T857: 'INFECCION Y REACCION INFLAMATORIA DEBIDAS A OTROS DISPOSITIVOS PROTESICOS, IMPLANTES E INJERTOS INTERNOS' };
+  T857: 'INFECCION Y REACCION INFLAMATORIA DEBIDAS A OTROS DISPOSITIVOS PROTESICOS, IMPLANTES E INJERTOS INTERNOS',
+  // para el cruce por palabras: las de uso frecuente y algunas "trampa" (pielonefritis cronica, ACV, neutropenia neonatal)
+  J189: 'NEUMONIA, NO ESPECIFICADA', J690: 'NEUMONITIS DEBIDA A ASPIRACION DE ALIMENTOS O VOMITO', G039: 'MENINGITIS, NO ESPECIFICADA',
+  A399: 'INFECCION MENINGOCOCICA, NO ESPECIFICADA', P393: 'INFECCION NEONATAL DE LAS VIAS URINARIAS',
+  O234: 'INFECCION NO ESPECIFICADA DE LAS VIAS URINARIAS EN EL EMBARAZO', N189: 'ENFERMEDAD RENAL CRONICA, NO ESPECIFICADA',
+  L039: 'CELULITIS DE SITIO NO ESPECIFICADO', L031: 'CELULITIS DE OTRAS PARTES DE LOS MIEMBROS', R572: 'CHOQUE SEPTICO', R571: 'CHOQUE HIPOVOLEMICO',
+  P615: 'NEUTROPENIA NEONATAL TRANSITORIA', T814: 'INFECCION CONSECUTIVA A PROCEDIMIENTO, NO CLASIFICADA EN OTRA PARTE',
+  K659: 'PERITONITIS, NO ESPECIFICADA', N110: 'PIELONEFRITIS CRONICA NO OBSTRUCTIVA ASOCIADA CON REFLUJO',
+  I64X: 'ACCIDENTE VASCULAR ENCEFALICO AGUDO, NO ESPECIFICADO COMO HEMORRAGICO O ISQUEMICO', K359: 'APENDICITIS AGUDA, NO ESPECIFICADA',
+  K350: 'APENDICITIS AGUDA CON PERITONITIS GENERALIZADA', K830: 'COLANGITIS', K819: 'COLECISTITIS, NO ESPECIFICADA' };
 var codigosCie = Object.keys(CIE10);
 
 var ENCABEZADOS_REALES = ['Marca temporal', 'Dirección de correo electrónico', 'Nombre del médico que prescribe', 'Registro médico',
@@ -526,13 +535,13 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   var r = revisionProlongado(e, filtrarAntimicrobianosRestringidos(e));
   assert.strictEqual(r.nivel, 2); assert.strictEqual(r.hc, '888001');
   // formato simple (2026-11-22): paciente, diagnostico, dias, motivo del color y la lista sin codigos
-  assert.deepStrictEqual(r.bloque.slice(0, 7), ['HC 888001 · 60 años', '📋 J189', '⏱️ Lleva 16 d de antibiótico; con esta orden llegaría a 23 d',
+  assert.deepStrictEqual(r.bloque.slice(0, 7), ['HC 888001 · 60 años', '📋 J189 · Neumonia, no especificada', '⏱️ Lleva 16 d de antibiótico; con esta orden llegaría a 23 d',
     '🔴 Más del doble de la duración de referencia para neumonía (5-7 d)',
     '1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · 7 d', '2. MEROPENEM 23/10/2026-01/11/2026 · 9 d',
     '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d (esta orden)']);
   incluye(r.bloque[7], '📏 Neumonía 5-7 d ('); incluye(r.bloque[7], '): 23 d duplica la referencia');
   assert.strictEqual(r.bloque.length, 8);   // ningun antimicrobiano se repite: sin "Por antimicrobiano"
-  assert.strictEqual(r.mensaje, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888001 · 60 años*\n📋 J189\n' +
+  assert.strictEqual(r.mensaje, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888001 · 60 años*\n📋 J189 · Neumonia, no especificada\n' +
     '⏱️ Lleva *16 d* de antibiótico; con esta orden llegaría a *23 d*\n🔴 Más del doble de la duración de referencia para neumonía (5-7 d)\n' +
     '1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · *7 d*\n2. MEROPENEM 23/10/2026-01/11/2026 · *9 d*\n' +
     '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · *7 d* (esta orden)');
@@ -654,7 +663,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
       try {   // modo inmediato
         envios.length = 0;
         notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]));
-        assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888003 · 60 años*\n📋 J189\n⏱️ Lleva *22 d* de antibiótico; con esta orden llegaría a *36 d*');
+        assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888003 · 60 años*\n📋 J189 · Neumonia, no especificada\n⏱️ Lleva *22 d* de antibiótico; con esta orden llegaría a *36 d*');
         // renovaciones seguidas del mismo antimicrobiano en una linea
         incluye(envios[0].message, '\n1-3. MEROPENEM 10/10/2026-01/11/2026 · *22 d*\n4. MEROPENEM 1000 mg IV c/8 h 01/11/2026-15/11/2026 · *14 d* (esta orden)\nPor antimicrobiano: MEROPENEM *36 d*');
         assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION');
@@ -829,6 +838,44 @@ prueba('calidad de datos: CIE10 en cualquier parte del texto o por descripcion, 
   assert.strictEqual(edadTexto('58', '695', '21170'), '58 años');
   assert.strictEqual(edadTexto('0', '4', '0'), '4 meses');
   assert.strictEqual(edadTexto('2', '6', ''), '2 años 6 meses');
+});
+
+prueba('cruce del diagnostico escrito con la pestana CIE10 (textos reales de la matriz)', function () {
+  var cod = function (dx) { return codigoCIE10Resuelto(dx); };
+  // abreviaturas, errores de digitacion y complementos que se quitan del final
+  assert.strictEqual(cod('ITU'), 'N390'); assert.strictEqual(cod('IVU COMPLICADA'), 'N390');
+  assert.strictEqual(cod('INFECCION DE VIAS URINARIAS COMPLICADA'), 'N390');
+  assert.strictEqual(cod('SHOCK SEPTICO'), 'R572'); assert.strictEqual(cod('Shock hipovolémico '), 'R571');
+  assert.strictEqual(cod('MENIGITIS '), 'G039'); assert.strictEqual(cod('meningitis bacteriana'), 'G039');
+  assert.strictEqual(cod('ENFEREMDAD RENAL CRONICA NO ESPECIFICADA\n \n'), 'N189');
+  assert.strictEqual(cod('PERITONISTIS ASOCIADO AL CATETER '), 'K659');
+  assert.strictEqual(cod('NEUMONIA ADQUIRIDA EN LA COMUNIDAD'), 'J189'); assert.strictEqual(cod('NEUMONÍA POSTERO BASAL IZQUIERDA EN TRATAMIENTO'), 'J189');
+  assert.strictEqual(cod('NEUMONIA ASPIRATIVA'), 'J690'); assert.strictEqual(cod('NEUMONIA BRONCOASPIRATIVA'), 'J189');
+  assert.strictEqual(cod('CELULITIS DE PIERNA DERECHA '), 'L039'); assert.strictEqual(cod('ISO'), 'T814');
+  assert.strictEqual(cod('COLECISTITIS MAS COLELITIASIS'), 'K819'); assert.strictEqual(cod('COLANGITIS'), 'K830');
+  // una sola palabra: solo la descripcion generica; nada de diagnosticos parecidos
+  assert.strictEqual(cod('NEUTROPRENIA FEBRIL '), '');           // no es la neutropenia neonatal
+  assert.strictEqual(cod('PIELONEFRITIS '), '');                  // no es la pielonefritis cronica con reflujo
+  assert.strictEqual(cod('ACCIDENTE OFIDICO'), '');               // no es el accidente cerebrovascular
+  assert.strictEqual(cod('INFECCION DE SITIO OPERATORIO '), '');  // no es la infeccion urinaria "sitio no especificado"
+  assert.strictEqual(cod('CÓDIGO BLANCO  MAYOR  72   HORAS'), '');
+  // codigos escritos y descripciones exactas no cambian
+  assert.strictEqual(resolverCIE10('A-419').via, 'escrito'); assert.strictEqual(resolverCIE10(': L031').codigo, 'L031');
+  assert.strictEqual(resolverCIE10('INFECCION DE VIAS URINARIAS, SITIO NO ESPECIFICADO').via, 'descripcion');
+  // en el mensaje sale lo escrito junto al codigo cruzado; categoria sin subcodigo con la descripcion de la no especificada
+  assert.strictEqual(diagnosticoCorto('MENIGITIS '), 'G039 · Meningitis, no especificada (escrito: menigitis)');
+  assert.strictEqual(diagnosticoCorto('K35'), 'K35 · Apendicitis aguda, no especificada');
+  assert.strictEqual(diagnosticoCorto('SINDROME FEBRIL'), 'SINDROME FEBRIL');
+  // duracion: el cruce y las palabras corregidas encuentran el sindrome; una palabra clave le gana al codigo cruzado
+  var tabla = obtenerPertinencia(), sin = function (dx) { var x = sindromePara(dx, tabla); return x ? x.clave : null; };
+  assert.strictEqual(sin('MENIGITIS '), 'MENINGITIS'); assert.strictEqual(sin('PERITONISTIS ASOCIADO AL CATETER'), 'INTRAABDOMINAL');
+  assert.strictEqual(sin('SHOCK SEPTICO'), 'BACTERIEMIA'); assert.strictEqual(sin('NEUTROPRENIA FEBRIL'), 'NEUTROPENIA');
+  assert.strictEqual(sin('SEPSIS URINARIA'), 'ITU'); assert.strictEqual(sin('COLECISTITIS MAS COLELITIASIS'), 'INTRAABDOMINAL');
+  // la pestana se lee una vez por ejecucion
+  var lecturas = 0, real = HOJAS['CIE10'], getRange = real.getRange;
+  real.getRange = function (f, c, nf, nc) { if (nc === 2) lecturas++; return getRange.apply(real, arguments); };
+  try { limpiarCacheEjecucion(); cache = {}; cod('NEUMONIA'); cod('CELULITIS'); cod('ITU'); assert.strictEqual(lecturas, 1); }
+  finally { real.getRange = getRange; }
 });
 
 var envios = [];

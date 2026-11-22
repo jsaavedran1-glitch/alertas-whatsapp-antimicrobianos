@@ -41,7 +41,7 @@ Paso a paso:
 2. **Se carga la lista de restringidos** desde la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` de la misma hoja (columna A, desde la fila 2). Si esa pestaña no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO`, para que las alertas nunca dejen de funcionar por eso.
 3. **Se revisan los 3 antimicrobianos de la solicitud.** El formulario guarda el nombre con un código interno (`ERTAPENEM - UT-19973898-1`). `nombreLimpio()` quita todo desde ` - UT-` y la presentación (`AMPOLLA 100, 200`, `50, 70`, `TABLETA`…; v1.29.1), se pasa a mayúsculas y se marca como restringido si el nombre **contiene** alguno de la lista. Por eso `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`, y `ANFOTERICINA` cubre la convencional y la liposomal.
 4. **Si ninguno es restringido, termina** sin enviar nada. Es lo más común: la mayoría de solicitudes son de cefepime, piperacilina/tazobactam, meropenem, etc. **`📆 REVISIÓN DE DURACIÓN DE TTO` (v1.27.0, antes "tratamiento prolongado"; solo si la solicitud no genera caso PROA, que ya trae la lista).** Si la solicitud es la **3.ª o más del mismo tratamiento continuo** y el paciente ya lleva **más de 10 días** (sumando los cambios entre fármacos, `seguimientoPaciente()`), la revisión queda pendiente en `REGISTRO_REVISIONES`, tenga o no restringido, y sale **al llegar la solicitud** (v1.31.0; antes a las 7:00), **un mensaje corto por paciente** (para que WhatsApp no lo corte con "Leer más"), con los días en negrita, cada solicitud con fechas, días y patología, y el total frente a la referencia de la patología más larga. Sin verdes y un paciente como máximo cada 7 días.
-5. **Si hay al menos uno, arma el mensaje.** Además de historia clínica, edad y servicio, incluye lo que PROA interviene: peso y **mg/kg por dosis**, cama, indicación (empírico/etiológico/profiláctico), cultivos, origen (IAAS/comunidad), si fue un cambio de antimicrobiano y por qué, ajuste renal con depuración de creatinina, y un aviso cuando **no se pidió interconsulta a Infectología**. El diagnóstico se busca en la pestaña `CIE10` por su código (`G06.0` → `G060 - ABSCESO…`; `J40` → `J40X`); si no lo encuentra, deja lo que escribió el médico. Cada antimicrobiano restringido va con dosis, vía, frecuencia, días y **fecha fin prevista**; si la dosis queda fuera del rango de referencia de la pestaña `RANGOS_DOSIS`, se agrega `⚠️ … revisar`. Los antimicrobianos **no** restringidos de la misma solicitud salen como "Acompañante", para ver la combinación completa.
+5. **Si hay al menos uno, arma el mensaje.** Además de historia clínica, edad y servicio, incluye lo que PROA interviene: peso y **mg/kg por dosis**, cama, indicación (empírico/etiológico/profiláctico), cultivos, origen (IAAS/comunidad), si fue un cambio de antimicrobiano y por qué, ajuste renal con depuración de creatinina, y un aviso cuando **no se pidió interconsulta a Infectología**. El diagnóstico se busca en la pestaña `CIE10` por su código (`G06.0` → `G060 - ABSCESO…`; `J40` → `J40X`). Si el médico no escribió código, se cruza el texto con las descripciones de la pestaña (v1.35.0, ver "Cruce del diagnóstico con la pestaña CIE10"); si tampoco así aparece, deja lo que escribió el médico. Cada antimicrobiano restringido va con dosis, vía, frecuencia, días y **fecha fin prevista**; si la dosis queda fuera del rango de referencia de la pestaña `RANGOS_DOSIS`, se agrega `⚠️ … revisar`. Los antimicrobianos **no** restringidos de la misma solicitud salen como "Acompañante", para ver la combinación completa.
 6. **WhatsApp.** `enviarAlertaWhatsApp()` pone la firma en negrita arriba (`Bot PROA Antimicrobianos HDV` o lo que diga `GREENAPI_BOT_LABEL`) y el pie en cursiva abajo, y hace un `POST` a `sendMessage` de Green-API. Si Green-API responde con error o no hay conexión, lo deja en el registro sin detener la ejecución.
 
 ### Antimicrobianos restringidos
@@ -159,6 +159,24 @@ La IA no escribe su razonamiento en la respuesta: el modelo declina ese pedido (
 
 Para activarlo: crear el archivo `IA_PROA` en el proyecto, pegar `IA_PROA.gs`, agregar `ANTHROPIC_API_KEY` en Propiedades del script, revisar el informe con `probarInformeProa()` (no envía nada) y ejecutar una vez `crearTriggerInformeProa()`.
 
+### Cruce del diagnóstico con la pestaña CIE10 (v1.35.0)
+
+Cuando el médico escribe el diagnóstico sin código (en la matriz, uno de cada cinco), el bot busca sus palabras en las descripciones de la pestaña `CIE10`:
+
+- **Abreviaturas** (`CONFIG.CIE10_SINONIMOS`): ITU/IVU, SHOCK, SX, ISO, NAC, CA, TBC, ERC/IRC, EPOC.
+- **Errores de digitación:** una letra de diferencia, dos en palabras largas, contra el vocabulario de la pestaña. MENIGITIS → MENINGITIS, PERITONISTIS → PERITONITIS, ENFEREMDAD → ENFERMEDAD.
+- **Palabras que no cambian el diagnóstico** (`CONFIG.CIE10_PALABRAS_IGNORADAS`): en estudio, probable, derecha, adquirida en la comunidad, asociada a los cuidados de la salud…
+- **Para no inventar un diagnóstico:**
+  - con dos o más palabras, la descripción debe contenerlas todas; si ninguna las tiene, se quitan complementos del final ("INFECCION DE VIAS URINARIAS COMPLICADA" → N390);
+  - con una sola palabra, solo vale la descripción genérica ("NEUMONIA" → J189; "CELULITIS DE PIERNA DERECHA" → L039).
+
+  Así "ACCIDENTE OFIDICO" no termina en un accidente cerebrovascular, ni "NEUTROPRENIA FEBRIL" en la neutropenia neonatal.
+- **En el mensaje se ve lo que escribió el médico:** `📋 G039 · Meningitis, no especificada (escrito: menigitis)`.
+- **Duración de referencia:** con código cruzado mandan primero las palabras clave de la tabla de duración ("SEPSIS URINARIA" sigue siendo infección urinaria) y, si ninguna coincide, el código cruzado. Con código escrito por el médico no cambia nada.
+- Un código de 3 caracteres sin subcódigo (`K35`, `K65`) sale con la descripción de su "no especificada".
+
+La pestaña se lee una vez por ejecución, y solo cuando hace falta. El resultado de cada texto queda 6 h en caché. `probarCruceCIE10(filas)` revisa los diagnósticos de las últimas solicitudes (500 por defecto) sin enviar nada: cuántos traen código, cuáles se cruzaron (para revisar) y cuáles quedaron sin código, cada uno con la duración de referencia que le toca.
+
 ### Rangos de dosis (`⚠️ revisar`)
 
 La pestaña **`RANGOS_DOSIS`** de la matriz tiene una fila por antimicrobiano con `min_mg_kg_dosis`, `max_mg_kg_dosis`, `min_mg_dosis`, `max_mg_dosis`, `ajuste_renal` (SI/NO; si el prescriptor marca ajuste renal y la molécula no lo requiere, el mensaje lo dice) y `nota` con la fuente del rango (ficha FDA/EMA, consenso de vancomicina 2020, consenso de polimixinas 2019, IDSA 2024; detalle en `docs/antimicrobianos-restringidos.md`). Una dosis se acepta si cumple **cualquiera** de las reglas definidas para su molécula (así, 600 mg de linezolid en un adulto de 100 kg no marca aunque sean 6 mg/kg); solo se marca si falla en todas. Sin peso no se evalúa mg/kg; si una molécula no tiene reglas (Polimixina B, cuya dosis puede venir en UI) nunca se marca.
@@ -240,7 +258,8 @@ El informe semanal tiene su propio activador (lunes a las 7:00), que se crea una
 | `probarInformeProa(dias)` (`IA_PROA.gs`) | **No** (llama a la API si hay clave) | Escribe en el registro de ejecución el informe de los últimos `dias` días (7 por defecto) |
 | `enviarInformeAPruebaBot(dias)` (`IA_PROA.gs`) | Sí, solo a PRUEBA BOT | El informe tal como llega a WhatsApp |
 | `crearTriggerInformeProa()` (`IA_PROA.gs`) | No (crea el activador) | Crea o recrea el activador de los lunes a las 7:00; solo toca los de `enviarInformeSemanalProa` |
-| `formatearDiagnosticoCIE10()`, `buscarDescripcionCIE10()` | **No** | Cruce del diagnóstico con la pestaña `CIE10` (TextFinder + caché) |
+| `formatearDiagnosticoCIE10()`, `buscarDescripcionCIE10()`, `resolverCIE10()`, `cruceCIE10PorTexto()` | **No** | Cruce del diagnóstico con la pestaña `CIE10`: por código (TextFinder + caché) y, sin código, por palabras |
+| `probarCruceCIE10(filas)` | **No** | Escribe en el registro de ejecución cómo se cruzan los diagnósticos de las últimas solicitudes |
 | `verificarEncabezados()` | **No** | Comprueba que todas las preguntas usadas existan en la fila 1 de la hoja |
 | `enviarAlertaWhatsApp(mensaje)` | Sí | Envío a Green-API con firma y pie |
 | `listarChatsGreenAPI()` | **No** | Lista los grupos visibles para la instancia |

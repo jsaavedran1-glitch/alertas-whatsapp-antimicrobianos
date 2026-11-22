@@ -13,6 +13,15 @@ var CONFIG = {
   // los 14 dias"). Un restringido con 14 d o menos no genera mensaje. 0 = caso PROA en cada solicitud, como antes.
   CASO_DIAS_MINIMOS: 14,
   HOJA_CIE10: 'CIE10',
+  // Cruce del diagnostico escrito con la pestana CIE10 cuando el medico no pone el codigo (v1.35.0, pedido del
+  // referente). Abreviaturas que se expanden antes de buscar y palabras que no cambian el diagnostico; las ajusta el QF.
+  CIE10_SINONIMOS: { ITU: 'INFECCION VIAS URINARIAS', IVU: 'INFECCION VIAS URINARIAS', SHOCK: 'CHOQUE', SX: 'SINDROME',
+    ISO: 'INFECCION CONSECUTIVA PROCEDIMIENTO', NAC: 'NEUMONIA', CA: 'TUMOR MALIGNO', TBC: 'TUBERCULOSIS', TB: 'TUBERCULOSIS',
+    ERC: 'ENFERMEDAD RENAL CRONICA', IRC: 'ENFERMEDAD RENAL CRONICA', EPOC: 'ENFERMEDAD PULMONAR OBSTRUCTIVA CRONICA' },
+  CIE10_PALABRAS_IGNORADAS: ['ESTUDIO', 'PROBABLE', 'POSIBLE', 'SOSPECHA', 'DESCARTAR', 'ORIGEN', 'FOCO', 'DETERMINAR', 'DERECHA',
+    'DERECHO', 'IZQUIERDA', 'IZQUIERDO', 'BILATERAL', 'ADQUIRIDA', 'ADQUIRIDO', 'COMUNIDAD', 'ASOCIADA', 'ASOCIADO', 'CUIDADO',
+    'CUIDADOS', 'SALUD', 'TRATAMIENTO', 'MANEJO', 'REGION', 'SEVERA', 'SEVERO', 'GRAVE', 'LEVE', 'MODERADA', 'MODERADO',
+    'PACIENTE', 'DX', 'DIAGNOSTICO'],
   CACHE_CIE10_SEG: 21600,
   HOJA_RANGOS_DOSIS: 'RANGOS_DOSIS',
   // Rangos de referencia POR DOSIS para marcar "revisar dosis". Una dosis se acepta si cumple
@@ -484,15 +493,29 @@ function extraerCodigoCIE10(diagnosticoCrudo) {
 // Codigo CIE10 del diagnostico aunque no venga al principio: primer token, despues cualquier token con
 // forma de codigo que exista en la pestana CIE10 y, por ultimo, la descripcion exacta de la pestana.
 function codigoCIE10Resuelto(diagnosticoCrudo) {
-  var directo = extraerCodigoCIE10(diagnosticoCrudo);
-  if (directo) return directo;
-  var texto = normalizarTexto(diagnosticoCrudo);
-  if (!texto || texto === '-') return '';
-  var tokens = texto.split(/[^A-Z0-9]+/);
-  for (var i = 0; i < tokens.length; i++) {
-    if (/^[A-Z]\d{2}[0-9X]?$/.test(tokens[i]) && buscarDescripcionCIE10(tokens[i])) return tokens[i];
-  }
-  return codigoCIE10PorDescripcion(texto);
+  return resolverCIE10(diagnosticoCrudo).codigo;
+}
+
+// { codigo, via, texto }: via 'escrito' (el codigo esta en el texto), 'descripcion' (el texto es una descripcion
+// exacta de la pestana), 'texto' (cruce por palabras, cruceCIE10PorTexto) o '' (sin codigo). texto: las palabras
+// corregidas del cruce, para buscar la duracion por palabra clave. Una vez por texto y ejecucion.
+function resolverCIE10(diagnosticoCrudo) {
+  var vacio = { codigo: '', via: '', texto: '' };
+  if (!diagnosticoCrudo) return vacio;
+  return enCacheEjecucion('cie10r:' + String(diagnosticoCrudo).slice(0, 300), function() {
+    var directo = extraerCodigoCIE10(diagnosticoCrudo);
+    if (directo) return { codigo: directo, via: 'escrito', texto: '' };
+    var texto = normalizarTexto(diagnosticoCrudo);
+    if (!texto || texto === '-') return vacio;
+    var tokens = texto.split(/[^A-Z0-9]+/);
+    for (var i = 0; i < tokens.length; i++) {
+      if (/^[A-Z]\d{2}[0-9X]?$/.test(tokens[i]) && buscarDescripcionCIE10(tokens[i])) return { codigo: tokens[i], via: 'escrito', texto: '' };
+    }
+    var exacto = codigoCIE10PorDescripcion(texto);
+    if (exacto) return { codigo: exacto, via: 'descripcion', texto: '' };
+    var cruce = cruceCIE10PorTexto(texto);
+    return { codigo: cruce.codigo, via: cruce.codigo ? 'texto' : '', texto: cruce.texto };
+  });
 }
 
 function codigoCIE10PorDescripcion(texto) {
@@ -524,6 +547,175 @@ function buscarEnColumnaA(hoja, codigo) {
 // Descripcion de un codigo CIE10. Busca solo la celda (TextFinder) en vez de cargar las 12.600
 // filas, y guarda el resultado en cache 6 h. Un codigo de 3 caracteres se busca tambien con X
 // (J40 -> J40X, como esta en el catalogo).
+// ---- Cruce del diagnostico escrito con la pestana CIE10 (v1.35.0) ----
+// Cuando el medico no escribe el codigo, se buscan sus palabras en las descripciones de la pestana CIE10, con las
+// abreviaturas de CONFIG.CIE10_SINONIMOS, sin las palabras de CONFIG.CIE10_PALABRAS_IGNORADAS y corrigiendo errores de
+// digitacion (una letra de diferencia; dos en palabras de 9 o mas) contra el vocabulario de la pestana. Para no
+// inventar un diagnostico:
+//  - con dos o mas palabras, la descripcion debe contenerlas todas; si ninguna las tiene, se quitan palabras del final
+//    (los complementos: "INFECCION DE VIAS URINARIAS COMPLICADA" -> N390) mientras queden dos;
+//  - con una sola palabra, solo vale la descripcion generica de esa palabra ("NEUMONIA" -> J189 "NEUMONIA, NO
+//    ESPECIFICADA"; "ACCIDENTE OFIDICO" no termina en un accidente cerebrovascular).
+// Entre varias, gana la de mas palabras identicas, menos palabras de sobra y mas corta. En el mensaje sale lo escrito
+// junto al codigo cruzado (formatearDiagnosticoCIE10). probarCruceCIE10() muestra el resultado sobre la matriz real.
+var CIE10_VACIAS = ['DE', 'DEL', 'LA', 'LAS', 'EL', 'LOS', 'Y', 'E', 'EN', 'POR', 'CON', 'SIN', 'A', 'AL', 'O', 'U', 'NO', 'PARA', 'SU', 'SE',
+  'QUE', 'VS', 'MAS', 'OTRA', 'OTRAS', 'OTRO', 'OTROS', 'ESPECIFICADO', 'ESPECIFICADA', 'ESPECIFICADOS', 'ESPECIFICADAS', 'ESPECIFICACION',
+  'CLASIFICADO', 'CLASIFICADA', 'CLASIFICADOS', 'CLASIFICADAS', 'PARTE', 'SITIO', 'TIPO'];
+
+function palabrasCIE10_(texto) {
+  return normalizarTexto(texto).replace(/[^A-Z0-9]+/g, ' ').trim().split(' ').filter(function(w) {
+    return w.length >= 2 && !/\d/.test(w) && CIE10_VACIAS.indexOf(w) === -1;
+  });
+}
+
+// Raiz para comparar singular/plural y masculino/femenino: URINARIAS y URINARIO -> URINARI.
+function raizCIE10_(w) { return w.length >= 5 ? w.replace(/S$/, '').replace(/[AO]$/, '') : w; }
+
+// Dos raices equivalen si son iguales o comparten un prefijo de 6 letras o mas que cubre el 60% de la mas corta
+// (NEUMONIA ~ NEUMONITIS, ASPIRATIVA ~ ASPIRACION).
+function raicesEquivalen_(a, b) {
+  if (a === b) return true;
+  var n = 0, max = Math.min(a.length, b.length);
+  while (n < max && a.charAt(n) === b.charAt(n)) n++;
+  return n >= 6 && n >= 0.6 * max;
+}
+
+// Distancia de edicion con transposiciones (ENFEREMDAD -> ENFERMEDAD es 1); corta en cuanto supera tope.
+function distanciaCIE10_(a, b, tope) {
+  if (Math.abs(a.length - b.length) > tope) return tope + 1;
+  var d = [], i, j;
+  for (i = 0; i <= a.length; i++) { d[i] = [i]; }
+  for (j = 0; j <= b.length; j++) d[0][j] = j;
+  for (i = 1; i <= a.length; i++) {
+    var minFila = tope + 1;
+    for (j = 1; j <= b.length; j++) {
+      var costo = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + costo);
+      if (i > 1 && j > 1 && a.charAt(i - 1) === b.charAt(j - 2) && a.charAt(i - 2) === b.charAt(j - 1)) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+      if (d[i][j] < minFila) minFila = d[i][j];
+    }
+    if (minFila > tope) return tope + 1;
+  }
+  return d[a.length][b.length];
+}
+
+// La pestana CIE10 en memoria (una lectura por ejecucion): filas { codigo, desc, raices }, vocabulario por letra
+// inicial (palabra -> veces) y raices -> filas. null si no se puede leer.
+function indiceCIE10_() {
+  return enCacheEjecucion('indiceCIE10', function() {
+    try {
+      var hoja = libroProa().getSheetByName(CONFIG.HOJA_CIE10);
+      if (!hoja || hoja.getLastRow() < 2) return null;
+      var idx = { filas: [], vocab: {}, porLetra: {}, porRaiz: {} };
+      hoja.getRange(2, 1, hoja.getLastRow() - 1, 2).getValues().forEach(function(f) {
+        var codigo = String(f[0] || '').trim().toUpperCase(), desc = String(f[1] || '').trim();
+        if (!/^[A-Z]\d{2}/.test(codigo) || !desc) return;
+        var palabras = palabrasCIE10_(desc), raices = [];
+        palabras.forEach(function(w) {
+          idx.vocab[w] = (idx.vocab[w] || 0) + 1;
+          var r = raizCIE10_(w);
+          if (raices.indexOf(r) === -1) raices.push(r);
+        });
+        if (!raices.length) return;
+        var i = idx.filas.push({ codigo: codigo, desc: desc, raices: raices }) - 1;
+        raices.forEach(function(r) { (idx.porRaiz[r] = idx.porRaiz[r] || []).push(i); });
+      });
+      Object.keys(idx.vocab).forEach(function(w) { (idx.porLetra[w.charAt(0)] = idx.porLetra[w.charAt(0)] || []).push(w); });
+      idx.raices = Object.keys(idx.porRaiz);
+      return idx;
+    } catch (err) {
+      Logger.log('No se pudo leer la pestana CIE10 para el cruce: ' + err);
+      return null;
+    }
+  });
+}
+
+// Palabra corregida contra el vocabulario de la pestana (la mas frecuente a la menor distancia), o la misma.
+function corregirPalabraCIE10_(w, idx) {
+  if (idx.vocab[w] || w.length < 5) return w;
+  var tope = w.length >= 9 ? 2 : 1, mejor = w, mejorD = tope + 1, mejorF = 0;
+  (idx.porLetra[w.charAt(0)] || []).forEach(function(v) {
+    if (Math.abs(v.length - w.length) > tope) return;
+    var d = distanciaCIE10_(w, v, tope);
+    if (d < mejorD || (d === mejorD && d <= tope && idx.vocab[v] > mejorF)) { mejor = v; mejorD = d; mejorF = idx.vocab[v]; }
+  });
+  return mejorD <= tope ? mejor : w;
+}
+
+// Palabras del diagnostico listas para buscar: abreviaturas expandidas, sin las ignoradas y corregidas.
+function palabrasDiagnosticoCIE10_(texto, idx) {
+  var sinonimos = CONFIG.CIE10_SINONIMOS || {}, ignoradas = CONFIG.CIE10_PALABRAS_IGNORADAS || [];
+  var palabras = [];
+  normalizarTexto(texto).replace(/[^A-Z0-9]+/g, ' ').trim().split(' ').forEach(function(w) {
+    (sinonimos[w] || w).split(' ').forEach(function(x) { palabras.push(x); });
+  });
+  return palabras.filter(function(w) { return w.length >= 3 && !/\d/.test(w) && CIE10_VACIAS.indexOf(w) === -1; })
+    .map(function(w) { return corregirPalabraCIE10_(w, idx); })
+    .filter(function(w, i, a) { return ignoradas.indexOf(w) === -1 && a.indexOf(w) === i; });
+}
+
+// La mejor descripcion que contiene todas las raices (soloGenerica: la que no tiene otra palabra que esa).
+function mejorDescripcionCIE10_(raices, idx, soloGenerica) {
+  // filas con una raiz equivalente; se memoriza por ejecucion (se copia: la interseccion borra claves)
+  var filasDe = function(r) {
+    idx.memo = idx.memo || {};
+    if (!idx.memo[r]) {
+      var set = {};
+      idx.raices.forEach(function(x) { if (raicesEquivalen_(r, x)) idx.porRaiz[x].forEach(function(i) { set[i] = true; }); });
+      idx.memo[r] = set;
+    }
+    var copia = {};
+    Object.keys(idx.memo[r]).forEach(function(i) { copia[i] = true; });
+    return copia;
+  };
+  var candidatas = filasDe(raices[0]);
+  for (var k = 1; k < raices.length; k++) {
+    var otras = filasDe(raices[k]);
+    Object.keys(candidatas).forEach(function(i) { if (!otras[i]) delete candidatas[i]; });
+  }
+  var mejor = null, mejorClave = null;
+  Object.keys(candidatas).forEach(function(i) {
+    var f = idx.filas[i];
+    if (soloGenerica && f.raices.length !== 1) return;
+    var exactas = raices.filter(function(r) { return f.raices.indexOf(r) > -1; }).length;
+    var usadas = f.raices.filter(function(x) { return raices.some(function(r) { return raicesEquivalen_(r, x); }); }).length;
+    var clave = [-exactas, f.raices.length - usadas, f.desc.length, f.codigo];
+    for (var c = 0; c < clave.length; c++) {
+      if (mejorClave && clave[c] === mejorClave[c]) continue;
+      if (!mejorClave || clave[c] < mejorClave[c]) { mejor = f; mejorClave = clave; }
+      break;
+    }
+  });
+  return mejor;
+}
+
+// { codigo, texto } del cruce de un diagnostico sin codigo (texto: sus palabras corregidas). Cache de 6 h por texto.
+function cruceCIE10PorTexto(texto) {
+  var cache = null, clave = 'CIE10T:' + texto.slice(0, 200);
+  try { cache = CacheService.getScriptCache(); var enCache = cache.get(clave); if (enCache !== null) return JSON.parse(enCache); } catch (err) { cache = null; }
+  var res = { codigo: '', texto: '' };
+  var idx = indiceCIE10_();
+  if (!idx) return res;
+  var palabras = palabrasDiagnosticoCIE10_(texto, idx);
+  res.texto = palabras.join(' ');
+  var raices = palabras.map(raizCIE10_).filter(function(r, i, a) { return a.indexOf(r) === i; });
+  for (var n = raices.length; n >= 1 && !res.codigo; n--) {
+    var f = mejorDescripcionCIE10_(raices.slice(0, n), idx, n === 1);
+    if (f) res.codigo = f.codigo;
+  }
+  if (cache) { try { cache.put(clave, JSON.stringify(res), CONFIG.CACHE_CIE10_SEG); } catch (err2) {} }
+  return res;
+}
+
+// Descripcion de una categoria de 3 caracteres escrita sin subcodigo (K35 -> la de K359, la no especificada), o ''.
+function descripcionCategoriaCIE10_(codigo) {
+  var idx = indiceCIE10_();
+  if (!idx) return '';
+  var delGrupo = idx.filas.filter(function(f) { return f.codigo.indexOf(codigo) === 0; });
+  var generica = delGrupo.filter(function(f) { return /NO ESPECIFICAD/.test(normalizarTexto(f.desc)); })[0];
+  return (generica || delGrupo[0] || {}).desc || '';
+}
+
 function buscarDescripcionCIE10(codigo) {
   if (!codigo) return '';
   var cache = null;
@@ -552,14 +744,18 @@ function buscarDescripcionCIE10(codigo) {
   return descripcion;
 }
 
+// "G060 - ABSCESO Y GRANULOMA INTRACRANEAL". Si el codigo salio del cruce por palabras, tambien lo que escribio el
+// medico: "G039 - MENINGITIS, NO ESPECIFICADA (escrito: MENIGITIS)".
 function formatearDiagnosticoCIE10(diagnosticoCrudo) {
   if (!diagnosticoCrudo || diagnosticoCrudo === '-') return diagnosticoCrudo || '-';
-  var codigo = codigoCIE10Resuelto(diagnosticoCrudo);
+  var r = resolverCIE10(diagnosticoCrudo), codigo = r.codigo;
   if (!codigo) return diagnosticoCrudo;
-  var descripcion = buscarDescripcionCIE10(codigo);
+  var descripcion = buscarDescripcionCIE10(codigo), mostrado = (codigo.length === 3) ? codigo + 'X' : codigo;
+  // categoria de 3 caracteres sin subcodigo ni "X" en la pestana (K35, K65): la descripcion de la no especificada
+  if (!descripcion && codigo.length === 3) { descripcion = descripcionCategoriaCIE10_(codigo); mostrado = codigo; }
   if (!descripcion) return diagnosticoCrudo;
-  var mostrado = (codigo.length === 3) ? codigo + 'X' : codigo;
-  return mostrado + ' - ' + descripcion;
+  var escrito = String(diagnosticoCrudo).replace(/\s+/g, ' ').trim();
+  return mostrado + ' - ' + descripcion + (r.via === 'texto' ? ' (escrito: ' + (escrito.length > 40 ? escrito.slice(0, 39) + '…' : escrito) + ')' : '');
 }
 
 /* =====================================================================
@@ -817,26 +1013,33 @@ function escribirPertinencia(hoja) {
 }
 
 // Sindrome del diagnostico: por prefijo CIE10 (el mas largo) y, si no, por palabra clave (la mas larga).
+// Sindrome de la tabla de duracion para un diagnostico. Con codigo escrito por el medico manda el prefijo CIE10 mas
+// largo y, si no hay, la palabra clave mas larga. Con codigo cruzado por palabras (resolverCIE10 via 'texto') mandan
+// primero las palabras clave, que pueden ser mas precisas ("SEPSIS URINARIA" es ITU aunque el cruce de A419), y el
+// codigo solo si ninguna coincide.
 function sindromePara(diagnosticoCrudo, tabla) {
-  var codigo = codigoCIE10Resuelto(diagnosticoCrudo);
-  var mejor = null, largo = 0;
-  if (codigo) {
+  var resuelto = resolverCIE10(diagnosticoCrudo), codigo = resuelto.codigo;
+  var porCodigo = function() {
+    var mejor = null, largo = 0;
+    if (codigo) tabla.forEach(function(f) {
+      f.prefijos.forEach(function(p) { if (codigo.indexOf(p) === 0 && p.length > largo) { mejor = f; largo = p.length; } });
+    });
+    return mejor;
+  };
+  var porPalabras = function() {
+    // tambien con las palabras corregidas del cruce (MENIGITIS -> MENINGITIS, SHOCK -> CHOQUE)
+    var texto = ' ' + normalizarTexto(diagnosticoCrudo) + (resuelto.texto ? ' ' + resuelto.texto : '') + ' ';
+    var mejor = null, largo = 0;
     tabla.forEach(function(f) {
-      f.prefijos.forEach(function(p) {
-        if (codigo.indexOf(p) === 0 && p.length > largo) { mejor = f; largo = p.length; }
+      f.palabras.forEach(function(p) {
+        // palabras de hasta 4 letras (ITU, IVU, TBC) deben ir como palabra completa
+        var hay = (p.length <= 4) ? texto.indexOf(' ' + p + ' ') > -1 : texto.indexOf(p) > -1;
+        if (hay && p.length > largo) { mejor = f; largo = p.length; }
       });
     });
-    if (mejor) return mejor;
-  }
-  var texto = ' ' + normalizarTexto(diagnosticoCrudo) + ' ';
-  tabla.forEach(function(f) {
-    f.palabras.forEach(function(p) {
-      // palabras de hasta 4 letras (ITU, IVU, TBC) deben ir como palabra completa
-      var hay = (p.length <= 4) ? texto.indexOf(' ' + p + ' ') > -1 : texto.indexOf(p) > -1;
-      if (hay && p.length > largo) { mejor = f; largo = p.length; }
-    });
-  });
-  return mejor;
+    return mejor;
+  };
+  return resuelto.via === 'texto' ? (porPalabras() || porCodigo()) : (porCodigo() || porPalabras());
 }
 
 // Aislamiento en mayusculas y sin tildes, con el mecanismo de resistencia escrito en palabras llevado a su sigla.
@@ -1957,6 +2160,37 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
     p ? 'sí (' + p.solicitudes + ' prescripciones seguidas, ' + p.dias + ' d)' :
       'no (necesita ' + CONFIG.PROLONGADO_MIN_SOLICITUDES + ' prescripciones seguidas y más de ' + CONFIG.PROLONGADO_DIAS + ' d)',
     (bloques.length ? bloques.join('\n\n') : '▶ No generaría ningún mensaje.') + '\n\nTiempos: ' + tiempos.join(' · '));
+}
+
+// Cruce de los diagnosticos de las ultimas `filas` solicitudes (500 por defecto) con la pestana CIE10: cuantos traen el
+// codigo, cuantos son una descripcion exacta, cuales se cruzaron por palabras (para revisar) y cuales quedaron sin
+// codigo, con la duracion de referencia que les toca. Solo lee; no envia nada.
+function probarCruceCIE10(filas) {
+  var n = Number(filas) || 500;
+  var hoja = libroProa().getSheetByName(CONFIG.HOJA_RESPUESTAS);
+  var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(normalizarClave);
+  var col = encabezados.indexOf(normalizarClave(CAMPOS.DIAGNOSTICO));
+  var ultima = hoja.getLastRow(), desde = Math.max(2, ultima - n + 1);
+  var tabla = obtenerPertinencia(), cuenta = { escrito: 0, descripcion: 0, texto: 0, '': 0 }, cruzados = {}, sinCodigo = {};
+  var duracion = function(dx) { var s = sindromePara(dx, tabla); return s ? 'duración: ' + s.sindrome : 'sin duración de referencia'; };
+  hoja.getRange(desde, col + 1, ultima - desde + 1, 1).getDisplayValues().forEach(function(f) {
+    var dx = String(f[0]).replace(/\s+/g, ' ').trim();
+    if (!dx) return;
+    var r = resolverCIE10(dx);
+    cuenta[r.via]++;
+    var clave = normalizarTexto(dx);
+    if (r.via === 'texto') cruzados[clave] = cruzados[clave] || { n: 0, linea: dx + ' → ' + formatearDiagnosticoCIE10(dx).replace(/ \(escrito: .*\)$/, '') + ' · ' + duracion(dx) };
+    else if (!r.codigo) sinCodigo[clave] = sinCodigo[clave] || { n: 0, linea: dx + ' · ' + duracion(dx) };
+    if (cruzados[clave]) cruzados[clave].n++;
+    if (sinCodigo[clave]) sinCodigo[clave].n++;
+  });
+  var lista = function(o) {
+    return Object.keys(o).map(function(k) { return o[k]; }).sort(function(a, b) { return b.n - a.n; })
+      .map(function(x) { return '- ' + (x.n > 1 ? x.n + ' × ' : '') + x.linea; }).join('\n') || '- ninguno';
+  };
+  Logger.log('Últimas %s solicitudes: %s con código escrito, %s con la descripción exacta de la pestaña, %s cruzadas por palabras, %s sin código.' +
+    '\n\nCruzadas por palabras (revisar):\n%s\n\nSin código:\n%s', String(ultima - desde + 1), String(cuenta.escrito), String(cuenta.descripcion),
+    String(cuenta.texto), String(cuenta['']), lista(cruzados), lista(sinCodigo));
 }
 
 function testCruceCIE10() {

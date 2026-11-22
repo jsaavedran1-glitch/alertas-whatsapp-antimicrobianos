@@ -2,6 +2,15 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.35.0] - 2026-11-22
+
+### Agregado (pedido del referente: cruzar el diagnóstico con la pestaña CIE10)
+- **Diagnóstico sin código → código CIE10 por palabras** (`resolverCIE10()`, `cruceCIE10PorTexto()`). Antes solo se cruzaba si el texto era idéntico a una descripción de la pestaña. Ahora entiende abreviaturas (`CONFIG.CIE10_SINONIMOS`), errores de digitación (MENIGITIS, PERITONISTIS, ENFEREMDAD) y omite palabras que no cambian el diagnóstico (`CONFIG.CIE10_PALABRAS_IGNORADAS`). Con varias palabras, la descripción debe contenerlas todas (quitando complementos del final); con una sola, solo vale la descripción genérica.
+- El mensaje muestra lo escrito junto al código cruzado: `📋 G039 · Meningitis, no especificada (escrito: menigitis)`. Los códigos de 3 caracteres sin subcódigo (`K35`) salen con la descripción de su "no especificada".
+- La duración de referencia aprovecha el cruce y las palabras corregidas ("PERITONISTIS ASOCIADO AL CATETER" → intraabdominal; "SHOCK SEPTICO" → bacteriemia/sepsis). Con código cruzado, las palabras clave de la tabla tienen prioridad sobre el código.
+- `probarCruceCIE10(filas)`: revisa los diagnósticos de las últimas solicitudes sin enviar nada.
+- Prueba nueva con diagnósticos tal como se escriben en la matriz, incluidos los que no deben cruzarse.
+
 ## [1.34.3] - 2026-11-22
 
 ### Cambiado (pedido del referente)
