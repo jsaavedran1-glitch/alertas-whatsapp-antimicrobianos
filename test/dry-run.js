@@ -2,8 +2,8 @@
 //
 // Carga el Codigo.gs y el IA_PROA.gs REALES en Node con los servicios de Apps Script simulados
 // (hoja con las pestanas ANTIMICROBIANOS_RESTRINGIDOS, CIE10 y RANGOS_DOSIS,
-// CacheService, Utilities) y verifica el filtro, el mensaje y los puntos de la IA
-// (con la API simulada). No hay red, credenciales ni envios.
+// CacheService, Utilities) y verifica el filtro, los mensajes y el informe semanal
+// (con la API de la IA simulada). No hay red, credenciales ni envios.
 //
 // Uso: node test/dry-run.js
 
@@ -901,14 +901,13 @@ prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {
   assert.ok(!/sk-ant/.test(src + srcIa)); assert.ok(!/@c\.us/.test(srcIa)); assert.ok(/@g\.us$/.test(IA_CHAT_PRUEBA));
 });
 
-// ---- IA (IA_PROA.gs) con la API simulada ---------------------------------------------------------------
-// Green-API responde bien, las fichas se leen de docs/ del repositorio y la API de la IA devuelve respuesta(n).
-function conIaSimulada(respuesta, fn) {
+// ---- Informe semanal PROA (IA_PROA.gs) con la API simulada ---------------------------------------------
+// Green-API responde bien y la API de la IA devuelve respuesta(n); cualquier otra URL es un error.
+function conApiInforme(respuesta, fn) {
   var real = global.UrlFetchApp, peticiones = []; envios = [];
   var r = function (codigo, texto) { return { getResponseCode: function () { return codigo; }, getContentText: function () { return texto; } }; };
   global.UrlFetchApp = { fetch: function (url, op) {
     if (url.indexOf('greenapi.test') > -1) { envios.push(JSON.parse(op.payload)); return r(200, JSON.stringify({ idMessage: 'MSG' + envios.length })); }
-    if (url.indexOf(IA_DOCS_URL) === 0) return r(200, fs.readFileSync(path.join(__dirname, '..', 'docs', url.slice(IA_DOCS_URL.length)), 'utf8'));
     if (url === IA_URL) {
       peticiones.push({ headers: op.headers, payload: op.payload, cuerpo: JSON.parse(op.payload) });
       var x = typeof respuesta === 'function' ? respuesta(peticiones.length) : respuesta;
@@ -919,157 +918,181 @@ function conIaSimulada(respuesta, fn) {
   } };
   try { fn(peticiones); } finally { global.UrlFetchApp = real; }
 }
-function respuestaIa(puntos, extra) {
-  return { cuerpo: Object.assign({ model: 'claude-opus-5-5', stop_reason: 'end_turn', usage: { input_tokens: 12000, output_tokens: 3000 },
-    content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify({ analisis: 'Repaso del caso.', puntos: puntos, datos_faltantes: ['antibiograma'] }) }] },
-    extra || {}) };
+function respuestaInforme(hallazgos, sugerencias) {
+  return { cuerpo: { model: 'claude-opus-5-5', stop_reason: 'end_turn', usage: { input_tokens: 12000, output_tokens: 3000 },
+    content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify({ analisis: 'Repaso de la semana.', hallazgos: hallazgos, sugerencias: sugerencias || [] }) }] } };
 }
-function propsIa(extra) {
+function propsInforme(extra) {
   var P = Object.assign({ GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test',
     ANTHROPIC_API_KEY: 'clave-de-prueba' }, extra || {});
   global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
 }
-function eventoCasoIa() {
-  var e = eventoSeguimiento('20/11/2026 10:00:00', '777010', 'L031', [['ERTAPENEM', '1000', '24', '21']]);
-  var nv = e.namedValues;
-  nv['Nombres y apellidos del paciente'] = ['PACIENTE FICTICIO']; nv['Nombre del médico que prescribe'] = ['DR FICTICIO'];
-  nv['EPS del paciente'] = ['EPS FICTICIA']; nv[CAMPOS.CAMA] = ['C99']; nv[CAMPOS.SERVICIO] = ['Hospitalización General Adulto'];
-  nv[CAMPOS.MICROORGANISMO] = ['Klebsiella pneumoniae BLEE']; nv[CAMPOS.INTERCONSULTA] = ['No'];
-  return e;
+function filaInforme(fecha, hc, extra, ams) {
+  var fila = filaMatriz(fecha, hc, ams);
+  var datos = Object.assign({ 'Peso en Kg': '70' }, extra);
+  Object.keys(datos).forEach(function (k) { fila[ENCABEZADOS_REALES.indexOf(k)] = datos[k]; });
+  return fila;
 }
-var PUNTO_DURACION = { antimicrobiano: 'ERTAPENEM', tema: 'duración', prioridad: 'alta',
-  observacion: '21 d con foco de piel (referencia 5-7 d); ¿hay osteomielitis o absceso sin drenar?', referencia: 'Tabla de duración' };
+function filaRegistro(datos) { return ENCABEZADOS_REGISTRO.map(function (h) { return h in datos ? datos[h] : ''; }); }
+var LUNES_23_11 = new Date(2026, 10, 23, 7, 0, 0);
 var CHAT_PRUEBA_BOT = '120363412506101174@g.us';
+// Una semana ficticia (16/11-22/11) y la anterior (09/11-15/11); corre fn con esa matriz y ese registro.
+function conSemanaFicticia(fn) {
+  var matrizReal = HOJAS['Respuestas de formulario 1'], registroReal = HOJAS['REGISTRO_REVISIONES'], informesReal = HOJAS['INFORMES_PROA'];
+  var UCI = 'Unidad de Cuidado Crítico UCI A', MI = 'Hospitalización Medicina Interna';
+  var EMP = 'Tratamiento Empírico (En presencia o sospecha de infección sin germen documentado - sin antibiograma))';
+  var ETI = 'Tratamiento Etiológico (En presencia de aislamiento conocido)', PRO = 'Profiláctico';
+  var S = 'Servicio actual', T = 'Indicación del antibiótico', C = 'Cultivos tomados:', I = '¿Solicitó interconsulta por infectología en Dinámica Gerencial?';
+  var D = 'Diagnóstico CIE10 para la cual se prescribe el antimicrobiano';
+  var x = function (s, t, c, i, d) { var o = {}; o[S] = s; o[T] = t; o[C] = c; o[I] = i; o[D] = d; return o; };
+  HOJAS['Respuestas de formulario 1'] = hojaDeFilas([ENCABEZADOS_REALES,
+    filaInforme('10/11/2026 08:00:00', '2001', x(MI, EMP, 'HEMOCULTIVO', 'No', 'A419'), [['MEROPENEM', '1000', '8', '7']]),
+    filaInforme('12/11/2026 08:00:00', '2002', x(UCI, EMP, 'NINGUNO', 'No', 'L031'), [['ERTAPENEM', '1000', '24', '7']]),
+    filaInforme('15/11/2026 23:00:00', '2003', x(MI, EMP, 'HEMOCULTIVO', 'No', 'J189'), [['CEFEPIME', '2000', '8', '7']]),
+    filaInforme('16/11/2026 08:00:00', '1001', x(UCI, EMP, 'NINGUNO', 'Sí', 'L031'), [['ERTAPENEM', '1000', '24', '7']]),
+    filaInforme('17/11/2026 09:00:00', '1002', x(MI, EMP, 'HEMOCULTIVO', 'No', 'A419'), [['MEROPENEM', '1000', '8', '7'], ['VANCOMICINA', '1000', '3', '7']]),
+    filaInforme('18/11/2026 10:00:00', '1001', x(UCI, ETI, 'HEMOCULTIVO', 'No', 'neumonia'), [['ERTAPENEM', '3000', '24', '7']]),
+    filaInforme('19/11/2026 11:00:00', '1003', x('Cirugía', PRO, '', 'No', 'T814'), [['CEFAZOLINA', '2000', '8', '3']]),
+    filaInforme('21/11/2026 12:00:00', '1004', x(UCI, ETI, 'HEMOCULTIVO', 'Sí', 'B377'), [['CASPOFUNGINA', '70', '24', '14']]),
+    filaInforme('23/11/2026 06:00:00', '1009', x(UCI, EMP, 'NINGUNO', 'No', 'L031'), [['ERTAPENEM', '1000', '24', '7']])   // hoy: no entra
+  ]);
+  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice(),
+    filaRegistro({ 'Marca temporal de la solicitud': '20/11/2026 10:00:00', 'Historia clínica': '1001', 'Servicio': UCI, 'Antimicrobianos restringidos': 'ERTAPENEM 7 d',
+      'Fuente del análisis': 'TABLAS', 'Enviado al grupo': 'SI', 'Días de tratamiento continuo': 52 }),
+    filaRegistro({ 'Marca temporal de la solicitud': '21/11/2026 10:00:00', 'Historia clínica': '1002', 'Servicio': MI, 'Acompañantes': 'MEROPENEM 7 d',
+      'Fuente del análisis': 'TRATAMIENTO PROLONGADO', 'Enviado al grupo': 'SI', 'Días de tratamiento continuo': 18 }),
+    filaRegistro({ 'Marca temporal de la solicitud': '21/11/2026 11:00:00', 'Historia clínica': '1005', 'Servicio': UCI, 'Antimicrobianos restringidos': 'ERTAPENEM 7 d',
+      'Fuente del análisis': 'TABLAS', 'Enviado al grupo': 'NO', 'Días de tratamiento continuo': 3 }),
+    filaRegistro({ 'Marca temporal de la solicitud': '12/11/2026 08:00:00', 'Historia clínica': '2002', 'Servicio': UCI, 'Antimicrobianos restringidos': 'ERTAPENEM 7 d',
+      'Fuente del análisis': 'TABLAS', 'Enviado al grupo': 'SI', 'Días de tratamiento continuo': 20 })
+  ], true);
+  delete HOJAS['INFORMES_PROA'];
+  try { fn(); } finally {
+    HOJAS['Respuestas de formulario 1'] = matrizReal; HOJAS['REGISTRO_REVISIONES'] = registroReal;
+    if (informesReal) HOJAS['INFORMES_PROA'] = informesReal; else delete HOJAS['INFORMES_PROA'];
+  }
+}
+var CIFRAS_SEMANA = '*📊 INFORME SEMANAL PROA · 16/11–22/11*\n' +
+  '📝 5 solicitudes (sem. ant. 3) · 4 pacientes · 3 con restringido (sem. ant. 1)\n' +
+  '💊 Más días ordenados: ERTAPENEM 14 d · CASPOFUNGINA 14 d · MEROPENEM 7 d\n' +
+  '🔒 Restringidos: ERTAPENEM 2 solicitudes · CASPOFUNGINA 1 solicitud · VANCOMICINA 1 solicitud\n' +
+  '🏥 Servicios: UCI A 60% · Hosp. Medicina Interna 20% · Cirugía 20%\n' +
+  '🧫 Empírico 40% (50% sin cultivos) · Etiológico 40% · Profiláctico 20% · 1 con profilaxis de más de 1 día\n' +
+  '🧪 Restringidos con interconsulta a Infectología: 67%\n' +
+  '📨 Caso PROA: 1 (sem. ant. 1) · Revisión de duración: 1 (sem. ant. 0)\n' +
+  '⏳ Más largos: HC 1001 UCI A *52 d* · HC 1002 Hosp. Medicina Interna *18 d*\n' +
+  '⚠️ Datos por corregir: 1 dosis fuera de rango · 1 frecuencia de menos de 4 h · 1 diagnóstico sin código CIE10';
 
-prueba('IA en modo PRUEBA: el grupo recibe el mensaje de siempre y PRUEBA BOT la copia con los puntos', function () {
+prueba('informe semanal: cifras de la semana calculadas por el codigo, sin IA si no hay clave', function () {
   var propsReal = global.PropertiesService;
-  propsIa();
-  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
+  propsInforme({ ANTHROPIC_API_KEY: '' });
   try {
-    conIaSimulada(respuestaIa([
-      PUNTO_DURACION,
-      { antimicrobiano: 'ERTAPENEM', tema: 'espectro', prioridad: 'media', observacion: 'Es inadecuado usar ertapenem aquí', referencia: 'Ficha Ertapenem' },
-      { antimicrobiano: '', tema: 'indicación', prioridad: 'media', observacion: 'Las guías IDSA 2024 sugieren otro esquema', referencia: 'IDSA 2024' },
-      { antimicrobiano: 'MEROPENEM', tema: 'combinación', prioridad: 'media', observacion: 'duplica espectro', referencia: 'Datos de la solicitud' },
-      { antimicrobiano: 'ERTAPENEM', tema: 'cobertura', prioridad: 'media', observacion: 'BLEE sin KPC: cubre el aislado; confirmar con antibiograma', referencia: 'ficha de Klebsiella pneumoniae' }
-    ]), function (peticiones) {
-      notificarNuevaRespuesta(eventoCasoIa());
-      assert.strictEqual(envios.length, 2);
-      assert.strictEqual(envios[0].chatId, '111@g.us'); incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*'); noIncluye(envios[0].message, '🤖');
-      assert.strictEqual(envios[1].chatId, CHAT_PRUEBA_BOT);
-      assert.strictEqual(envios[1].message.indexOf(envios[0].message.split('\n\n_Ecosistema')[0]), 0, 'la copia empieza con el mismo mensaje');
-      incluye(envios[1].message, '\n\n*🤖 Para revisar (IA)*\n🔎 ERTAPENEM · 21 d con foco de piel (referencia 5-7 d); ¿hay osteomielitis o absceso sin drenar? (tabla de duración)\n' +
-        '🔎 ERTAPENEM · BLEE sin KPC: cubre el aislado; confirmar con antibiograma (ficha Klebsiella pneumoniae)\n_Apoyo automático; la decisión es del equipo PROA_');
-      ['inadecuado', 'IDSA 2024', 'MEROPENEM', 'duplica'].forEach(function (x) { noIncluye(envios[1].message, x); });
-      // la peticion: modelo, esfuerzo, salida estructurada, respaldo ante declinacion, sin razonamiento ni temperatura fijos
-      assert.strictEqual(peticiones.length, 1);
-      var c = peticiones[0].cuerpo;
-      assert.strictEqual(c.model, 'claude-opus-5-5'); assert.strictEqual(c.output_config.effort, 'high');
-      assert.strictEqual(c.output_config.format.type, 'json_schema'); assert.strictEqual(c.fallbacks, 'default');
-      assert.strictEqual(peticiones[0].headers['anthropic-beta'], 'server-side-fallback-2026-07-01'); assert.strictEqual(peticiones[0].headers['x-api-key'], 'clave-de-prueba');
-      assert.ok(!('thinking' in c) && !('temperature' in c));
-      incluye(c.system, 'TABLA DE DURACIÓN POR SÍNDROME'); incluye(c.system, '### 7. Ertapenem'); incluye(c.system, 'Klebsiella pneumoniae');
-      incluye(c.messages[0].content, 'Mensaje que el bot va a enviar: CASO PROA'); incluye(c.messages[0].content, '- Ficha Ertapenem\n');
-      // seudonimizado: sin historia clinica, nombre, medico, EPS ni cama
-      ['777010', 'PACIENTE FICTICIO', 'DR FICTICIO', 'EPS FICTICIA', 'C99'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
-    });
-    var reg = HOJAS['REGISTRO_REVISIONES']._filas, fila = reg[reg.length - 1], col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
-    assert.strictEqual(fila[col('Enviado al grupo')], 'SI'); assert.strictEqual(fila[col('Destino')], 'PRODUCCION + PRUEBA BOT (IA)');
-    assert.strictEqual(fila[col('Modelo')], 'claude-opus-5-5'); assert.strictEqual(fila[col('Tokens de entrada')], 12000);
-    assert.strictEqual(fila[col('Tokens de salida')], 3000); assert.strictEqual(fila[col('Costo aproximado USD')], 0.108);
-    var d = fila[col('Detalle')];
-    incluye(d, '[alta] ERTAPENEM · duración: 21 d con foco de piel'); incluye(d, 'lenguaje de juicio'); incluye(d, 'sin referencia permitida: IDSA 2024');
-    incluye(d, 'antimicrobiano que no está en la solicitud'); incluye(d, 'Faltan: antibiograma'); incluye(d, 'Repaso: Repaso del caso.');
-  } finally { global.PropertiesService = propsReal; }
-});
-
-prueba('IA en modo PRODUCCION: los puntos van en el mensaje; sin puntos, con error o si declina, el mensaje sale igual', function () {
-  var propsReal = global.PropertiesService;
-  propsIa({ IA_PROA_MODO: 'produccion', IA_ESFUERZO: 'medium' });
-  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
-  var reg = HOJAS['REGISTRO_REVISIONES']._filas, col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
-  var ultima = function () { return reg[reg.length - 1]; };
-  try {
-    conIaSimulada(respuestaIa([PUNTO_DURACION]), function (peticiones) {
-      notificarNuevaRespuesta(eventoCasoIa());
-      assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].chatId, '111@g.us');
-      incluye(envios[0].message, '*🤖 Para revisar (IA)*\n🔎 ERTAPENEM · 21 d'); assert.strictEqual(peticiones[0].cuerpo.output_config.effort, 'medium');
-      assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION (con puntos de IA)');
-    });
-    // sin puntos: nada de IA en el grupo
-    conIaSimulada(respuestaIa([]), function () {
-      notificarNuevaRespuesta(eventoCasoIa());
-      assert.strictEqual(envios.length, 1); noIncluye(envios[0].message, '🤖'); incluye(ultima()[col('Detalle')], 'sin puntos para revisar');
-    });
-    // error de la API, declinacion y respuesta cortada: el mensaje sale sin el bloque y el registro dice por que
-    [[{ codigo: 500, cuerpo: 'error' }, 'IA sin respuesta: HTTP 500'],
-     [respuestaIa([], { stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'bio' } }), 'IA sin respuesta: el modelo declinó, categoría bio'],
-     [respuestaIa([], { stop_reason: 'max_tokens' }), 'IA sin respuesta: respuesta incompleta'],
-     [new Error('Timeout: ' + IA_URL), 'IA sin respuesta: tardó demasiado']].forEach(function (caso) {
-      conIaSimulada(caso[0], function () {
-        notificarNuevaRespuesta(eventoCasoIa());
-        assert.strictEqual(envios.length, 1); noIncluye(envios[0].message, '🤖'); incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*');
-        incluye(ultima()[col('Detalle')], caso[1]); assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Modelo')], '');
+    conSemanaFicticia(function () {
+      conApiInforme(function () { throw new Error('no debia llamarse a la API'); }, function (peticiones) {
+        var inf = construirInformeProa_(LUNES_23_11, 7);
+        assert.strictEqual(inf.mensaje, CIFRAS_SEMANA);
+        assert.strictEqual(inf.anterior.periodo, '09/11–15/11'); assert.strictEqual(inf.anterior.solicitudes, 3);
+        assert.strictEqual(peticiones.length, 0);
+        // el activador envia a PRUEBA BOT por defecto y deja la fila en INFORMES_PROA
+        enviarInforme_(LUNES_23_11);
+        assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].chatId, CHAT_PRUEBA_BOT);
+        assert.strictEqual(envios[0].message, CIFRAS_SEMANA + '\n\n_Ecosistema de Vigilancia Digital Servicio Farmacéutico · QF JPSN_');
+        var fila = HOJAS['INFORMES_PROA']._filas[1];
+        assert.deepStrictEqual(HOJAS['INFORMES_PROA']._filas[0], ENCABEZADOS_INFORMES);
+        assert.strictEqual(fila[1], '16/11–22/11'); assert.strictEqual(fila[2], 'PRUEBA BOT'); assert.strictEqual(fila[3], 'SI');
+        assert.strictEqual(fila[4], CIFRAS_SEMANA); incluye(fila[5], 'sin IA'); assert.strictEqual(fila[6], '');
       });
     });
-    // si la API no acepta el respaldo, se repite sin el
-    conIaSimulada(function (n) { return n === 1 ? { codigo: 400, cuerpo: '{"error":{"message":"fallbacks: not supported"}}' } : respuestaIa([PUNTO_DURACION]); }, function (peticiones) {
-      notificarNuevaRespuesta(eventoCasoIa());
-      assert.strictEqual(peticiones.length, 2); assert.ok(!('fallbacks' in peticiones[1].cuerpo)); assert.ok(!('anthropic-beta' in peticiones[1].headers));
-      incluye(envios[0].message, '🤖');
-    });
-    // como maximo 3 puntos, los de prioridad alta primero; con respaldo vale el ultimo bloque de texto
-    var p = function (o, prio) { return { antimicrobiano: 'ERTAPENEM', tema: 'datos', prioridad: prio, observacion: o, referencia: 'Datos de la solicitud' }; };
-    var resp = respuestaIa([p('uno', 'media'), p('dos', 'media'), p('tres', 'alta'), p('cuatro', 'media')]);
-    resp.cuerpo.content = [{ type: 'text', text: '{"incompleto' }, { type: 'fallback', from: { model: 'claude-opus-5-5' }, to: { model: 'otro' } }].concat(resp.cuerpo.content);
-    conIaSimulada(resp, function () {
-      notificarNuevaRespuesta(eventoCasoIa());
-      var m = envios[0].message;
-      assert.ok(m.indexOf('· tres') < m.indexOf('· uno') && m.indexOf('· uno') < m.indexOf('· dos')); noIncluye(m, 'cuatro');
-      incluye(ultima()[col('Detalle')], 'cuatro (más de 3 puntos)');
+    // nombres de servicio y cultivos tal como vienen en la matriz real
+    assert.strictEqual(servicioCorto('Unidad de Cuidado Crítico UCI B'), 'UCI B'); assert.strictEqual(servicioCorto('Unidad de Cuidado Crítico PEDIATRÍA'), 'UCI PEDIATRÍA');
+    assert.strictEqual(servicioCorto('Unidad de Cuidados Intermedios UCI NEO 1/2'), 'Intermedios UCI NEO 1/2'); assert.strictEqual(servicioCorto(''), 'Sin servicio');
+    ['NINGUNO', 'NINGUNO, ', '..', '', 'pendiente'].forEach(function (v) { assert.strictEqual(sinCultivos(v), true, v); });
+    ['UROCULTIVO, NINGUNO', 'CULTIVO DE LCR ', 'SECRECIÓN'].forEach(function (v) { assert.strictEqual(sinCultivos(v), false, v); });
+    // semana sin solicitudes
+    var vacia = datosInforme_([], [], new Date(2026, 10, 16), new Date(2026, 10, 23));
+    assert.strictEqual(mensajeInforme_(vacia, vacia, null), '*📊 INFORME SEMANAL PROA · 16/11–22/11*\nSin solicitudes en el formulario en este periodo (sem. ant. 0).');
+  } finally { global.PropertiesService = propsReal; }
+});
+
+prueba('informe semanal con IA: lectura con cifras de los datos; se descartan cifras inventadas y lenguaje de juicio', function () {
+  var propsReal = global.PropertiesService;
+  propsInforme();
+  try {
+    conSemanaFicticia(function () {
+      conApiInforme(respuestaInforme([
+        { indicador: 'servicios', texto: 'UCI A concentró el 60% de las solicitudes de la semana.' },
+        { indicador: 'comparacion', texto: 'Las solicitudes subieron un 66% frente a la semana anterior' },
+        { indicador: 'interconsulta', texto: 'El 67% de las solicitudes con restringido tuvo interconsulta a Infectología' },
+        { indicador: 'servicios', texto: 'Hay abuso de carbapenémicos en UCI A' }
+      ], [{ texto: 'Revisar con UCI A la toma de cultivos antes del tratamiento empírico' }]), function (peticiones) {
+        enviarInforme_(LUNES_23_11);
+        assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].chatId, CHAT_PRUEBA_BOT);
+        assert.strictEqual(envios[0].message.indexOf(CIFRAS_SEMANA), 0);
+        incluye(envios[0].message, CIFRAS_SEMANA + '\n\n*🤖 Lectura de la semana (IA)*\n• UCI A concentró el 60% de las solicitudes de la semana\n' +
+          '• El 67% de las solicitudes con restringido tuvo interconsulta a Infectología\n*Para el comité*\n' +
+          '• Revisar con UCI A la toma de cultivos antes del tratamiento empírico\n_Cifras del formulario; lectura automática para el comité PROA_');
+        noIncluye(envios[0].message, '66%'); noIncluye(envios[0].message, 'abuso');
+        // la peticion: modelo, esfuerzo, salida estructurada, respaldo; solo cifras agregadas, sin historias clinicas
+        assert.strictEqual(peticiones.length, 1);
+        var c = peticiones[0].cuerpo;
+        assert.strictEqual(c.model, 'claude-opus-5-5'); assert.strictEqual(c.output_config.effort, 'high');
+        assert.strictEqual(c.output_config.format.type, 'json_schema'); assert.strictEqual(c.fallbacks, 'default');
+        assert.strictEqual(peticiones[0].headers['anthropic-beta'], 'server-side-fallback-2026-07-01'); assert.strictEqual(peticiones[0].headers['x-api-key'], 'clave-de-prueba');
+        assert.ok(!('thinking' in c) && !('temperature' in c));
+        incluye(c.messages[0].content, '"solicitudes": 5'); incluye(c.messages[0].content, '"periodo": "09/11–15/11"');
+        ['1001', '1002', '2002', '"hc"'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
+      });
+      var fila = HOJAS['INFORMES_PROA']._filas[1];
+      assert.strictEqual(fila[6], 'claude-opus-5-5'); assert.strictEqual(fila[7], 12000); assert.strictEqual(fila[8], 3000); assert.strictEqual(fila[9], 0.108);
+      incluye(fila[5], 'cifra que no está en los datos: 66'); incluye(fila[5], 'lenguaje de juicio'); incluye(fila[5], 'Repaso: Repaso de la semana.');
     });
   } finally { global.PropertiesService = propsReal; }
 });
 
-prueba('IA en la revision de duracion (PRUEBA): mismo flujo y los puntos quedan en el Detalle despues del bloque', function () {
-  var propsReal = global.PropertiesService;
-  propsIa();
-  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
-  var filas = HOJAS['Respuestas de formulario 1']._filas;
-  filas.push(filaMatriz('03/11/2026 08:00:00', '888050', [['MEROPENEM', '1000', '8', '7']]));
-  filas.push(filaMatriz('10/11/2026 08:00:00', '888050', [['MEROPENEM', '1000', '8', '7']]));
-  try {
-    conIaSimulada(respuestaIa([{ antimicrobiano: 'MEROPENEM', tema: 'duración', prioridad: 'alta', observacion: 'con esta orden llega a 21 d en piel; ¿hay foco sin controlar?',
-      referencia: 'Tabla de duración' }]), function (peticiones) {
-      notificarNuevaRespuesta(eventoSeguimiento('17/11/2026 08:00:00', '888050', 'L031', [['MEROPENEM', '1000', '8', '7']]));
-      assert.strictEqual(envios.length, 2);
-      incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*'); noIncluye(envios[0].message, '🤖');
-      assert.strictEqual(envios[1].chatId, CHAT_PRUEBA_BOT); incluye(envios[1].message, '🔎 MEROPENEM · con esta orden llega a 21 d en piel');
-      incluye(peticiones[0].cuerpo.messages[0].content, 'Mensaje que el bot va a enviar: REVISIÓN DE DURACIÓN');
-      incluye(peticiones[0].cuerpo.messages[0].content, 'TRATAMIENTO PROLONGADO: es la prescripción 3');
-      noIncluye(peticiones[0].cuerpo.messages[0].content, '- Ficha ');   // meropenem no tiene ficha: solo tabla, analisis y datos
-    });
-    var fila = HOJAS['REGISTRO_REVISIONES']._filas[1], col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
-    assert.strictEqual(fila[col('Fuente del análisis')], 'TRATAMIENTO PROLONGADO'); assert.strictEqual(fila[col('Enviado al grupo')], 'SI');
-    assert.strictEqual(fila[col('Modelo')], 'claude-opus-5-5');
-    var d = fila[col('Detalle')];
-    assert.strictEqual(d.indexOf('HC 888050'), 0); incluye(d, '\nIA (');
-    // la revision sigue contando para no repetir al paciente en 7 dias
-    assert.strictEqual(prolongadoRevisadoReciente('888050', new Date(2026, 10, 18)), true);
-  } finally { global.PropertiesService = propsReal; }
-});
-
-prueba('IA apagada: sin ANTHROPIC_API_KEY o con IA_PROA_MODO = NO no se llama a la API', function () {
+prueba('informe semanal: destino PRODUCCION, reintento con esfuerzo medio si tarda y sin lectura si la API falla', function () {
   var propsReal = global.PropertiesService;
   try {
-    [{ ANTHROPIC_API_KEY: '' }, { IA_PROA_MODO: 'NO' }].forEach(function (extra) {
-      propsIa(extra);
-      conIaSimulada(function () { throw new Error('no debia llamarse a la API'); }, function (peticiones) {
-        notificarNuevaRespuesta(eventoCasoIa());
-        assert.strictEqual(peticiones.length, 0); assert.strictEqual(envios.length, 1); noIncluye(envios[0].message, '🤖');
+    conSemanaFicticia(function () {
+      propsInforme({ INFORME_PROA_DESTINO: 'produccion' });
+      conApiInforme(function (n) { return n === 1 ? new Error('Timeout: ' + IA_URL) : respuestaInforme([{ indicador: 'servicios', texto: 'UCI A concentró el 60% de las solicitudes' }]); },
+        function (peticiones) {
+          enviarInforme_(LUNES_23_11);
+          assert.strictEqual(envios[0].chatId, '111@g.us'); incluye(envios[0].message, '• UCI A concentró el 60% de las solicitudes');
+          assert.strictEqual(peticiones.length, 2); assert.strictEqual(peticiones[1].cuerpo.output_config.effort, 'medium');
+          assert.strictEqual(HOJAS['INFORMES_PROA']._filas[1][2], 'PRODUCCION');
+        });
+      [[{ codigo: 500, cuerpo: 'error' }, 'IA sin respuesta: HTTP 500'],
+       [{ cuerpo: { stop_reason: 'refusal', stop_details: { category: 'bio' }, content: [] } }, 'IA sin respuesta: el modelo declinó, categoría bio']].forEach(function (caso) {
+        conApiInforme(caso[0], function () {
+          enviarInforme_(LUNES_23_11);
+          assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].message.split('\n\n_Ecosistema')[0], CIFRAS_SEMANA);
+          var filas = HOJAS['INFORMES_PROA']._filas; incluye(filas[filas.length - 1][5], caso[1]);
+        });
       });
     });
   } finally { global.PropertiesService = propsReal; }
+});
+
+prueba('crearTriggerInformeProa deja un solo activador semanal (lunes 7:00, hora de Colombia)', function () {
+  var activadores = [{ f: 'enviarInformeSemanalProa' }, { f: 'notificarNuevaRespuesta' }].map(function (x) { return { getHandlerFunction: function () { return x.f; } }; });
+  var creado = null, real = global.ScriptApp;
+  global.ScriptApp = {
+    WeekDay: { MONDAY: 'MONDAY' },
+    getProjectTriggers: function () { return activadores.slice(); },
+    deleteTrigger: function (t) { activadores.splice(activadores.indexOf(t), 1); },
+    newTrigger: function (f) {
+      var cfg = { f: f };
+      var b = { timeBased: function () { return b; }, onWeekDay: function (d) { cfg.dia = d; return b; }, atHour: function (h) { cfg.hora = h; return b; },
+        inTimezone: function (z) { cfg.zona = z; return b; },
+        create: function () { creado = cfg; var t = { getHandlerFunction: function () { return f; } }; activadores.push(t); return t; } };
+      return b;
+    }
+  };
+  try {
+    crearTriggerInformeProa();
+    assert.deepStrictEqual(activadores.map(function (t) { return t.getHandlerFunction(); }).sort(), ['enviarInformeSemanalProa', 'notificarNuevaRespuesta']);
+    assert.deepStrictEqual(creado, { f: 'enviarInformeSemanalProa', dia: 'MONDAY', hora: 7, zona: 'America/Bogota' });
+  } finally { global.ScriptApp = real; }
 });
 
 console.log();

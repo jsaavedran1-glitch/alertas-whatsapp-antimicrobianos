@@ -7,7 +7,7 @@ Bot de Google Apps Script que avisa por **WhatsApp** (vía [Green-API](https://g
 | Formulario | [FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV](https://docs.google.com/forms/d/1u8XYmynHfAH0EoeyNFFcd8w12IA95J47oItrv34TyGI/edit) |
 | Hoja de respuestas | [MATRIZ FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV (Respuestas)](https://docs.google.com/spreadsheets/d/1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY/edit) |
 | Proyecto Apps Script | [PROA ALERTAS](https://script.google.com/u/1/home/projects/12mUy9SqQGzRnGjkbAsFyycG9RxJxvFePpSuHl4Nv8MokONxKY7kwbIw0/edit) (independiente, no vinculado a la hoja; archivo "Código") |
-| Código en este repo | `Codigo.gs` (archivo "Código") e `IA_PROA.gs` (archivo "IA_PROA": puntos para revisar de la IA, v1.33.0; sin `ANTHROPIC_API_KEY` el bot funciona igual que sin el archivo) |
+| Código en este repo | `Codigo.gs` (archivo "Código") e `IA_PROA.gs` (archivo "IA_PROA": informe semanal PROA con lectura de la IA, v1.34.0; no cambia los mensajes de cada solicitud) |
 
 La misma hoja tiene vinculado otro script, **FORMULARIO PROA DOT**, que calcula los días de terapia. Son proyectos separados y este bot no lo toca.
 
@@ -64,7 +64,7 @@ Si se cambia la lista de la pestaña, conviene actualizar también la de respald
 
 **Formato simple (v1.32.0).** Revisión de duración: paciente, diagnóstico, `⏱️` días que lleva y con esta orden, el motivo del color (la duración de referencia contra la que se compara), la lista de prescripciones sin códigos y, si un antimicrobiano se repite, los días por antimicrobiano. Caso PROA: un solo encabezado, las prescripciones anteriores a esta orden, el total con esta orden y los antimicrobianos en curso. Frecuencias de menos de 4 h salen con `⚠️ Verificar frecuencia`.
 
-Desde la v1.23.0 el caso PROA va **solo con datos** (`CONFIG.CASO_ANALISIS = false`): título, `📍` servicio y cama, `📋` diagnóstico, `📄` HC, edad, peso y especialidad, `🦠` aislamiento, cultivos, indicación y origen, interconsulta, cada antimicrobiano con los días en negrita y la lista numerada de prescripciones del tratamiento continuo con su total. Sin veredicto ni pertinencia de las tablas (el análisis de las tablas queda en `REGISTRO_REVISIONES`). Con la IA activa se agregan, según el modo, los puntos para revisar (sección siguiente).
+Desde la v1.23.0 el caso PROA va **solo con datos** (`CONFIG.CASO_ANALISIS = false`): título, `📍` servicio y cama, `📋` diagnóstico, `📄` HC, edad, peso y especialidad, `🦠` aislamiento, cultivos, indicación y origen, interconsulta, cada antimicrobiano con los días en negrita y la lista numerada de prescripciones del tratamiento continuo con su total. Sin veredicto ni pertinencia de las tablas (el análisis de las tablas queda en `REGISTRO_REVISIONES`). La IA no interviene en estos mensajes: solo escribe la lectura del informe semanal (sección siguiente).
 
 | En el mensaje | Pregunta del formulario (título exacto) |
 |---|---|
@@ -120,34 +120,43 @@ La columna `TERMINACION` de la hoja es una fórmula y no llega con el formulario
 _Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado por el QF Juan Pablo Saavedra_
 ```
 
-### Puntos para revisar (IA, v1.33.0)
+### Informe semanal PROA (IA, v1.34.0)
 
-El archivo `IA_PROA.gs` le pide a la API de Claude (modelo Opus, `claude-opus-5-5`, esfuerzo `high`) **como máximo 3 puntos para revisar** en cada mensaje que el bot ya va a enviar: el caso PROA y la revisión de duración. Una llamada como máximo por solicitud; las solicitudes que no generan mensaje no se analizan.
+La IA ya **no opina caso por caso** (decisión del referente: el caso lo valora Infectología). Su papel es el informe del programa: los **lunes a las 7:00** (hora de Colombia) el bot envía un mensaje con las cifras de los 7 días anteriores y, debajo, una lectura corta escrita por Claude (modelo Opus, `claude-opus-5-5`).
 
-La versión anterior (v1.9.0–v1.23.0) daba un veredicto por antimicrobiano (pertinente / verificar / no pertinente) y generó controversia con Infectología. Esta se diseñó para evitarlo:
+- **Las cifras las calcula el código**, no la IA. Salen de todas las solicitudes del formulario de la semana, no solo de los restringidos, y de `REGISTRO_REVISIONES`. Incluyen: solicitudes, pacientes y solicitudes con restringido (frente a la semana anterior), antimicrobianos con más días ordenados, restringidos, servicios, empírico, etiológico y profiláctico (con el % de empíricos sin cultivos), profilaxis de más de 1 día, interconsulta a Infectología en restringidos, casos PROA y revisiones de duración enviados, tratamientos más largos y datos por corregir (dosis fuera de rango, frecuencias de menos de 4 h, diagnósticos sin código CIE10).
+- **La IA solo escribe la lectura:** 2 a 4 hallazgos y hasta 2 sugerencias de programa para el comité (educación, auditoría de una molécula, protocolo, formulario), nunca sobre un paciente.
+- **El código revisa cada frase de la IA.** Descarta la que traiga una cifra que no esté en los datos (la IA no puede calcular ni inventar números) y la que tenga lenguaje de juicio ("inadecuado", "abuso", "mal uso"…). Lo descartado queda en la pestaña `INFORMES_PROA` con el motivo.
+- A la API **solo salen cifras agregadas**: sin historia clínica, nombres, camas ni médicos. Las HC de los tratamientos largos las pone el código en el mensaje y no van a la API.
+- Sin `ANTHROPIC_API_KEY`, o si la API falla, el informe sale igual, solo con las cifras.
+- Destino: `INFORME_PROA_DESTINO` vacío = **PRUEBA BOT**; `PRODUCCION` = grupo PROA.
+- Costo estimado: unos USD 0,05–0,15 por informe, menos de USD 1 al mes.
 
-| | Antes (hasta v1.23.0) | Ahora (v1.33.0) |
-|---|---|---|
-| Qué devuelve | Veredicto y color por antimicrobiano | Hasta 3 datos para verificar, sin color ni veredicto; cero es válido y frecuente |
-| Fuente | Fichas y guías "si estaba seguro" | Solo el material del PROA: tabla de duración, fichas de `docs/`, análisis de las tablas o datos de la solicitud. Cada punto dice su fuente entre paréntesis y el código **descarta** el que cite otra cosa |
-| Tono | Libre | Pregunta o dato a confirmar; el código descarta "no pertinente", "inadecuado", "incorrecto", "injustificado", "erróneo". Con interconsulta a Infectología, el punto se plantea como algo a confirmar con Infectología |
-| Dónde sale | En el mensaje del grupo | `PRUEBA` por defecto: el grupo recibe el mensaje de siempre y **PRUEBA BOT** una copia con los puntos, para que el QF los valide antes de llevarlos al grupo |
-| Si falla | Análisis de las tablas | El mensaje sale igual, sin bloque; en `PRUEBA` el grupo no espera a la IA (se le envía primero) |
-
-En el mensaje (datos ficticios):
+Ejemplo con datos ficticios:
 
 ```
-*🤖 Para revisar (IA)*
-🔎 ERTAPENEM · 21 d con foco de piel (referencia 5-7 d); ¿hay osteomielitis o absceso sin drenar? (tabla de duración)
-🔎 ERTAPENEM · BLEE sin KPC: cubre el aislado; confirmar con antibiograma (ficha Klebsiella pneumoniae)
-_Apoyo automático; la decisión es del equipo PROA_
+*📊 INFORME SEMANAL PROA · 16/11–22/11*
+📝 5 solicitudes (sem. ant. 3) · 4 pacientes · 3 con restringido (sem. ant. 1)
+💊 Más días ordenados: ERTAPENEM 14 d · CASPOFUNGINA 14 d · MEROPENEM 7 d
+🔒 Restringidos: ERTAPENEM 2 solicitudes · CASPOFUNGINA 1 solicitud · VANCOMICINA 1 solicitud
+🏥 Servicios: UCI A 60% · Hosp. Medicina Interna 20% · Cirugía 20%
+🧫 Empírico 40% (50% sin cultivos) · Etiológico 40% · Profiláctico 20% · 1 con profilaxis de más de 1 día
+🧪 Restringidos con interconsulta a Infectología: 67%
+📨 Caso PROA: 1 (sem. ant. 1) · Revisión de duración: 1 (sem. ant. 0)
+⏳ Más largos: HC 1001 UCI A *52 d* · HC 1002 Hosp. Medicina Interna *18 d*
+⚠️ Datos por corregir: 1 dosis fuera de rango · 1 frecuencia de menos de 4 h · 1 diagnóstico sin código CIE10
+
+*🤖 Lectura de la semana (IA)*
+• UCI A concentró el 60% de las solicitudes de la semana
+• El 67% de las solicitudes con restringido tuvo interconsulta a Infectología
+*Para el comité*
+• Revisar con UCI A la toma de cultivos antes del tratamiento empírico
+_Cifras del formulario; lectura automática para el comité PROA_
 ```
 
-En `REGISTRO_REVISIONES` quedan los puntos con su prioridad, los descartados y por qué, los datos que faltaron, el repaso del caso que hizo el modelo, los segundos que tardó, modelo, tokens y costo aproximado (columnas Modelo, Tokens de entrada/salida y Costo aproximado USD). Costo estimado: USD 0,05–0,15 por mensaje; con el volumen de noviembre (unos 24 mensajes en 15 días), alrededor de USD 3–7 al mes.
+Los "días ordenados" son los días de las solicitudes de la semana, no días de terapia administrados. El DOT lo sigue calculando el script FORMULARIO PROA DOT.
 
-A la API sale el caso **seudonimizado**: sin historia clínica, nombre, cama, EPS ni médico (hay una prueba que lo verifica). No evalúa dosis, ajuste renal ni frecuencias (los marca el bot) y no repite la revaluación a las 48-72 h.
-
-Para activarla: crear el archivo `IA_PROA` en el proyecto, pegar `IA_PROA.gs`, agregar `ANTHROPIC_API_KEY` en Propiedades del script (`IA_PROA_MODO` vacío = `PRUEBA`) y probar con `probarIaUltimaSolicitud()` (no envía nada). Para llevar los puntos al grupo, `IA_PROA_MODO` = `PRODUCCION`; para apagarla, `NO` o borrar la clave.
+Para activarlo: crear el archivo `IA_PROA` en el proyecto, pegar `IA_PROA.gs`, agregar `ANTHROPIC_API_KEY` en Propiedades del script, revisar el informe con `probarInformeProa()` (no envía nada) y ejecutar una vez `crearTriggerInformeProa()`.
 
 ### Rangos de dosis (`⚠️ revisar`)
 
@@ -186,21 +195,25 @@ En el editor de Apps Script: **Configuración del proyecto → Propiedades del s
 | `GREENAPI_GROUP_CHATID` | sí | chatId del grupo de destino; siempre termina en `@g.us` |
 | `GREENAPI_BOT_LABEL` | no | Firma en negrita al inicio del mensaje (por defecto `Bot PROA Antimicrobianos HDV`) |
 
-Puntos para revisar de la IA (`IA_PROA.gs`, opcional):
+Informe semanal PROA (`IA_PROA.gs`):
 
 | Propiedad | Obligatoria | Descripción |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | para la IA | Clave de la API de Claude (secreto). Sin ella no se llama a la API y el bot funciona como siempre |
-| `IA_PROA_MODO` | no | `PRUEBA` (por defecto): el grupo recibe el mensaje de siempre y PRUEBA BOT la copia con los puntos. `PRODUCCION`: los puntos van en el mensaje del grupo. `NO`: sin IA |
-| `IA_ESFUERZO` | no | `low`, `medium`, `high` (por defecto), `xhigh` o `max`. Si el registro muestra "tardó demasiado", bajar a `medium` |
+| `ANTHROPIC_API_KEY` | para la lectura de la IA | Clave de la API de Claude (secreto). Sin ella el informe sale solo con las cifras |
+| `INFORME_PROA_DESTINO` | no | Vacío o `PRUEBA`: el informe va a PRUEBA BOT. `PRODUCCION`: al grupo PROA |
+| `IA_ESFUERZO` | no | `low`, `medium`, `high` (por defecto), `xhigh` o `max`. Si la API tarda demasiado con esfuerzo alto, el bot reintenta una vez con `medium` |
 | `CLAUDE_MODEL` | no | Modelo; por defecto `claude-opus-5-5` |
-| `GREENAPI_PRUEBA_CHATID` | no | Grupo de la copia en modo `PRUEBA`; por defecto PRUEBA BOT. Debe terminar en `@g.us` |
+| `GREENAPI_PRUEBA_CHATID` | no | Grupo de prueba; por defecto PRUEBA BOT. Debe terminar en `@g.us` |
+
+`IA_PROA_MODO` (de la v1.33.0) ya no se lee y se puede borrar.
 
 Para encontrar el chatId de un grupo sin riesgo de enviar nada, ejecutar `listarChatsGreenAPI()`: solo lee (`getChats`) y registra los grupos (`@g.us`).
 
 ## Activador
 
 El proyecto es independiente (no está vinculado a la hoja), así que el activador "Al enviar el formulario" **no** se puede crear desde la pantalla de Activadores. Se creó una sola vez ejecutando `crearTriggerFormSubmit()`. No volver a ejecutarla: crearía un segundo activador y cada alerta llegaría duplicada.
+
+El informe semanal tiene su propio activador (lunes a las 7:00), que se crea una vez con `crearTriggerInformeProa()`. Esa función sí se puede repetir: borra el anterior antes de crear el nuevo.
 
 ## Funciones
 
@@ -222,9 +235,10 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 | `crearTriggerResumenProlongados()` | No (crea el activador) | Crea o recrea el activador diario de las 7:00; solo toca los de `enviarResumenProlongados` |
 | `probarResumenProlongados()` | **No** | Escribe en el registro de ejecución el resumen pendiente |
 | `probarUltimaSolicitud(fila)`, `probarUltimoProlongado()` | **No** | Escriben en el registro de ejecución los mensajes de una fila real (o de la última que alerta / la última con revisión por tratamiento prolongado) |
-| `probarIaUltimaSolicitud(fila)`, `probarIaUltimoProlongado()` (`IA_PROA.gs`) | **No** (llama a la API) | Igual, con la copia que vería PRUEBA BOT y lo que quedaría en el registro |
-| `probarRevisionIa()` (`IA_PROA.gs`) | **No** (llama a la API) | Puntos de la IA para 3 casos ficticios |
-| `enviarPruebaIaAPruebaBot()` (`IA_PROA.gs`) | Sí, solo a PRUEBA BOT | Un caso ficticio con los puntos de la IA, tal como llega a WhatsApp |
+| `enviarInformeSemanalProa()` (`IA_PROA.gs`) | Sí (según `INFORME_PROA_DESTINO`) | La llama el activador de los lunes: informe de los 7 días anteriores; deja una fila en `INFORMES_PROA` |
+| `probarInformeProa(dias)` (`IA_PROA.gs`) | **No** (llama a la API si hay clave) | Escribe en el registro de ejecución el informe de los últimos `dias` días (7 por defecto) |
+| `enviarInformeAPruebaBot(dias)` (`IA_PROA.gs`) | Sí, solo a PRUEBA BOT | El informe tal como llega a WhatsApp |
+| `crearTriggerInformeProa()` (`IA_PROA.gs`) | No (crea el activador) | Crea o recrea el activador de los lunes a las 7:00; solo toca los de `enviarInformeSemanalProa` |
 | `formatearDiagnosticoCIE10()`, `buscarDescripcionCIE10()` | **No** | Cruce del diagnóstico con la pestaña `CIE10` (TextFinder + caché) |
 | `verificarEncabezados()` | **No** | Comprueba que todas las preguntas usadas existan en la fila 1 de la hoja |
 | `enviarAlertaWhatsApp(mensaje)` | Sí | Envío a Green-API con firma y pie |
@@ -251,7 +265,7 @@ Al pegar texto con tildes o emojis, el editor a veces los daña. Los textos nuev
 ## Pruebas locales (sin red ni credenciales)
 
 ```bash
-node test/dry-run.js     # carga Codigo.gs e IA_PROA.gs reales con la hoja y las API simuladas: filtro, mensajes, seguimiento, revisión de duración y puntos de la IA
+node test/dry-run.js     # carga Codigo.gs e IA_PROA.gs reales con la hoja y las API simuladas: filtro, mensajes, seguimiento, revisión de duración e informe semanal
 node test/pie-firma.js   # pie de firma y filtro de los antimicrobianos nuevos
 ```
 

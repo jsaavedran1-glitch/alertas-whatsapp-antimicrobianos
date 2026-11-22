@@ -2,6 +2,15 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.34.0] - 2026-11-22
+
+### Cambiado (decisión del referente: otro enfoque para la IA)
+- **La IA deja de analizar casos** y pasa a escribir la lectura de un **informe semanal PROA** para el comité. Los mensajes de cada solicitud (caso PROA y revisión de duración) vuelven a ser los de la v1.32.0, sin IA.
+- **Informe de los lunes a las 7:00** (`crearTriggerInformeProa()`, `enviarInformeSemanalProa()`), con las cifras de los 7 días anteriores frente a la semana anterior: solicitudes, pacientes, restringidos, antimicrobianos con más días ordenados, servicios, tipo de indicación y empíricos sin cultivos, profilaxis de más de 1 día, interconsulta a Infectología, mensajes del bot, tratamientos más largos y datos por corregir. Las cifras las calcula el código.
+- **Lectura de la IA** (`claude-opus-5-5`): 2 a 4 hallazgos y hasta 2 sugerencias de programa. Se descarta toda frase con una cifra que no esté en los datos o con lenguaje de juicio; a la API solo salen cifras agregadas. Sin clave, o si la API falla, el informe sale solo con cifras. Si tarda demasiado con esfuerzo alto, se reintenta con `medium`.
+- Destino con `INFORME_PROA_DESTINO` (PRUEBA BOT por defecto). Cada informe queda en la pestaña nueva `INFORMES_PROA` (mensaje, descartes, repaso de la IA, modelo, tokens y costo). `IA_PROA_MODO` ya no se lee.
+- Las columnas Modelo, Tokens y Costo de `REGISTRO_REVISIONES` vuelven a quedar vacías.
+
 ## [1.33.0] - 2026-11-22
 
 ### Agregado (pedido del referente: análisis con Opus)
