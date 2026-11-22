@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.34.3] - 2026-11-22
+
+### Cambiado (pedido del referente)
+- Se quita del informe el promedio de tratamiento continuo por paciente (`⏱️`); tampoco va a la IA. Siguen el promedio por antimicrobiano y los tratamientos más largos, que usan el mismo cálculo de continuidad (documentado en el README).
+
 ## [1.34.2] - 2026-11-22
 
 ### Corregido (primera prueba con la matriz real: 13 s, USD 0,05, sin descartes)

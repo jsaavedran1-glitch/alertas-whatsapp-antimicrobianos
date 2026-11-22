@@ -124,7 +124,8 @@ _Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado
 
 La IA ya **no opina caso por caso** (decisión del referente: el caso lo valora Infectología). Su papel es el informe del programa: los **lunes a las 7:00** (hora de Colombia) el bot envía un mensaje con las cifras de los 7 días anteriores y, debajo, una lectura corta escrita por Claude (modelo Opus, `claude-opus-5-5`).
 
-- **Las cifras las calcula el código**, no la IA, a partir de todas las solicitudes del formulario (no solo restringidos): solicitudes, pacientes y solicitudes con restringido (frente a la semana anterior); **promedio de días de tratamiento** por paciente (antibiótico y antifúngico continuo, como el "Con esta orden: N d" de los mensajes) y por antimicrobiano (solo los días de ese antimicrobiano), con el número de pacientes; restringidos con su promedio; servicios; empírico, etiológico y profiláctico (con el % de empíricos sin cultivos); profilaxis de más de 1 día; interconsulta a Infectología en restringidos y los tratamientos más largos. Los días se cuentan con las mismas reglas del seguimiento (prescripciones seguidas con 3 días de tolerancia, 60 días hacia atrás, días calendario) hasta el fin de la última orden de la semana de cada paciente.
+- **Las cifras las calcula el código**, no la IA, a partir de todas las solicitudes del formulario (no solo restringidos): solicitudes, pacientes y solicitudes con restringido (frente a la semana anterior); **promedio de días de tratamiento por antimicrobiano** (por paciente, solo los días de ese antimicrobiano) con el número de pacientes; restringidos con su promedio; servicios; empírico, etiológico y profiláctico (con el % de empíricos sin cultivos); profilaxis de más de 1 día; interconsulta a Infectología en restringidos y los **tratamientos más largos**.
+- **Cómo se cuentan los días** (mismas reglas que el "⏱️ Con esta orden: N d" del caso PROA): para cada paciente con alguna orden en la semana se toma su última orden de la semana y se retrocede por sus órdenes anteriores (hasta 60 días): una orden anterior es parte del mismo tratamiento si termina (fecha + días ordenados + 3 días de tolerancia) en o después del inicio ya encontrado, y entonces el inicio se corre hacia atrás. Los días son los días calendario desde ese inicio hasta el fin de la última orden (incluye los días que faltan por administrar). En **Más largos** se suma el tratamiento continuo aunque cambie de antimicrobiano (antibacterianos y antifúngicos por separado; se muestra el mayor de cada paciente, los 3 mayores de la semana, con el servicio de su última orden); en el promedio por antimicrobiano, solo las órdenes de ese antimicrobiano.
 - **La IA solo escribe la lectura:** 2 a 4 hallazgos y hasta 2 sugerencias de programa para el comité (educación, auditoría de una molécula, protocolo, formulario), nunca sobre un paciente.
 - **El código revisa cada frase de la IA.** Descarta la que traiga una cifra que no esté en los datos (la IA no puede calcular ni inventar números) y la que tenga lenguaje de juicio ("inadecuado", "abuso", "mal uso"…). Lo descartado queda en la pestaña `INFORMES_PROA` con el motivo.
 - A la API **solo salen cifras agregadas**: sin historia clínica, nombres, camas ni médicos. Las HC de los tratamientos largos las pone el código en el mensaje y no van a la API.
@@ -137,7 +138,6 @@ Ejemplo con datos ficticios:
 ```
 *📊 INFORME SEMANAL PROA · 16/11–22/11*
 📝 6 solicitudes (sem. ant. 3) · 5 pacientes · 4 con restringido (sem. ant. 1)
-⏱️ Tratamiento continuo, promedio por paciente: antibiótico 10,5 d en 4 pacientes (sem. ant. 7 d) · antifúngico 14 d en 1 paciente
 💊 Promedio de días por antimicrobiano (pacientes): ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)
 🔒 Restringidos: ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)
 🏥 Servicios: UCI A 67% · Hosp. Medicina Interna 17% · Cirugía 17%
@@ -147,7 +147,7 @@ Ejemplo con datos ficticios:
 
 *🤖 Lectura de la semana (IA)*
 • UCI A concentró el 67% de las solicitudes de la semana
-• El tratamiento antibiótico continuo promedió 10,5 días por paciente, frente a 7 la semana anterior
+• Ertapenem promedió 11,5 días en 2 pacientes
 *Para el comité*
 • Revisar con UCI A la toma de cultivos antes del tratamiento empírico
 _Cifras del formulario; lectura automática para el comité PROA_

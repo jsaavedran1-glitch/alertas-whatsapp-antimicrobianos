@@ -4,8 +4,8 @@
 //
 // Enfoque (v1.34.0, decision del referente): la IA ya no opina caso por caso. Una vez por semana (lunes,
 // INFORME_HORA, hora de Colombia) el bot envia un informe con las cifras de los ultimos INFORME_DIAS dias:
-// solicitudes, promedio de dias del tratamiento continuo por paciente y por antimicrobiano (v1.34.1, pedido del
-// referente), restringidos, servicios, tipo de indicacion, cultivos, interconsultas y tratamientos mas largos.
+// solicitudes, promedio de dias de tratamiento por antimicrobiano (v1.34.1, pedido del referente), restringidos,
+// servicios, tipo de indicacion, cultivos, interconsultas y tratamientos mas largos (tratamiento continuo por paciente).
 // Las cifras las calcula este codigo; la IA solo escribe la lectura (hallazgos y sugerencias para el comite) y el
 // codigo descarta cualquier frase con una cifra que no este en los datos o con lenguaje de juicio. Sin
 // ANTHROPIC_API_KEY, o si la API falla, el informe sale igual, solo con las cifras.
@@ -51,9 +51,9 @@ var INFORME_INDICADORES = ["solicitudes", "duracion", "antimicrobianos", "restri
 var INFORME_REGLAS = [
   "Apoyas al comité del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia. Recibes los indicadores de un periodo, calculados por el bot a partir del formulario de solicitud de antimicrobianos (todas las solicitudes, no solo restringidos), junto con los del periodo anterior. Escribes la lectura que acompaña al informe en el grupo de WhatsApp del PROA, donde están la infectóloga, el químico farmacéutico y el equipo del programa.",
   "",
-  "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento (por paciente o por antimicrobiano), la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
+  "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento por antimicrobiano, la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
   "",
-  "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los promedios de días son del tratamiento continuo de cada paciente (sus prescripciones seguidas sumadas, hasta el fin de su última orden del periodo; el de cada antimicrobiano cuenta solo los días de ese antimicrobiano); son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
+  "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. El promedio de días de cada antimicrobiano cuenta, por paciente, sus prescripciones seguidas de ese antimicrobiano hasta el fin de su última orden del periodo; los tratamientos más largos suman el tratamiento continuo del paciente aunque cambie de antimicrobiano. Son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
   "",
   "Tono: neutro e institucional, en español corriente con tildes, sin markdown. Cada frase de máximo 150 caracteres. Sin culpar a servicios, especialidades ni personas; sin juicios sobre casos clínicos; sin palabras como \"inadecuado\", \"incorrecto\", \"injustificado\", \"no pertinente\", \"abuso\" o \"mal uso\". Si no hay nada notable, dilo en un hallazgo corto y no rellenes.",
   "",
@@ -192,9 +192,9 @@ function diasOrden_(v) { var d = numeroONulo(v); return (d !== null && d > 0 && 
 function promedio_(lista) { return lista.length ? Math.round(10 * lista.reduce(function(a, b) { return a + b; }, 0) / lista.length) / 10 : 0; }
 
 // Dias de tratamiento de los pacientes con alguna orden en [desde, hasta), con su ultima orden del periodo:
-// { antibiotico: [dias por paciente], antifungico: [...], porAm: { nombre: [dias por paciente] }, largos }.
-// antibiotico/antifungico: tratamiento continuo del tipo (sumando cambios de antimicrobiano), como "Con esta orden: N d";
-// porAm: solo los dias de ese antimicrobiano.
+// { porAm: { nombre: [dias por paciente, solo de ese antimicrobiano] }, largos: [{ hc, servicio, dias }] }. largos: el
+// tratamiento continuo del paciente (antibacteriano o antifungico, el mayor), sumando cambios de antimicrobiano, como
+// el "Con esta orden: N d" del caso PROA.
 function tratamientosDelPeriodo_(eventos, desde, hasta) {
   var porHc = {};
   eventos.forEach(function(e) {
@@ -202,7 +202,7 @@ function tratamientosDelPeriodo_(eventos, desde, hasta) {
     if (!hc || hc === '-' || /^0+$/.test(hc)) return;
     (porHc[hc] = porHc[hc] || []).push({ t: e.fecha.getTime(), ams: leerSlots(e), servicio: campoDelEvento(e.namedValues, CAMPOS.SERVICIO) });
   });
-  var res = { antibiotico: [], antifungico: [], porAm: {}, largos: [] };
+  var res = { porAm: {}, largos: [] };
   Object.keys(porHc).forEach(function(hc) {
     var ordenes = porHc[hc].sort(function(a, b) { return a.t - b.t; });
     var delPeriodo = ordenes.filter(function(o) { return o.t >= desde.getTime() && o.t < hasta.getTime() && o.ams.length; });
@@ -215,7 +215,6 @@ function tratamientosDelPeriodo_(eventos, desde, hasta) {
       var previas = [];
       ordenes.forEach(function(o) { delTipo(o).forEach(function(am) { previas.push({ t: o.t, dias: diasOrden_(am.dias) }); }); });
       var dias = diasPrevios_(previas, ultima.t) + Math.max.apply(null, delTipo(ultima).map(function(am) { return diasOrden_(am.dias); }));
-      res[antifungico ? 'antifungico' : 'antibiotico'].push(dias);
       if (!mayor || dias > mayor.dias) mayor = { hc: hc, servicio: servicioCorto(ultima.servicio), dias: dias };
     });
     var nombres = {};
@@ -271,8 +270,6 @@ function datosInforme_(eventos, desde, hasta) {
     solicitudes: n,
     pacientes: Object.keys(hcs).length,
     solicitudes_con_restringido: conRestringido,
-    tratamiento_continuo: { antibiotico_promedio_dias: promedio_(tr.antibiotico), antibiotico_pacientes: tr.antibiotico.length,
-      antifungico_promedio_dias: promedio_(tr.antifungico), antifungico_pacientes: tr.antifungico.length },
     antimicrobianos: ams.slice(0, 8),
     restringidos: ams.filter(function(a) { return a.restringido; }),
     servicios: Object.keys(porServicio).map(function(k) { return { nombre: k, solicitudes: porServicio[k], porcentaje: porcentaje(porServicio[k], n) }; })
@@ -296,15 +293,7 @@ function mensajeInforme_(a, ant, ia) {
   }
   lineas.push(E(0x1F4DD) + " " + a.solicitudes + " solicitudes" + sem(ant.solicitudes) + " · " + a.pacientes + " pacientes · " +
     a.solicitudes_con_restringido + " con restringido" + sem(ant.solicitudes_con_restringido));
-  var tc = a.tratamiento_continuo, f = function(x) { return formatoNumero(x, 1) + " d"; };
-  if (tc.antibiotico_pacientes || tc.antifungico_pacientes) {
-    var enPacientes = function(n) { return " en " + n + (n === 1 ? " paciente" : " pacientes"); };
-    lineas.push(E(0x23F1) + E(0xFE0F) + " Tratamiento continuo, promedio por paciente: " + [
-      tc.antibiotico_pacientes ? "antibiótico " + f(tc.antibiotico_promedio_dias) + enPacientes(tc.antibiotico_pacientes) +
-        (ant.tratamiento_continuo.antibiotico_pacientes ? sem(f(ant.tratamiento_continuo.antibiotico_promedio_dias)) : "") : "",
-      tc.antifungico_pacientes ? "antifúngico " + f(tc.antifungico_promedio_dias) + enPacientes(tc.antifungico_pacientes) : ""
-    ].filter(String).join(" · "));
-  }
+  var f = function(x) { return formatoNumero(x, 1) + " d"; };
   var conPacientes = function(x) { return x.nombre + " " + f(x.promedio_dias) + " (" + x.pacientes + ")"; };
   lineas.push(E(0x1F48A) + " Promedio de días por antimicrobiano (pacientes): " + a.antimicrobianos.slice(0, 4).map(conPacientes).join(" · "));
   if (a.restringidos.length) lineas.push(E(0x1F512) + " Restringidos: " + a.restringidos.slice(0, 4).map(conPacientes).join(" · "));

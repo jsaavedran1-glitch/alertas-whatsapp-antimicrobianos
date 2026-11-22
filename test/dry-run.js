@@ -969,10 +969,9 @@ function conSemanaFicticia(fn) {
 }
 // 1001: ertapenem desde el 07/11 (renovaciones dentro de la tolerancia) hasta el fin de su orden del 18/11 = 18 d;
 // 1002: piperacilina/tazobactam desde el 08/11 y meropenem + vancomicina el 17/11 = 16 d de antibiotico (7 d de cada uno);
-// 1003: 3 d; 1005: 5 d. Antibiotico: (18 + 16 + 3 + 5) / 4 = 10,5 d. Ertapenem: (18 + 5) / 2 = 11,5 d.
+// 1003: 3 d; 1005: 5 d; 1004: caspofungina 14 d. Ertapenem: (18 + 5) / 2 = 11,5 d. Mas largos: 18, 16 y 14 d.
 var CIFRAS_SEMANA = '*📊 INFORME SEMANAL PROA · 16/11–22/11*\n' +
   '📝 6 solicitudes (sem. ant. 3) · 5 pacientes · 4 con restringido (sem. ant. 1)\n' +
-  '⏱️ Tratamiento continuo, promedio por paciente: antibiótico 10,5 d en 4 pacientes (sem. ant. 7 d) · antifúngico 14 d en 1 paciente\n' +
   '💊 Promedio de días por antimicrobiano (pacientes): ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)\n' +
   '🔒 Restringidos: ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)\n' +
   '🏥 Servicios: UCI A 67% · Hosp. Medicina Interna 17% · Cirugía 17%\n' +
@@ -1020,14 +1019,15 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
       conApiInforme(respuestaInforme([
         { indicador: 'servicios', texto: 'UCI A concentró el 67 % de las solicitudes de la semana.' },
         { indicador: 'comparacion', texto: 'Las solicitudes subieron un 66% frente a la semana anterior' },
-        { indicador: 'duracion', texto: 'El tratamiento antibiótico continuo promedió 10.5 días por paciente, frente a 7 la semana anterior' },
+        { indicador: 'antimicrobianos', texto: 'Ertapenem promedió 11.5 días en 2 pacientes' },
+        { indicador: 'duracion', texto: 'El tratamiento antibiótico continuo promedió 10,5 días por paciente' },
         { indicador: 'servicios', texto: 'Hay abuso de carbapenémicos en UCI A' }
       ], [{ texto: 'Revisar con UCI A la toma de cultivos antes del tratamiento empírico' }]), function (peticiones) {
         enviarInforme_(LUNES_23_11);
         assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].chatId, CHAT_PRUEBA_BOT);
         assert.strictEqual(envios[0].message.indexOf(CIFRAS_SEMANA), 0);
         incluye(envios[0].message, CIFRAS_SEMANA + '\n\n*🤖 Lectura de la semana (IA)*\n• UCI A concentró el 67% de las solicitudes de la semana\n' +
-          '• El tratamiento antibiótico continuo promedió 10,5 días por paciente, frente a 7 la semana anterior\n*Para el comité*\n' +
+          '• Ertapenem promedió 11,5 días en 2 pacientes\n*Para el comité*\n' +
           '• Revisar con UCI A la toma de cultivos antes del tratamiento empírico\n_Cifras del formulario; lectura automática para el comité PROA_');
         noIncluye(envios[0].message, '66%'); noIncluye(envios[0].message, 'abuso');
         // la peticion: modelo, esfuerzo, salida estructurada, respaldo; solo cifras agregadas, sin historias clinicas
@@ -1039,12 +1039,13 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
         // el razonamiento no se pide en la respuesta (se declina como reasoning_extraction): se lee del resumen de thinking
         assert.deepStrictEqual(c.thinking, { type: 'adaptive', display: 'summarized' }); assert.ok(!('temperature' in c));
         assert.ok(!('analisis' in c.output_config.format.schema.properties)); noIncluye(c.system, 'analisis');
-        incluye(c.messages[0].content, '"solicitudes": 6'); incluye(c.messages[0].content, '"antibiotico_promedio_dias": 10.5'); incluye(c.messages[0].content, '"periodo": "09/11–15/11"');
+        incluye(c.messages[0].content, '"solicitudes": 6'); incluye(c.messages[0].content, '"promedio_dias": 11.5');
+        noIncluye(c.messages[0].content, 'tratamiento_continuo'); incluye(c.messages[0].content, '"periodo": "09/11–15/11"');
         ['1001', '1002', '1004', '2002', '"hc"'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
       });
       var fila = HOJAS['INFORMES_PROA']._filas[1];
       assert.strictEqual(fila[6], 'claude-opus-5-5'); assert.strictEqual(fila[7], 12000); assert.strictEqual(fila[8], 3000); assert.strictEqual(fila[9], 0.108);
-      incluye(fila[5], 'cifra que no está en los datos: 66'); incluye(fila[5], 'lenguaje de juicio'); incluye(fila[5], 'Razonamiento (resumen): Resumen del razonamiento.');
+      incluye(fila[5], 'cifra que no está en los datos: 66'); incluye(fila[5], 'cifra que no está en los datos: 10,5'); incluye(fila[5], 'lenguaje de juicio'); incluye(fila[5], 'Razonamiento (resumen): Resumen del razonamiento.');
     });
   } finally { global.PropertiesService = propsReal; }
 });
