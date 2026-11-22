@@ -920,7 +920,7 @@ function conApiInforme(respuesta, fn) {
 }
 function respuestaInforme(hallazgos, sugerencias) {
   return { cuerpo: { model: 'claude-opus-5-5', stop_reason: 'end_turn', usage: { input_tokens: 12000, output_tokens: 3000 },
-    content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify({ analisis: 'Repaso de la semana.', hallazgos: hallazgos, sugerencias: sugerencias || [] }) }] } };
+    content: [{ type: 'thinking', thinking: 'Resumen del razonamiento.' }, { type: 'text', text: JSON.stringify({ hallazgos: hallazgos, sugerencias: sugerencias || [] }) }] } };
 }
 function propsInforme(extra) {
   var P = Object.assign({ GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test',
@@ -933,12 +933,11 @@ function filaInforme(fecha, hc, extra, ams) {
   Object.keys(datos).forEach(function (k) { fila[ENCABEZADOS_REALES.indexOf(k)] = datos[k]; });
   return fila;
 }
-function filaRegistro(datos) { return ENCABEZADOS_REGISTRO.map(function (h) { return h in datos ? datos[h] : ''; }); }
 var LUNES_23_11 = new Date(2026, 10, 23, 7, 0, 0);
 var CHAT_PRUEBA_BOT = '120363412506101174@g.us';
 // Una semana ficticia (16/11-22/11) y la anterior (09/11-15/11); corre fn con esa matriz y ese registro.
 function conSemanaFicticia(fn) {
-  var matrizReal = HOJAS['Respuestas de formulario 1'], registroReal = HOJAS['REGISTRO_REVISIONES'], informesReal = HOJAS['INFORMES_PROA'];
+  var matrizReal = HOJAS['Respuestas de formulario 1'], informesReal = HOJAS['INFORMES_PROA'];
   var UCI = 'Unidad de Cuidado Crítico UCI A', MI = 'Hospitalización Medicina Interna';
   var EMP = 'Tratamiento Empírico (En presencia o sospecha de infección sin germen documentado - sin antibiograma))';
   var ETI = 'Tratamiento Etiológico (En presencia de aislamiento conocido)', PRO = 'Profiláctico';
@@ -946,42 +945,40 @@ function conSemanaFicticia(fn) {
   var D = 'Diagnóstico CIE10 para la cual se prescribe el antimicrobiano';
   var x = function (s, t, c, i, d) { var o = {}; o[S] = s; o[T] = t; o[C] = c; o[I] = i; o[D] = d; return o; };
   HOJAS['Respuestas de formulario 1'] = hojaDeFilas([ENCABEZADOS_REALES,
+    // historia (antes de los dos periodos): cuenta para la continuidad de 1001 y 1002
+    filaInforme('07/11/2026 08:00:00', '1001', x(UCI, EMP, 'NINGUNO', 'No', 'L031'), [['ERTAPENEM', '1000', '24', '7']]),
+    filaInforme('08/11/2026 08:00:00', '1002', x(MI, EMP, 'HEMOCULTIVO', 'No', 'A419'), [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]),
+    // semana anterior (09/11-15/11)
     filaInforme('10/11/2026 08:00:00', '2001', x(MI, EMP, 'HEMOCULTIVO', 'No', 'A419'), [['MEROPENEM', '1000', '8', '7']]),
     filaInforme('12/11/2026 08:00:00', '2002', x(UCI, EMP, 'NINGUNO', 'No', 'L031'), [['ERTAPENEM', '1000', '24', '7']]),
     filaInforme('15/11/2026 23:00:00', '2003', x(MI, EMP, 'HEMOCULTIVO', 'No', 'J189'), [['CEFEPIME', '2000', '8', '7']]),
-    filaInforme('16/11/2026 08:00:00', '1001', x(UCI, EMP, 'NINGUNO', 'Sí', 'L031'), [['ERTAPENEM', '1000', '24', '7']]),
-    filaInforme('17/11/2026 09:00:00', '1002', x(MI, EMP, 'HEMOCULTIVO', 'No', 'A419'), [['MEROPENEM', '1000', '8', '7'], ['VANCOMICINA', '1000', '3', '7']]),
-    filaInforme('18/11/2026 10:00:00', '1001', x(UCI, ETI, 'HEMOCULTIVO', 'No', 'neumonia'), [['ERTAPENEM', '3000', '24', '7']]),
+    // semana del informe (16/11-22/11)
+    filaInforme('16/11/2026 08:00:00', '1001', x(UCI, EMP, 'NINGUNO, ', 'Sí', 'L031'), [['ERTAPENEM', '1000', '24', '7']]),
+    filaInforme('17/11/2026 09:00:00', '1002', x(MI, EMP, 'HEMOCULTIVO', 'No', 'A419'), [['MEROPENEM', '1000', '8', '7'], ['VANCOMICINA', '1000', '12', '7']]),
+    filaInforme('18/11/2026 10:00:00', '1001', x(UCI, ETI, 'HEMOCULTIVO', 'No', 'neumonia'), [['ERTAPENEM', '1000', '24', '7']]),
     filaInforme('19/11/2026 11:00:00', '1003', x('Cirugía', PRO, '', 'No', 'T814'), [['CEFAZOLINA', '2000', '8', '3']]),
+    filaInforme('20/11/2026 14:00:00', '1005', x(UCI, EMP, '..', 'No', 'L031'), [['ERTAPENEM', '1000', '24', '5']]),
     filaInforme('21/11/2026 12:00:00', '1004', x(UCI, ETI, 'HEMOCULTIVO', 'Sí', 'B377'), [['CASPOFUNGINA', '70', '24', '14']]),
     filaInforme('23/11/2026 06:00:00', '1009', x(UCI, EMP, 'NINGUNO', 'No', 'L031'), [['ERTAPENEM', '1000', '24', '7']])   // hoy: no entra
   ]);
-  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice(),
-    filaRegistro({ 'Marca temporal de la solicitud': '20/11/2026 10:00:00', 'Historia clínica': '1001', 'Servicio': UCI, 'Antimicrobianos restringidos': 'ERTAPENEM 7 d',
-      'Fuente del análisis': 'TABLAS', 'Enviado al grupo': 'SI', 'Días de tratamiento continuo': 52 }),
-    filaRegistro({ 'Marca temporal de la solicitud': '21/11/2026 10:00:00', 'Historia clínica': '1002', 'Servicio': MI, 'Acompañantes': 'MEROPENEM 7 d',
-      'Fuente del análisis': 'TRATAMIENTO PROLONGADO', 'Enviado al grupo': 'SI', 'Días de tratamiento continuo': 18 }),
-    filaRegistro({ 'Marca temporal de la solicitud': '21/11/2026 11:00:00', 'Historia clínica': '1005', 'Servicio': UCI, 'Antimicrobianos restringidos': 'ERTAPENEM 7 d',
-      'Fuente del análisis': 'TABLAS', 'Enviado al grupo': 'NO', 'Días de tratamiento continuo': 3 }),
-    filaRegistro({ 'Marca temporal de la solicitud': '12/11/2026 08:00:00', 'Historia clínica': '2002', 'Servicio': UCI, 'Antimicrobianos restringidos': 'ERTAPENEM 7 d',
-      'Fuente del análisis': 'TABLAS', 'Enviado al grupo': 'SI', 'Días de tratamiento continuo': 20 })
-  ], true);
   delete HOJAS['INFORMES_PROA'];
   try { fn(); } finally {
-    HOJAS['Respuestas de formulario 1'] = matrizReal; HOJAS['REGISTRO_REVISIONES'] = registroReal;
+    HOJAS['Respuestas de formulario 1'] = matrizReal;
     if (informesReal) HOJAS['INFORMES_PROA'] = informesReal; else delete HOJAS['INFORMES_PROA'];
   }
 }
+// 1001: ertapenem desde el 07/11 (renovaciones dentro de la tolerancia) hasta el fin de su orden del 18/11 = 18 d;
+// 1002: piperacilina/tazobactam desde el 08/11 y meropenem + vancomicina el 17/11 = 16 d de antibiotico (7 d de cada uno);
+// 1003: 3 d; 1005: 5 d. Antibiotico: (18 + 16 + 3 + 5) / 4 = 10,5 d. Ertapenem: (18 + 5) / 2 = 11,5 d.
 var CIFRAS_SEMANA = '*📊 INFORME SEMANAL PROA · 16/11–22/11*\n' +
-  '📝 5 solicitudes (sem. ant. 3) · 4 pacientes · 3 con restringido (sem. ant. 1)\n' +
-  '💊 Más días ordenados: ERTAPENEM 14 d · CASPOFUNGINA 14 d · MEROPENEM 7 d\n' +
-  '🔒 Restringidos: ERTAPENEM 2 solicitudes · CASPOFUNGINA 1 solicitud · VANCOMICINA 1 solicitud\n' +
-  '🏥 Servicios: UCI A 60% · Hosp. Medicina Interna 20% · Cirugía 20%\n' +
-  '🧫 Empírico 40% (50% sin cultivos) · Etiológico 40% · Profiláctico 20% · 1 con profilaxis de más de 1 día\n' +
-  '🧪 Restringidos con interconsulta a Infectología: 67%\n' +
-  '📨 Caso PROA: 1 (sem. ant. 1) · Revisión de duración: 1 (sem. ant. 0)\n' +
-  '⏳ Más largos: HC 1001 UCI A *52 d* · HC 1002 Hosp. Medicina Interna *18 d*\n' +
-  '⚠️ Datos por corregir: 1 dosis fuera de rango · 1 frecuencia de menos de 4 h · 1 diagnóstico sin código CIE10';
+  '📝 6 solicitudes (sem. ant. 3) · 5 pacientes · 4 con restringido (sem. ant. 1)\n' +
+  '⏱️ Tratamiento continuo, promedio por paciente: antibiótico 10,5 d en 4 pacientes (sem. ant. 7 d) · antifúngico 14 d en 1 paciente\n' +
+  '💊 Promedio de días por antimicrobiano (pacientes): ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)\n' +
+  '🔒 Restringidos: ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)\n' +
+  '🏥 Servicios: UCI A 67% · Hosp. Medicina Interna 17% · Cirugía 17%\n' +
+  '🧫 Empírico 50% (67% sin cultivos) · Etiológico 33% · Profiláctico 17% · 1 con profilaxis de más de 1 día\n' +
+  '🧪 Restringidos con interconsulta a Infectología: 50%\n' +
+  '⏳ Más largos: HC 1001 UCI A *18 d* · HC 1002 Hosp. Medicina Interna *16 d* · HC 1004 UCI A *14 d*';
 
 prueba('informe semanal: cifras de la semana calculadas por el codigo, sin IA si no hay clave', function () {
   var propsReal = global.PropertiesService;
@@ -992,6 +989,7 @@ prueba('informe semanal: cifras de la semana calculadas por el codigo, sin IA si
         var inf = construirInformeProa_(LUNES_23_11, 7);
         assert.strictEqual(inf.mensaje, CIFRAS_SEMANA);
         assert.strictEqual(inf.anterior.periodo, '09/11–15/11'); assert.strictEqual(inf.anterior.solicitudes, 3);
+        noIncluye(inf.mensaje, 'Caso PROA'); noIncluye(inf.mensaje, 'Datos por corregir');
         assert.strictEqual(peticiones.length, 0);
         // el activador envia a PRUEBA BOT por defecto y deja la fila en INFORMES_PROA
         enviarInforme_(LUNES_23_11);
@@ -1009,7 +1007,7 @@ prueba('informe semanal: cifras de la semana calculadas por el codigo, sin IA si
     ['NINGUNO', 'NINGUNO, ', '..', '', 'pendiente'].forEach(function (v) { assert.strictEqual(sinCultivos(v), true, v); });
     ['UROCULTIVO, NINGUNO', 'CULTIVO DE LCR ', 'SECRECIÓN'].forEach(function (v) { assert.strictEqual(sinCultivos(v), false, v); });
     // semana sin solicitudes
-    var vacia = datosInforme_([], [], new Date(2026, 10, 16), new Date(2026, 10, 23));
+    var vacia = datosInforme_([], new Date(2026, 10, 16), new Date(2026, 10, 23));
     assert.strictEqual(mensajeInforme_(vacia, vacia, null), '*📊 INFORME SEMANAL PROA · 16/11–22/11*\nSin solicitudes en el formulario en este periodo (sem. ant. 0).');
   } finally { global.PropertiesService = propsReal; }
 });
@@ -1020,16 +1018,16 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
   try {
     conSemanaFicticia(function () {
       conApiInforme(respuestaInforme([
-        { indicador: 'servicios', texto: 'UCI A concentró el 60% de las solicitudes de la semana.' },
+        { indicador: 'servicios', texto: 'UCI A concentró el 67% de las solicitudes de la semana.' },
         { indicador: 'comparacion', texto: 'Las solicitudes subieron un 66% frente a la semana anterior' },
-        { indicador: 'interconsulta', texto: 'El 67% de las solicitudes con restringido tuvo interconsulta a Infectología' },
+        { indicador: 'duracion', texto: 'El tratamiento antibiótico continuo promedió 10,5 días por paciente, frente a 7 la semana anterior' },
         { indicador: 'servicios', texto: 'Hay abuso de carbapenémicos en UCI A' }
       ], [{ texto: 'Revisar con UCI A la toma de cultivos antes del tratamiento empírico' }]), function (peticiones) {
         enviarInforme_(LUNES_23_11);
         assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].chatId, CHAT_PRUEBA_BOT);
         assert.strictEqual(envios[0].message.indexOf(CIFRAS_SEMANA), 0);
-        incluye(envios[0].message, CIFRAS_SEMANA + '\n\n*🤖 Lectura de la semana (IA)*\n• UCI A concentró el 60% de las solicitudes de la semana\n' +
-          '• El 67% de las solicitudes con restringido tuvo interconsulta a Infectología\n*Para el comité*\n' +
+        incluye(envios[0].message, CIFRAS_SEMANA + '\n\n*🤖 Lectura de la semana (IA)*\n• UCI A concentró el 67% de las solicitudes de la semana\n' +
+          '• El tratamiento antibiótico continuo promedió 10,5 días por paciente, frente a 7 la semana anterior\n*Para el comité*\n' +
           '• Revisar con UCI A la toma de cultivos antes del tratamiento empírico\n_Cifras del formulario; lectura automática para el comité PROA_');
         noIncluye(envios[0].message, '66%'); noIncluye(envios[0].message, 'abuso');
         // la peticion: modelo, esfuerzo, salida estructurada, respaldo; solo cifras agregadas, sin historias clinicas
@@ -1038,13 +1036,15 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
         assert.strictEqual(c.model, 'claude-opus-5-5'); assert.strictEqual(c.output_config.effort, 'high');
         assert.strictEqual(c.output_config.format.type, 'json_schema'); assert.strictEqual(c.fallbacks, 'default');
         assert.strictEqual(peticiones[0].headers['anthropic-beta'], 'server-side-fallback-2026-07-01'); assert.strictEqual(peticiones[0].headers['x-api-key'], 'clave-de-prueba');
-        assert.ok(!('thinking' in c) && !('temperature' in c));
-        incluye(c.messages[0].content, '"solicitudes": 5'); incluye(c.messages[0].content, '"periodo": "09/11–15/11"');
-        ['1001', '1002', '2002', '"hc"'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
+        // el razonamiento no se pide en la respuesta (se declina como reasoning_extraction): se lee del resumen de thinking
+        assert.deepStrictEqual(c.thinking, { type: 'adaptive', display: 'summarized' }); assert.ok(!('temperature' in c));
+        assert.ok(!('analisis' in c.output_config.format.schema.properties)); noIncluye(c.system, 'analisis');
+        incluye(c.messages[0].content, '"solicitudes": 6'); incluye(c.messages[0].content, '"antibiotico_promedio_dias": 10.5'); incluye(c.messages[0].content, '"periodo": "09/11–15/11"');
+        ['1001', '1002', '1004', '2002', '"hc"'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
       });
       var fila = HOJAS['INFORMES_PROA']._filas[1];
       assert.strictEqual(fila[6], 'claude-opus-5-5'); assert.strictEqual(fila[7], 12000); assert.strictEqual(fila[8], 3000); assert.strictEqual(fila[9], 0.108);
-      incluye(fila[5], 'cifra que no está en los datos: 66'); incluye(fila[5], 'lenguaje de juicio'); incluye(fila[5], 'Repaso: Repaso de la semana.');
+      incluye(fila[5], 'cifra que no está en los datos: 66'); incluye(fila[5], 'lenguaje de juicio'); incluye(fila[5], 'Razonamiento (resumen): Resumen del razonamiento.');
     });
   } finally { global.PropertiesService = propsReal; }
 });
@@ -1054,15 +1054,15 @@ prueba('informe semanal: destino PRODUCCION, reintento con esfuerzo medio si tar
   try {
     conSemanaFicticia(function () {
       propsInforme({ INFORME_PROA_DESTINO: 'produccion' });
-      conApiInforme(function (n) { return n === 1 ? new Error('Timeout: ' + IA_URL) : respuestaInforme([{ indicador: 'servicios', texto: 'UCI A concentró el 60% de las solicitudes' }]); },
+      conApiInforme(function (n) { return n === 1 ? new Error('Timeout: ' + IA_URL) : respuestaInforme([{ indicador: 'servicios', texto: 'UCI A concentró el 67% de las solicitudes' }]); },
         function (peticiones) {
           enviarInforme_(LUNES_23_11);
-          assert.strictEqual(envios[0].chatId, '111@g.us'); incluye(envios[0].message, '• UCI A concentró el 60% de las solicitudes');
+          assert.strictEqual(envios[0].chatId, '111@g.us'); incluye(envios[0].message, '• UCI A concentró el 67% de las solicitudes');
           assert.strictEqual(peticiones.length, 2); assert.strictEqual(peticiones[1].cuerpo.output_config.effort, 'medium');
           assert.strictEqual(HOJAS['INFORMES_PROA']._filas[1][2], 'PRODUCCION');
         });
       [[{ codigo: 500, cuerpo: 'error' }, 'IA sin respuesta: HTTP 500'],
-       [{ cuerpo: { stop_reason: 'refusal', stop_details: { category: 'bio' }, content: [] } }, 'IA sin respuesta: el modelo declinó, categoría bio']].forEach(function (caso) {
+       [{ cuerpo: { stop_reason: 'refusal', stop_details: { category: 'reasoning_extraction' }, content: [] } }, 'IA sin respuesta: el modelo declinó, categoría reasoning_extraction']].forEach(function (caso) {
         conApiInforme(caso[0], function () {
           enviarInforme_(LUNES_23_11);
           assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].message.split('\n\n_Ecosistema')[0], CIFRAS_SEMANA);

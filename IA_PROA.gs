@@ -4,11 +4,11 @@
 //
 // Enfoque (v1.34.0, decision del referente): la IA ya no opina caso por caso. Una vez por semana (lunes,
 // INFORME_HORA, hora de Colombia) el bot envia un informe con las cifras de los ultimos INFORME_DIAS dias:
-// solicitudes, antimicrobianos con mas dias ordenados, restringidos, servicios, tipo de indicacion, cultivos,
-// interconsultas, mensajes del bot, tratamientos mas largos y datos por corregir. Las cifras las calcula
-// este codigo; la IA solo escribe la lectura (hallazgos y sugerencias para el comite) y el codigo descarta
-// cualquier frase con una cifra que no este en los datos o con lenguaje de juicio. Sin ANTHROPIC_API_KEY,
-// o si la API falla, el informe sale igual, solo con las cifras.
+// solicitudes, promedio de dias del tratamiento continuo por paciente y por antimicrobiano (v1.34.1, pedido del
+// referente), restringidos, servicios, tipo de indicacion, cultivos, interconsultas y tratamientos mas largos.
+// Las cifras las calcula este codigo; la IA solo escribe la lectura (hallazgos y sugerencias para el comite) y el
+// codigo descarta cualquier frase con una cifra que no este en los datos o con lenguaje de juicio. Sin
+// ANTHROPIC_API_KEY, o si la API falla, el informe sale igual, solo con las cifras.
 //
 // Propiedades del script:
 //   ANTHROPIC_API_KEY        opcional: la lectura de la IA. Sin ella, informe solo con cifras.
@@ -24,7 +24,7 @@
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
 var INFORME_HOJA = "INFORMES_PROA";
-var INFORME_FILAS_MAX = 4000;                     // filas de la matriz que se leen hacia atras
+var INFORME_FILAS_MAX = 4000;                     // filas de la matriz que se leen hacia atras (dos periodos + 60 d de historia)
 var INFORME_TOP = 5;
 var INFORME_MAX_HALLAZGOS = 4;
 var INFORME_MAX_SUGERENCIAS = 2;
@@ -45,26 +45,25 @@ var IA_JUICIO = /\bno pertinente|\binadecuad|\bincorrect|\binjustificad|\bmal (i
 var IA_PRECIOS_MTOK = { "claude-opus-5-5": [4, 20], "claude-opus-5": [5, 25], "claude-opus-4-8": [5, 25],
   "claude-sonnet-5-5": [2, 10], "claude-sonnet-5": [2, 10], "claude-haiku-5-5": [0.10, 0.50] };
 
-var INFORME_INDICADORES = ["solicitudes", "antimicrobianos", "restringidos", "servicios", "indicacion", "interconsulta",
-  "profilaxis", "mensajes_bot", "tratamientos_largos", "calidad_datos", "comparacion"];
+var INFORME_INDICADORES = ["solicitudes", "duracion", "antimicrobianos", "restringidos", "servicios", "indicacion", "interconsulta",
+  "profilaxis", "tratamientos_largos", "comparacion"];
 
 var INFORME_REGLAS = [
-  "Apoyas al comité del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia. Recibes los indicadores de un periodo, calculados por el bot a partir del formulario de solicitud de antimicrobianos (todas las solicitudes, no solo restringidos) y del registro de mensajes del bot, junto con los del periodo anterior. Escribes la lectura que acompaña al informe en el grupo de WhatsApp del PROA, donde están la infectóloga, el químico farmacéutico y el equipo del programa.",
+  "Apoyas al comité del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia. Recibes los indicadores de un periodo, calculados por el bot a partir del formulario de solicitud de antimicrobianos (todas las solicitudes, no solo restringidos), junto con los del periodo anterior. Escribes la lectura que acompaña al informe en el grupo de WhatsApp del PROA, donde están la infectóloga, el químico farmacéutico y el equipo del programa.",
   "",
-  "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día, los tratamientos más largos o los datos mal digitados. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
+  "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento (por paciente o por antimicrobiano), la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
   "",
-  "Cifras: usa solo las que vienen en los datos y escríbelas igual. No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los días son días ordenados en las solicitudes del periodo, no días de terapia administrados: llámalos así. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
+  "Cifras: usa solo las que vienen en los datos y escríbelas igual. No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los promedios de días son del tratamiento continuo de cada paciente (sus prescripciones seguidas sumadas, hasta el fin de su última orden del periodo; el de cada antimicrobiano cuenta solo los días de ese antimicrobiano); son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
   "",
   "Tono: neutro e institucional, en español corriente con tildes, sin markdown. Cada frase de máximo 150 caracteres. Sin culpar a servicios, especialidades ni personas; sin juicios sobre casos clínicos; sin palabras como \"inadecuado\", \"incorrecto\", \"injustificado\", \"no pertinente\", \"abuso\" o \"mal uso\". Si no hay nada notable, dilo en un hallazgo corto y no rellenes.",
   "",
-  "En analisis repasa primero todos los indicadores y qué podría explicarlos (queda en el registro, no va al grupo). indicador es la sección de los datos de la que sale cada hallazgo."
+  "indicador es la sección de los datos de la que sale cada hallazgo."
 ].join("\n");
 
 var INFORME_ESQUEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
-    analisis: { type: "string", description: "Repaso de los indicadores antes de escribir. Máximo 1200 caracteres. No va al grupo." },
     hallazgos: { type: "array", items: { type: "object", additionalProperties: false, properties: {
       indicador: { type: "string", enum: INFORME_INDICADORES },
       texto: { type: "string", description: "Una frase de máximo 150 caracteres con cifras tomadas de los datos." }
@@ -73,7 +72,7 @@ var INFORME_ESQUEMA = {
       texto: { type: "string", description: "Una acción de programa para el comité, máximo 150 caracteres." }
     }, required: ["texto"] } }
   },
-  required: ["analisis", "hallazgos", "sugerencias"]
+  required: ["hallazgos", "sugerencias"]
 };
 
 // =====================================================================
@@ -129,9 +128,10 @@ function destinoInforme_() {
 function construirInformeProa_(hoy, dias) {
   var hasta = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
   var desde = new Date(hasta.getTime() - dias * 864e5), desdeAnterior = new Date(desde.getTime() - dias * 864e5);
-  var eventos = eventosDesde_(desdeAnterior), registro = filasRegistroInforme_();
-  var actual = datosInforme_(eventos, registro, desde, hasta);
-  var anterior = datosInforme_(eventos, registro, desdeAnterior, desde);
+  // la historia de cada paciente (CONFIG.SEGUIMIENTO_DIAS antes de cada orden) cuenta para sus dias de tratamiento
+  var eventos = eventosDesde_(new Date(desdeAnterior.getTime() - CONFIG.SEGUIMIENTO_DIAS * 864e5));
+  var actual = datosInforme_(eventos, desde, hasta);
+  var anterior = datosInforme_(eventos, desdeAnterior, desde);
   var cfg = iaConfigProa_();
   var ia = cfg.clave ? lecturaIa_(actual, anterior, cfg) : null;
   return { mensaje: mensajeInforme_(actual, anterior, ia), actual: actual, anterior: anterior, ia: ia };
@@ -156,16 +156,6 @@ function eventosDesde_(desde) {
   return eventos;
 }
 
-function filasRegistroInforme_() {
-  var hoja = libroProa().getSheetByName(CONFIG.HOJA_REGISTRO);
-  if (!hoja || hoja.getLastRow() < 2) return [];
-  return hoja.getRange(2, 1, hoja.getLastRow() - 1, ENCABEZADOS_REGISTRO.length).getValues().map(function(fila) {
-    var r = {};
-    ENCABEZADOS_REGISTRO.forEach(function(h, i) { r[h] = fila[i]; });
-    return r;
-  });
-}
-
 function porcentaje(a, b) { return b ? Math.round(100 * a / b) : 0; }
 
 // "Unidad de Cuidado Critico UCI A" -> "UCI A"; "Unidad de Cuidado Critico PEDIATRIA" -> "UCI PEDIATRÍA";
@@ -182,12 +172,72 @@ function sinCultivos(valor) {
 
 function fechaDiaMes_(d) { return ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2); }
 
-// Indicadores de las solicitudes con marca temporal en [desde, hasta) y de los mensajes del bot del mismo periodo.
-function datosInforme_(eventos, registro, desde, hasta) {
-  var lista = obtenerAntimicrobianosRestringidos(), reglas = obtenerRangosDosis();
-  var porAm = {}, porServicio = {}, hcs = {}, tipos = { "Empírico": 0, "Etiológico": 0, "Profiláctico": 0 };
+// Tratamiento continuo hasta una orden, con las reglas de seguimientoPaciente() (Codigo.gs): se retrocede mientras
+// una orden anterior del paciente (de la lista) termine, con CONFIG.SEGUIMIENTO_TOLERANCIA_DIAS de tolerancia, despues
+// del inicio conocido, dentro de CONFIG.SEGUIMIENTO_DIAS; dias calendario. Devuelve los dias desde el inicio hasta la
+// orden, sin contar los de la orden.
+function diasPrevios_(ordenes, t) {
+  var dia = 864e5, tolerancia = CONFIG.SEGUIMIENTO_TOLERANCIA_DIAS * dia, ventana = t - CONFIG.SEGUIMIENTO_DIAS * dia;
+  var lista = ordenes.filter(function(o) { return o.t < t - 1000 && o.t >= ventana; });
+  var inicio = t, cambio = true;
+  while (cambio) {
+    cambio = false;
+    lista.forEach(function(o) { if (o.t < inicio && o.t + (o.dias || 1) * dia + tolerancia >= inicio) { inicio = o.t; cambio = true; } });
+  }
+  var diaCal = function(x) { var d = new Date(x); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / dia); };
+  return diaCal(t) - diaCal(inicio);
+}
+
+function diasOrden_(v) { var d = numeroONulo(v); return (d !== null && d > 0 && d < 365) ? d : 0; }
+function promedio_(lista) { return lista.length ? Math.round(10 * lista.reduce(function(a, b) { return a + b; }, 0) / lista.length) / 10 : 0; }
+
+// Dias de tratamiento de los pacientes con alguna orden en [desde, hasta), con su ultima orden del periodo:
+// { antibiotico: [dias por paciente], antifungico: [...], porAm: { nombre: [dias por paciente] }, largos }.
+// antibiotico/antifungico: tratamiento continuo del tipo (sumando cambios de antimicrobiano), como "Con esta orden: N d";
+// porAm: solo los dias de ese antimicrobiano.
+function tratamientosDelPeriodo_(eventos, desde, hasta) {
+  var porHc = {};
+  eventos.forEach(function(e) {
+    var hc = String(campoDelEvento(e.namedValues, CAMPOS.HC) || '').replace(/\s+/g, '');
+    if (!hc || hc === '-' || /^0+$/.test(hc)) return;
+    (porHc[hc] = porHc[hc] || []).push({ t: e.fecha.getTime(), ams: leerSlots(e), servicio: campoDelEvento(e.namedValues, CAMPOS.SERVICIO) });
+  });
+  var res = { antibiotico: [], antifungico: [], porAm: {}, largos: [] };
+  Object.keys(porHc).forEach(function(hc) {
+    var ordenes = porHc[hc].sort(function(a, b) { return a.t - b.t; });
+    var delPeriodo = ordenes.filter(function(o) { return o.t >= desde.getTime() && o.t < hasta.getTime() && o.ams.length; });
+    if (!delPeriodo.length) return;
+    var mayor = null;
+    [false, true].forEach(function(antifungico) {
+      var delTipo = function(o) { return o.ams.filter(function(am) { return esAntifungico(am.nombre) === antifungico; }); };
+      var ultima = delPeriodo.filter(function(o) { return delTipo(o).length; }).pop();
+      if (!ultima) return;
+      var previas = [];
+      ordenes.forEach(function(o) { delTipo(o).forEach(function(am) { previas.push({ t: o.t, dias: diasOrden_(am.dias) }); }); });
+      var dias = diasPrevios_(previas, ultima.t) + Math.max.apply(null, delTipo(ultima).map(function(am) { return diasOrden_(am.dias); }));
+      res[antifungico ? 'antifungico' : 'antibiotico'].push(dias);
+      if (!mayor || dias > mayor.dias) mayor = { hc: hc, servicio: servicioCorto(ultima.servicio), dias: dias };
+    });
+    var nombres = {};
+    delPeriodo.forEach(function(o) { o.ams.forEach(function(am) { nombres[am.nombre] = true; }); });
+    Object.keys(nombres).forEach(function(nombre) {
+      var ultima = delPeriodo.filter(function(o) { return o.ams.some(function(am) { return am.nombre === nombre; }); }).pop();
+      var previas = [];
+      ordenes.forEach(function(o) { o.ams.forEach(function(am) { if (am.nombre === nombre) previas.push({ t: o.t, dias: diasOrden_(am.dias) }); }); });
+      var dias = diasPrevios_(previas, ultima.t) + Math.max.apply(null, ultima.ams.filter(function(am) { return am.nombre === nombre; }).map(function(am) { return diasOrden_(am.dias); }));
+      (res.porAm[nombre] = res.porAm[nombre] || []).push(dias);
+    });
+    if (mayor) res.largos.push(mayor);
+  });
+  res.largos.sort(function(a, b) { return b.dias - a.dias; });
+  return res;
+}
+
+// Indicadores de las solicitudes con marca temporal en [desde, hasta).
+function datosInforme_(eventos, desde, hasta) {
+  var lista = obtenerAntimicrobianosRestringidos();
+  var porServicio = {}, hcs = {}, tipos = { "Empírico": 0, "Etiológico": 0, "Profiláctico": 0 };
   var n = 0, conRestringido = 0, conInterconsulta = 0, empiricoSinCultivo = 0, profilaxisLarga = 0;
-  var dosisFuera = 0, frecuencias = 0, sinCie10 = 0;
   eventos.forEach(function(e) {
     if (e.fecha < desde || e.fecha >= hasta) return;
     var slots = leerSlots(e);
@@ -201,55 +251,37 @@ function datosInforme_(eventos, registro, desde, hasta) {
     var tipo = tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION));
     if (tipo in tipos) tipos[tipo]++;
     if (tipo === "Empírico" && sinCultivos(c(CAMPOS.CULTIVOS))) empiricoSinCultivo++;
-    var pesoKg = pesoKgDesde(c(CAMPOS.PESO_KG), c(CAMPOS.PESO_G));
     var restringido = false, profLarga = false;
     slots.forEach(function(am) {
-      var d = numeroONulo(am.dias), dias = (d !== null && d > 0 && d < 365) ? d : 0;
       var entrada = entradaRestringida(am.nombre, lista);
-      var x = porAm[am.nombre] || (porAm[am.nombre] = { nombre: am.nombre, solicitudes: 0, dias_ordenados: 0, restringido: !!entrada });
-      x.solicitudes++; x.dias_ordenados += dias;
       if (entrada && entrada.dispara !== false) restringido = true;
-      if (entrada && evaluarDosis(am.nombre, am.dosis, pesoKg, reglas).revisar) dosisFuera++;
-      if (avisoFrecuencia(am)) frecuencias++;
-      if (tipo === "Profiláctico" && dias > 1) profLarga = true;
+      if (tipo === "Profiláctico" && diasOrden_(am.dias) > 1) profLarga = true;
     });
     if (restringido) { conRestringido++; if (esSi(c(CAMPOS.INTERCONSULTA))) conInterconsulta++; }
     if (profLarga) profilaxisLarga++;
-    if (!extraerCodigoCIE10(c(CAMPOS.DIAGNOSTICO))) sinCie10++;
   });
 
-  var ams = Object.keys(porAm).map(function(k) { return porAm[k]; });
-  var orden = function(a, b) { return b.dias_ordenados - a.dias_ordenados || b.solicitudes - a.solicitudes; };
-
-  // Mensajes del bot del periodo (REGISTRO_REVISIONES, por la marca temporal de la solicitud)
-  var casos = 0, revisiones = 0, largos = {};
-  registro.forEach(function(r) {
-    var f = fechaDe(r["Marca temporal de la solicitud"]);
-    if (!f || f < desde || f >= hasta || String(r["Enviado al grupo"]) !== "SI") return;
-    if (r["Fuente del análisis"] === FUENTE_PROLONGADO) revisiones++; else casos++;
-    var hc = String(r["Historia clínica"] || "").replace(/\s+/g, ""), dias = Number(r["Días de tratamiento continuo"]) || 0;
-    if (hc && (!largos[hc] || dias > largos[hc].dias)) {
-      largos[hc] = { hc: hc, servicio: servicioCorto(r["Servicio"]), dias: dias,
-        antimicrobianos: String(r["Antimicrobianos restringidos"] || r["Acompañantes"] || "").replace(/ \d+ d\b/g, "").replace(/;\s*/g, " + ") };
-    }
-  });
+  var tr = tratamientosDelPeriodo_(eventos, desde, hasta);
+  var ams = Object.keys(tr.porAm).map(function(k) {
+    return { nombre: k, pacientes: tr.porAm[k].length, promedio_dias: promedio_(tr.porAm[k]), restringido: !!entradaRestringida(k, lista) };
+  }).sort(function(a, b) { return b.pacientes - a.pacientes || b.promedio_dias - a.promedio_dias; });
 
   return {
     periodo: fechaDiaMes_(desde) + "–" + fechaDiaMes_(new Date(hasta.getTime() - 864e5)),
     solicitudes: n,
     pacientes: Object.keys(hcs).length,
     solicitudes_con_restringido: conRestringido,
-    antimicrobianos_mas_dias: ams.slice().sort(orden).slice(0, 8),
-    restringidos: ams.filter(function(a) { return a.restringido; }).sort(orden),
+    tratamiento_continuo: { antibiotico_promedio_dias: promedio_(tr.antibiotico), antibiotico_pacientes: tr.antibiotico.length,
+      antifungico_promedio_dias: promedio_(tr.antifungico), antifungico_pacientes: tr.antifungico.length },
+    antimicrobianos: ams.slice(0, 8),
+    restringidos: ams.filter(function(a) { return a.restringido; }),
     servicios: Object.keys(porServicio).map(function(k) { return { nombre: k, solicitudes: porServicio[k], porcentaje: porcentaje(porServicio[k], n) }; })
       .sort(function(a, b) { return b.solicitudes - a.solicitudes; }).slice(0, 6),
     indicacion: { empirico_pct: porcentaje(tipos["Empírico"], n), etiologico_pct: porcentaje(tipos["Etiológico"], n),
       profilactico_pct: porcentaje(tipos["Profiláctico"], n), empiricos_sin_cultivo_pct: porcentaje(empiricoSinCultivo, tipos["Empírico"]) },
     restringidos_con_interconsulta_pct: porcentaje(conInterconsulta, conRestringido),
     profilaxis_mas_de_1_dia: profilaxisLarga,
-    mensajes_bot: { casos_proa: casos, revisiones_duracion: revisiones },
-    tratamientos_largos: Object.keys(largos).map(function(k) { return largos[k]; }).sort(function(a, b) { return b.dias - a.dias; }).slice(0, INFORME_TOP),
-    calidad_datos: { dosis_fuera_de_rango: dosisFuera, frecuencias_menores_4h: frecuencias, diagnosticos_sin_cie10: sinCie10 }
+    tratamientos_largos: tr.largos.slice(0, INFORME_TOP)
   };
 }
 
@@ -264,28 +296,26 @@ function mensajeInforme_(a, ant, ia) {
   }
   lineas.push(E(0x1F4DD) + " " + a.solicitudes + " solicitudes" + sem(ant.solicitudes) + " · " + a.pacientes + " pacientes · " +
     a.solicitudes_con_restringido + " con restringido" + sem(ant.solicitudes_con_restringido));
-  lineas.push(E(0x1F48A) + " Más días ordenados: " + a.antimicrobianos_mas_dias.slice(0, 3).map(function(x) { return x.nombre + " " + x.dias_ordenados + " d"; }).join(" · "));
-  if (a.restringidos.length) {
-    lineas.push(E(0x1F512) + " Restringidos: " + a.restringidos.slice(0, 4).map(function(x) {
-      return x.nombre + " " + x.solicitudes + (x.solicitudes === 1 ? " solicitud" : " solicitudes");
-    }).join(" · "));
+  var tc = a.tratamiento_continuo, f = function(x) { return formatoNumero(x, 1) + " d"; };
+  if (tc.antibiotico_pacientes || tc.antifungico_pacientes) {
+    var enPacientes = function(n) { return " en " + n + (n === 1 ? " paciente" : " pacientes"); };
+    lineas.push(E(0x23F1) + E(0xFE0F) + " Tratamiento continuo, promedio por paciente: " + [
+      tc.antibiotico_pacientes ? "antibiótico " + f(tc.antibiotico_promedio_dias) + enPacientes(tc.antibiotico_pacientes) +
+        (ant.tratamiento_continuo.antibiotico_pacientes ? sem(f(ant.tratamiento_continuo.antibiotico_promedio_dias)) : "") : "",
+      tc.antifungico_pacientes ? "antifúngico " + f(tc.antifungico_promedio_dias) + enPacientes(tc.antifungico_pacientes) : ""
+    ].filter(String).join(" · "));
   }
+  var conPacientes = function(x) { return x.nombre + " " + f(x.promedio_dias) + " (" + x.pacientes + ")"; };
+  lineas.push(E(0x1F48A) + " Promedio de días por antimicrobiano (pacientes): " + a.antimicrobianos.slice(0, 4).map(conPacientes).join(" · "));
+  if (a.restringidos.length) lineas.push(E(0x1F512) + " Restringidos: " + a.restringidos.slice(0, 4).map(conPacientes).join(" · "));
   lineas.push(E(0x1F3E5) + " Servicios: " + a.servicios.slice(0, 3).map(function(x) { return x.nombre + " " + x.porcentaje + "%"; }).join(" · "));
   lineas.push(E(0x1F9EB) + " Empírico " + a.indicacion.empirico_pct + "% (" + a.indicacion.empiricos_sin_cultivo_pct + "% sin cultivos) · Etiológico " +
     a.indicacion.etiologico_pct + "% · Profiláctico " + a.indicacion.profilactico_pct + "%" +
     (a.profilaxis_mas_de_1_dia ? " · " + a.profilaxis_mas_de_1_dia + " con profilaxis de más de 1 día" : ""));
   if (a.solicitudes_con_restringido) lineas.push(E(0x1F9EA) + " Restringidos con interconsulta a Infectología: " + a.restringidos_con_interconsulta_pct + "%");
-  lineas.push(E(0x1F4E8) + " Caso PROA: " + a.mensajes_bot.casos_proa + sem(ant.mensajes_bot.casos_proa) + " · Revisión de duración: " +
-    a.mensajes_bot.revisiones_duracion + sem(ant.mensajes_bot.revisiones_duracion));
   if (a.tratamientos_largos.length) {
     lineas.push(E(0x23F3) + " Más largos: " + a.tratamientos_largos.slice(0, 3).map(function(x) { return "HC " + x.hc + " " + x.servicio + " *" + x.dias + " d*"; }).join(" · "));
   }
-  var cal = a.calidad_datos, datos = [];
-  var plural = function(n, uno, varios) { return n + " " + (n === 1 ? uno : varios); };
-  if (cal.dosis_fuera_de_rango) datos.push(plural(cal.dosis_fuera_de_rango, "dosis fuera de rango", "dosis fuera de rango"));
-  if (cal.frecuencias_menores_4h) datos.push(plural(cal.frecuencias_menores_4h, "frecuencia de menos de 4 h", "frecuencias de menos de 4 h"));
-  if (cal.diagnosticos_sin_cie10) datos.push(plural(cal.diagnosticos_sin_cie10, "diagnóstico sin código CIE10", "diagnósticos sin código CIE10"));
-  if (datos.length) lineas.push(E(0x26A0) + E(0xFE0F) + " Datos por corregir: " + datos.join(" · "));
 
   if (ia && ia.lectura && (ia.lectura.hallazgos.length || ia.lectura.sugerencias.length)) {
     lineas.push("", "*" + E(0x1F916) + " Lectura de la semana (IA)*");
@@ -327,6 +357,8 @@ function lecturaIa_(actual, anterior, cfg) {
     model: cfg.modelo,
     max_tokens: IA_MAX_TOKENS,
     system: INFORME_REGLAS,
+    // el repaso del modelo se lee del resumen de su razonamiento: pedirlo en la respuesta se declina (reasoning_extraction)
+    thinking: { type: "adaptive", display: "summarized" },
     output_config: { effort: cfg.esfuerzo, format: { type: "json_schema", schema: INFORME_ESQUEMA } },
     fallbacks: "default",
     messages: [{ role: "user", content: "Indicadores del PROA (periodo actual y anterior, " + actual.periodo + " frente a " + anterior.periodo + "):\n" + texto }]
@@ -354,6 +386,7 @@ function lecturaIa_(actual, anterior, cfg) {
     var datos = JSON.parse(resp.getContentText());
     if (datos.stop_reason === "refusal" || datos.stop_reason === "max_tokens") {
       var cat = datos.stop_details && datos.stop_details.category ? ", categoría " + datos.stop_details.category : "";
+      Logger.log("IA sin resultado (%s%s; modelo %s; %s s).", datos.stop_reason, cat, datos.model || cfg.modelo, segundos);
       return { lectura: null, motivo: (datos.stop_reason === "refusal" ? "el modelo declinó" : "respuesta incompleta") + cat };
     }
     // Con respaldo puede haber texto del modelo que declino antes del bloque fallback: vale el ultimo bloque de texto.
@@ -361,6 +394,8 @@ function lecturaIa_(actual, anterior, cfg) {
     if (!bloques.length) return { lectura: null, motivo: "respuesta sin texto" };
     var salida = JSON.parse(bloques[bloques.length - 1].text);
     var lectura = filtrarLecturaIa_(salida, texto);
+    lectura.analisis = (datos.content || []).filter(function(b) { return b.type === "thinking" && b.thinking; })
+      .map(function(b) { return b.thinking; }).join(" ").replace(/\s+/g, " ").substring(0, 1500);
     var modelo = datos.model || cfg.modelo;
     var entrada = (datos.usage && datos.usage.input_tokens) || 0, salidaTok = (datos.usage && datos.usage.output_tokens) || 0;
     var p = IA_PRECIOS_MTOK[modelo] || IA_PRECIOS_MTOK[cfg.modelo];
@@ -397,7 +432,7 @@ function filtrarLecturaIa_(salida, textoDatos) {
   (salida.sugerencias || []).forEach(function(s) { var t = valida(s.texto); if (t) sugerencias.push(t); });
   hallazgos.slice(INFORME_MAX_HALLAZGOS).concat(sugerencias.slice(INFORME_MAX_SUGERENCIAS)).forEach(function(t) { descartados.push(t + " (sobra)"); });
   return { hallazgos: hallazgos.slice(0, INFORME_MAX_HALLAZGOS), sugerencias: sugerencias.slice(0, INFORME_MAX_SUGERENCIAS),
-    descartados: descartados, analisis: String(salida.analisis || "").replace(/\s+/g, " ").substring(0, 1500) };
+    descartados: descartados, analisis: "" };
 }
 
 function llamarApiIa_(cuerpo, cfg, conRespaldo) {
@@ -427,7 +462,8 @@ function textoRegistroIa_(ia) {
   if (!ia) return "sin IA (falta ANTHROPIC_API_KEY)";
   if (!ia.lectura) return "IA sin respuesta: " + ia.motivo;
   var l = ia.lectura;
-  return "IA (" + ia.segundos + " s)" + (l.descartados.length ? " · Descartados: " + l.descartados.join(" | ") : " · sin descartes") + " · Repaso: " + l.analisis;
+  return "IA (" + ia.segundos + " s)" + (l.descartados.length ? " · Descartados: " + l.descartados.join(" | ") : " · sin descartes") +
+    (l.analisis ? " · Razonamiento (resumen): " + l.analisis : "");
 }
 
 // Una fila por informe en la pestana INFORMES_PROA (la crea si no existe). Nunca interrumpe el envio.

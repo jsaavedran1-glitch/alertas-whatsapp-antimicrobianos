@@ -124,7 +124,7 @@ _Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado
 
 La IA ya **no opina caso por caso** (decisión del referente: el caso lo valora Infectología). Su papel es el informe del programa: los **lunes a las 7:00** (hora de Colombia) el bot envía un mensaje con las cifras de los 7 días anteriores y, debajo, una lectura corta escrita por Claude (modelo Opus, `claude-opus-5-5`).
 
-- **Las cifras las calcula el código**, no la IA. Salen de todas las solicitudes del formulario de la semana, no solo de los restringidos, y de `REGISTRO_REVISIONES`. Incluyen: solicitudes, pacientes y solicitudes con restringido (frente a la semana anterior), antimicrobianos con más días ordenados, restringidos, servicios, empírico, etiológico y profiláctico (con el % de empíricos sin cultivos), profilaxis de más de 1 día, interconsulta a Infectología en restringidos, casos PROA y revisiones de duración enviados, tratamientos más largos y datos por corregir (dosis fuera de rango, frecuencias de menos de 4 h, diagnósticos sin código CIE10).
+- **Las cifras las calcula el código**, no la IA, a partir de todas las solicitudes del formulario (no solo restringidos): solicitudes, pacientes y solicitudes con restringido (frente a la semana anterior); **promedio de días de tratamiento** por paciente (antibiótico y antifúngico continuo, como el "Con esta orden: N d" de los mensajes) y por antimicrobiano (solo los días de ese antimicrobiano), con el número de pacientes; restringidos con su promedio; servicios; empírico, etiológico y profiláctico (con el % de empíricos sin cultivos); profilaxis de más de 1 día; interconsulta a Infectología en restringidos y los tratamientos más largos. Los días se cuentan con las mismas reglas del seguimiento (prescripciones seguidas con 3 días de tolerancia, 60 días hacia atrás, días calendario) hasta el fin de la última orden de la semana de cada paciente.
 - **La IA solo escribe la lectura:** 2 a 4 hallazgos y hasta 2 sugerencias de programa para el comité (educación, auditoría de una molécula, protocolo, formulario), nunca sobre un paciente.
 - **El código revisa cada frase de la IA.** Descarta la que traiga una cifra que no esté en los datos (la IA no puede calcular ni inventar números) y la que tenga lenguaje de juicio ("inadecuado", "abuso", "mal uso"…). Lo descartado queda en la pestaña `INFORMES_PROA` con el motivo.
 - A la API **solo salen cifras agregadas**: sin historia clínica, nombres, camas ni médicos. Las HC de los tratamientos largos las pone el código en el mensaje y no van a la API.
@@ -136,25 +136,26 @@ Ejemplo con datos ficticios:
 
 ```
 *📊 INFORME SEMANAL PROA · 16/11–22/11*
-📝 5 solicitudes (sem. ant. 3) · 4 pacientes · 3 con restringido (sem. ant. 1)
-💊 Más días ordenados: ERTAPENEM 14 d · CASPOFUNGINA 14 d · MEROPENEM 7 d
-🔒 Restringidos: ERTAPENEM 2 solicitudes · CASPOFUNGINA 1 solicitud · VANCOMICINA 1 solicitud
-🏥 Servicios: UCI A 60% · Hosp. Medicina Interna 20% · Cirugía 20%
-🧫 Empírico 40% (50% sin cultivos) · Etiológico 40% · Profiláctico 20% · 1 con profilaxis de más de 1 día
-🧪 Restringidos con interconsulta a Infectología: 67%
-📨 Caso PROA: 1 (sem. ant. 1) · Revisión de duración: 1 (sem. ant. 0)
-⏳ Más largos: HC 1001 UCI A *52 d* · HC 1002 Hosp. Medicina Interna *18 d*
-⚠️ Datos por corregir: 1 dosis fuera de rango · 1 frecuencia de menos de 4 h · 1 diagnóstico sin código CIE10
+📝 6 solicitudes (sem. ant. 3) · 5 pacientes · 4 con restringido (sem. ant. 1)
+⏱️ Tratamiento continuo, promedio por paciente: antibiótico 10,5 d en 4 pacientes (sem. ant. 7 d) · antifúngico 14 d en 1 paciente
+💊 Promedio de días por antimicrobiano (pacientes): ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)
+🔒 Restringidos: ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)
+🏥 Servicios: UCI A 67% · Hosp. Medicina Interna 17% · Cirugía 17%
+🧫 Empírico 50% (67% sin cultivos) · Etiológico 33% · Profiláctico 17% · 1 con profilaxis de más de 1 día
+🧪 Restringidos con interconsulta a Infectología: 50%
+⏳ Más largos: HC 1001 UCI A *18 d* · HC 1002 Hosp. Medicina Interna *16 d* · HC 1004 UCI A *14 d*
 
 *🤖 Lectura de la semana (IA)*
-• UCI A concentró el 60% de las solicitudes de la semana
-• El 67% de las solicitudes con restringido tuvo interconsulta a Infectología
+• UCI A concentró el 67% de las solicitudes de la semana
+• El tratamiento antibiótico continuo promedió 10,5 días por paciente, frente a 7 la semana anterior
 *Para el comité*
 • Revisar con UCI A la toma de cultivos antes del tratamiento empírico
 _Cifras del formulario; lectura automática para el comité PROA_
 ```
 
-Los "días ordenados" son los días de las solicitudes de la semana, no días de terapia administrados. El DOT lo sigue calculando el script FORMULARIO PROA DOT.
+Los promedios son de días ordenados (hasta el fin de la última orden), no de días de terapia administrados. El DOT lo sigue calculando el script FORMULARIO PROA DOT.
+
+La IA no escribe su razonamiento en la respuesta: el modelo declina ese pedido (`reasoning_extraction`). El resumen de su razonamiento se lee de los bloques de *thinking* (`display: "summarized"`) y queda en `INFORMES_PROA`.
 
 Para activarlo: crear el archivo `IA_PROA` en el proyecto, pegar `IA_PROA.gs`, agregar `ANTHROPIC_API_KEY` en Propiedades del script, revisar el informe con `probarInformeProa()` (no envía nada) y ejecutar una vez `crearTriggerInformeProa()`.
 

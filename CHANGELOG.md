@@ -2,6 +2,15 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.34.1] - 2026-11-22
+
+### Cambiado (pedido del referente)
+- **Promedios de días de tratamiento** en lugar de días ordenados sumados: `⏱️` tratamiento continuo promedio por paciente (antibiótico y antifúngico, frente a la semana anterior), `💊` promedio por antimicrobiano con el número de pacientes y `🔒` restringidos con su promedio. Se calculan con las reglas del seguimiento (prescripciones seguidas, 3 d de tolerancia, 60 d de historia) hasta el fin de la última orden de la semana; los tratamientos más largos salen del mismo cálculo, para todos los pacientes.
+- Se quitan del informe las líneas de mensajes del bot (`📨 Caso PROA · Revisión de duración`) y de datos por corregir (`⚠️`). El informe ya no lee `REGISTRO_REVISIONES`.
+
+### Corregido
+- **La IA declinaba** (`reasoning_extraction`) porque el esquema le pedía escribir su repaso en el campo `analisis`. Se quita ese campo; el resumen del razonamiento se lee de los bloques de *thinking* (`display: "summarized"`) y queda en `INFORMES_PROA`.
+
 ## [1.34.0] - 2026-11-22
 
 ### Cambiado (decisión del referente: otro enfoque para la IA)
