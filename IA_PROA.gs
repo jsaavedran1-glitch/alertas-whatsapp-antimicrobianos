@@ -53,7 +53,7 @@ var INFORME_REGLAS = [
   "",
   "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento (por paciente o por antimicrobiano), la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
   "",
-  "Cifras: usa solo las que vienen en los datos y escríbelas igual. No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los promedios de días son del tratamiento continuo de cada paciente (sus prescripciones seguidas sumadas, hasta el fin de su última orden del periodo; el de cada antimicrobiano cuenta solo los días de ese antimicrobiano); son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
+  "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los promedios de días son del tratamiento continuo de cada paciente (sus prescripciones seguidas sumadas, hasta el fin de su última orden del periodo; el de cada antimicrobiano cuenta solo los días de ese antimicrobiano); son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
   "",
   "Tono: neutro e institucional, en español corriente con tildes, sin markdown. Cada frase de máximo 150 caracteres. Sin culpar a servicios, especialidades ni personas; sin juicios sobre casos clínicos; sin palabras como \"inadecuado\", \"incorrecto\", \"injustificado\", \"no pertinente\", \"abuso\" o \"mal uso\". Si no hay nada notable, dilo en un hallazgo corto y no rellenes.",
   "",
@@ -400,8 +400,9 @@ function lecturaIa_(actual, anterior, cfg) {
     var entrada = (datos.usage && datos.usage.input_tokens) || 0, salidaTok = (datos.usage && datos.usage.output_tokens) || 0;
     var p = IA_PRECIOS_MTOK[modelo] || IA_PRECIOS_MTOK[cfg.modelo];
     var costo = p ? Number(((entrada * p[0] + salidaTok * p[1]) / 1e6).toFixed(4)) : "";
-    Logger.log("IA (%s, %s s): %s hallazgo(s), %s sugerencia(s), %s descartada(s); tokens %s/%s; aprox. USD %s.", modelo, segundos,
-      lectura.hallazgos.length, lectura.sugerencias.length, lectura.descartados.length, entrada, salidaTok, costo);
+    // concatenado: con %s, Logger escribe los numeros como 13.0
+    Logger.log("IA (" + modelo + ", " + segundos + " s): " + lectura.hallazgos.length + " hallazgo(s), " + lectura.sugerencias.length +
+      " sugerencia(s), " + lectura.descartados.length + " descartada(s); tokens " + entrada + "/" + salidaTok + "; aprox. USD " + costo + ".");
     return { lectura: lectura, modelo: modelo, entrada: entrada, salida: salidaTok, costo: costo, segundos: segundos };
   } catch (err) {
     var s = Math.round((Date.now() - inicio) / 1000);
@@ -447,9 +448,11 @@ function llamarApiIa_(cuerpo, cfg, conRespaldo) {
   });
 }
 
-// Una frase limpia para WhatsApp: sin marcas de formato y con tope de longitud.
+// Una frase limpia para WhatsApp: sin marcas de formato, decimales con coma y "%" pegado al numero, como las cifras
+// del informe ("12.5 dias" -> "12,5 dias", "86 %" -> "86%"), y con tope de longitud.
 function fraseIa_(s) {
-  var t = String(s === undefined || s === null ? "" : s).replace(/[*~\x60]/g, "").replace(/_/g, " ").replace(/\s+/g, " ").trim().replace(/\.$/, "");
+  var t = String(s === undefined || s === null ? "" : s).replace(/[*~\x60]/g, "").replace(/_/g, " ").replace(/\s+/g, " ").trim().replace(/\.$/, "")
+    .replace(/(\d)\.(\d)/g, "$1,$2").replace(/(\d) %/g, "$1%");
   if (t.length > INFORME_MAX_CARACTERES) t = t.substring(0, INFORME_MAX_CARACTERES - 1).replace(/\s+\S*$/, "") + "…";
   return t;
 }

@@ -1018,9 +1018,9 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
   try {
     conSemanaFicticia(function () {
       conApiInforme(respuestaInforme([
-        { indicador: 'servicios', texto: 'UCI A concentró el 67% de las solicitudes de la semana.' },
+        { indicador: 'servicios', texto: 'UCI A concentró el 67 % de las solicitudes de la semana.' },
         { indicador: 'comparacion', texto: 'Las solicitudes subieron un 66% frente a la semana anterior' },
-        { indicador: 'duracion', texto: 'El tratamiento antibiótico continuo promedió 10,5 días por paciente, frente a 7 la semana anterior' },
+        { indicador: 'duracion', texto: 'El tratamiento antibiótico continuo promedió 10.5 días por paciente, frente a 7 la semana anterior' },
         { indicador: 'servicios', texto: 'Hay abuso de carbapenémicos en UCI A' }
       ], [{ texto: 'Revisar con UCI A la toma de cultivos antes del tratamiento empírico' }]), function (peticiones) {
         enviarInforme_(LUNES_23_11);

@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.34.2] - 2026-11-22
+
+### Corregido (primera prueba con la matriz real: 13 s, USD 0,05, sin descartes)
+- La lectura de la IA sale con coma decimal y el signo % pegado, como las cifras del informe (`12.5` → `12,5`, `86 %` → `86%`).
+- El registro de ejecución ya no escribe los números como `13.0 s` o `4.0 hallazgo(s)`.
+
 ## [1.34.1] - 2026-11-22
 
 ### Cambiado (pedido del referente)
