@@ -62,6 +62,8 @@ Si se cambia la lista de la pestaña, conviene actualizar también la de respald
 
 ### Datos del mensaje
 
+**Formato simple (v1.32.0).** Revisión de duración: paciente, diagnóstico, `⏱️` días que lleva y con esta orden, el motivo del color (la duración de referencia contra la que se compara), la lista de prescripciones sin códigos y, si un antimicrobiano se repite, los días por antimicrobiano. Caso PROA: un solo encabezado, las prescripciones anteriores a esta orden, el total con esta orden y los antimicrobianos en curso. Frecuencias de menos de 4 h salen con `⚠️ Verificar frecuencia`.
+
 Desde la v1.23.0 el caso PROA va **solo con datos** (`CONFIG.CASO_ANALISIS = false`): título, `📍` servicio y cama, `📋` diagnóstico, `📄` HC, edad, peso y especialidad, `🦠` aislamiento, cultivos, indicación y origen, interconsulta, cada antimicrobiano con los días en negrita y la lista numerada de prescripciones del tratamiento continuo con su total. Sin veredicto, sin pertinencia y sin IA; el análisis de las tablas queda en `REGISTRO_REVISIONES`.
 
 | En el mensaje | Pregunta del formulario (título exacto) |

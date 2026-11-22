@@ -2,6 +2,16 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.32.0] - 2026-11-22
+
+### Cambiado (los mensajes en el grupo resultaban confusos; formato elegido por el referente)
+- **Revisión de duración:** título sin días; paciente (HC, edad, servicio, cama); `📋` diagnóstico con su nombre; `⏱️ Lleva *15 d* de antibiótico; con esta orden llegaría a *29 d*`; una línea que dice **contra qué se compara el color** (`🔴 Más del doble de la duración de referencia para infección de piel y tejidos blandos (5-7 d)`); la lista de prescripciones **sin códigos CIE10**. Desaparece "N prescripciones seguidas · … · se sugiere revaluar".
+- **Caso PROA:** un solo encabezado (`ENCABEZADOS_DESTACADOS` vacío: ya no sale `🚨CEFTAZIDIMA/AVIBACTAM🚨` además del título); cambio e interconsulta en una línea; la orden actual ya no se repite en la lista: `🔁 Antes de esta orden: …` y `⏱️ Con esta orden: *25 d* de antibiótico continuo`.
+- **Por antimicrobiano** solo sale si algún antimicrobiano aparece en más de una prescripción (si no, repetía la lista), y sin "(con esta orden)".
+- **Otros antimicrobianos del paciente:** los vigentes salen "en curso" (`🍄 Antifúngico en curso: ANFOTERICINA B LIPOSOMAL desde 18/11 (14 d)`) y los demás como "Ya terminados"; antes todos decían "Otros previos", aunque siguieran activos.
+- **Aviso de frecuencia** (`CONFIG.FRECUENCIA_MINIMA_H = 4`): `⚠️ Verificar frecuencia de VANCOMICINA: c/3 h` cuando se digita una dosis cada menos de 4 h.
+- Las renovaciones seguidas del mismo esquema se agrupan aunque el diagnóstico digitado cambie; el diagnóstico de cada prescripción se sigue usando para elegir la referencia de duración.
+
 ## [1.31.1] - 2026-11-16
 
 ### Corregido
