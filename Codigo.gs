@@ -58,7 +58,7 @@ var CONFIG = {
   SEGUIMIENTO_TOLERANCIA_DIAS: 3,
   // Caso PROA solo con datos (decision del referente, 2026-11-16): sin el bloque de pertinencia ni el veredicto.
   // El analisis de las tablas se sigue guardando en REGISTRO_REVISIONES; true lo devuelve al mensaje.
-  // El bot no usa IA (se retiro el 2026-11-16 por decision del referente: el caso lo valora Infectologia).
+  // Los puntos para revisar de la IA no dependen de esto: viven en IA_PROA.gs (ANTHROPIC_API_KEY e IA_PROA_MODO).
   CASO_ANALISIS: false,
   // Revision por tratamiento prolongado (decision del referente, 2026-11-16): mensaje APARTE del caso PROA
   // cuando la solicitud es al menos la PROLONGADO_MIN_SOLICITUDES-esima del mismo tratamiento continuo (contando
@@ -432,9 +432,21 @@ function notificarCaso_(e, coincidencias) {
         CONFIG.CASO_DIAS_MINIMOS + ' d)' : '' });
     return;
   }
-  // El mensaje ya se encabeza con "CASO PROA": no lleva la linea de titulo del bot.
-  var envio = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias), { sinFirma: true });
-  registrarRevision(e, coincidencias, { enviado: !!(envio && envio.ok), destino: 'PRODUCCION' });
+  var r = enviarAlGrupo_(e, coincidencias, construirMensajeDesdeEvento(e, coincidencias), 'CASO');
+  registrarRevision(e, coincidencias, { enviado: r.ok, destino: r.destino, ia: r.ia });
+}
+
+// Envia un mensaje del bot al grupo (sin la linea de titulo: ya se encabeza con su propio titulo). Con IA_PROA.gs y la
+// IA activa (ANTHROPIC_API_KEY, IA_PROA_MODO distinto de NO) se agregan los puntos para revisar de la IA: en el
+// mismo mensaje (PRODUCCION) o solo en una copia a PRUEBA BOT (PRUEBA). Sin ese archivo o sin clave, se envia igual que
+// siempre. tipo: 'CASO' o 'REVISION'. Devuelve { ok, destino, ia } (ia: datos para el registro, o null).
+function enviarAlGrupo_(e, coincidencias, mensaje, tipo) {
+  if (typeof enviarConRevisionIa_ === 'function') {
+    var conIa = enviarConRevisionIa_(e, coincidencias, mensaje, tipo);
+    if (conIa) return conIa;
+  }
+  var envio = enviarAlertaWhatsApp(mensaje, { sinFirma: true });
+  return { ok: !!(envio && envio.ok), destino: 'PRODUCCION', ia: null };
 }
 
 // Revision por tratamiento prolongado, sin modelo (son datos de la matriz y la tabla de duracion). Con
@@ -444,11 +456,12 @@ function notificarTratamientoProlongado(e, coincidencias) {
   try {
     var revision = revisionProlongado(e, coincidencias);
     if (!revision) return;
-    var accion = accionProlongado(revision, e, coincidencias), envio = null;
-    if (accion === 'ENVIAR') envio = enviarAlertaWhatsApp(revision.mensaje, { sinFirma: true });
+    var accion = accionProlongado(revision, e, coincidencias), r = null;
+    if (accion === 'ENVIAR') r = enviarAlGrupo_(e, coincidencias, revision.mensaje, 'REVISION');
+    // con IA, sus puntos van en el Detalle despues del bloque (las filas enviadas ya no las lee el resumen diario)
     registrarRevision(e, coincidencias, { fuente: FUENTE_PROLONGADO, nivelFinal: revision.nivel, detalle: revision.bloque.join('\n'),
-      estadoEnvio: accion === 'RESUMEN' ? 'PENDIENTE' : (envio && envio.ok ? 'SI' : 'NO'),
-      destino: accion === 'ENVIAR' ? 'PRODUCCION' : (accion === 'RESUMEN' ? 'RESUMEN DIARIO' : TEXTO_ACCION_PROLONGADO[accion]) });
+      estadoEnvio: accion === 'RESUMEN' ? 'PENDIENTE' : (r && r.ok ? 'SI' : 'NO'), ia: r ? r.ia : null,
+      destino: accion === 'ENVIAR' ? r.destino : (accion === 'RESUMEN' ? 'RESUMEN DIARIO' : TEXTO_ACCION_PROLONGADO[accion]) });
   } catch (err) {
     Logger.log('Revision por tratamiento prolongado no disponible: ' + err);
   }
@@ -1497,7 +1510,8 @@ var ENCABEZADOS_REGISTRO = ['Fecha de registro', 'Marca temporal de la solicitud
   'Días de tratamiento continuo'];
 
 // Una fila por solicitud con antimicrobiano restringido en la pestana CONFIG.HOJA_REGISTRO (la crea si no
-// existe). datos: { tablas, revision, detalle, enviado, destino, costo }. Nunca interrumpe el flujo.
+// existe). datos: { tablas, detalle, enviado, estadoEnvio, destino, fuente, nivelFinal, ia }; ia (IA_PROA.gs):
+// { registro, modelo, entrada, salida, costo }. Nunca interrumpe el flujo.
 function registrarRevision(e, coincidencias, datos) {
   if (!CONFIG.REGISTRO_ACTIVO) return;
   try {
@@ -1513,16 +1527,17 @@ function registrarRevision(e, coincidencias, datos) {
     var semaforo = ['VERDE', 'AMARILLO', 'ROJO'];
     var tablas = datos.tablas || analisisPertinenciaDesdeEvento(e, coincidencias);
     var nivelFinal = datos.nivelFinal !== undefined ? datos.nivelFinal : tablas.nivel;
+    var ia = datos.ia || null;
+    // el bloque de la revision por tratamiento prolongado es el texto que saldria en el resumen: no se recorta
+    var detalle = String(datos.detalle || tablas.lineas.join(' | ')).replace(/[*_]/g, '').slice(0, datos.fuente === FUENTE_PROLONGADO ? 8000 : 1500);
+    if (ia && ia.registro) detalle += '\n' + String(ia.registro).slice(0, 4000);
     hoja.appendRow([new Date(), c('Marca temporal'), c(CAMPOS.HC), c(CAMPOS.SERVICIO), c(CAMPOS.ESPECIALIDAD),
       diagnosticoCorto(c(CAMPOS.DIAGNOSTICO)), c(CAMPOS.MICROORGANISMO), tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION)),
       coincidencias.map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
       acompanantesNoRestringidos(e).map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
       tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], datos.fuente || 'TABLAS',
-      // el bloque de la revision por tratamiento prolongado es el texto que saldra en el resumen: no se recorta
-      String(datos.detalle || tablas.lineas.join(' | ')).replace(/[*_]/g, '').slice(0, datos.fuente === FUENTE_PROLONGADO ? 8000 : 1500), seg.previas,
-      datos.estadoEnvio || (datos.enviado ? 'SI' : 'NO'), datos.destino || '',
-      // Modelo, tokens y costo: columnas de cuando el bot usaba IA (retirada el 2026-11-16); quedan vacias
-      '', '', '', '',
+      detalle, seg.previas, datos.estadoEnvio || (datos.enviado ? 'SI' : 'NO'), datos.destino || '',
+      ia ? ia.modelo : '', ia ? ia.entrada : '', ia ? ia.salida : '', ia ? ia.costo : '',
       diasContinuos]);
   } catch (err) {
     Logger.log('No se pudo registrar la revision: ' + err);
@@ -1893,7 +1908,8 @@ function probarUltimaSolicitud(filaOpcional) { probarSolicitud_(filaOpcional, fa
 // (hasta 100 filas: cada una consulta la historia del paciente). No envia nada.
 function probarUltimoProlongado() { probarSolicitud_(null, true); }
 
-function probarSolicitud_(filaOpcional, buscarProlongado) {
+// conIa (IA_PROA.gs): agrega a cada mensaje el bloque que veria PRUEBA BOT; llama a la API, pero no envia nada.
+function probarSolicitud_(filaOpcional, buscarProlongado, conIa) {
   // Tiempos de cada parte, para saber donde se va el tiempo de una solicitud
   var t0 = Date.now(), tiempos = [];
   var marca = function(nombre) { var t = Date.now(); tiempos.push(nombre + ' ' + ((t - t0) / 1000).toFixed(1) + ' s'); t0 = t; };
@@ -1935,8 +1951,14 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
   marca('revisión');
   // Cada bloque dice que pasaria con ese mensaje; las lineas con ▶ son solo de esta prueba, nunca van al grupo.
   var bloques = [];
+  var ia = function(tipo) {
+    if (!conIa || typeof bloqueIaParaPrueba_ !== 'function') return '';
+    var b = '\n\n▶ Copia de PRUEBA BOT:\n' + bloqueIaParaPrueba_(e, coincidencias, tipo);
+    marca('IA');
+    return b;
+  };
   if (generaCasoProa(e, coincidencias)) {
-    bloques.push('▶ CASO PROA: se enviaría al grupo al llegar la solicitud\n\n' + construirMensajeDesdeEvento(e, coincidencias));
+    bloques.push('▶ CASO PROA: se enviaría al grupo al llegar la solicitud\n\n' + construirMensajeDesdeEvento(e, coincidencias) + ia('CASO'));
   } else if (debeAlertar(coincidencias)) {
     bloques.push('▶ CASO PROA: no se enviaría (' + formatoNumero(diasCasoProa(e, coincidencias), 0) + ' d con esta orden; sale desde más de ' +
       CONFIG.CASO_DIAS_MINIMOS + ' d)');
@@ -1945,7 +1967,7 @@ function probarSolicitud_(filaOpcional, buscarProlongado) {
   if (revision) {
     var accion = accionProlongado(revision, e, coincidencias);
     if (accion === 'RESUMEN') bloques.push('▶ REVISIÓN DE DURACIÓN: se enviaría al día siguiente, a las 7:00\n\n' + revision.mensaje);
-    else if (accion === 'ENVIAR') bloques.push('▶ REVISIÓN DE DURACIÓN: se enviaría al grupo al llegar la solicitud\n\n' + revision.mensaje);
+    else if (accion === 'ENVIAR') bloques.push('▶ REVISIÓN DE DURACIÓN: se enviaría al grupo al llegar la solicitud\n\n' + revision.mensaje + ia('REVISION'));
     else bloques.push('▶ REVISIÓN DE DURACIÓN: ' + TEXTO_ACCION_PROLONGADO[accion].replace(/^no se envía: /, 'no se enviaría (') + ')');
     marca('registro (7 d)');
   }

@@ -7,7 +7,7 @@ Bot de Google Apps Script que avisa por **WhatsApp** (vía [Green-API](https://g
 | Formulario | [FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV](https://docs.google.com/forms/d/1u8XYmynHfAH0EoeyNFFcd8w12IA95J47oItrv34TyGI/edit) |
 | Hoja de respuestas | [MATRIZ FORMULARIO DE ANTIMICROBIANOS RESTRINGIDOS HDV (Respuestas)](https://docs.google.com/spreadsheets/d/1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY/edit) |
 | Proyecto Apps Script | [PROA ALERTAS](https://script.google.com/u/1/home/projects/12mUy9SqQGzRnGjkbAsFyycG9RxJxvFePpSuHl4Nv8MokONxKY7kwbIw0/edit) (independiente, no vinculado a la hoja; archivo "Código") |
-| Código en este repo | `Codigo.gs` (archivo "Código"). El bot no usa IA desde la v1.24.0: el archivo `IA_PROA` se borra del proyecto |
+| Código en este repo | `Codigo.gs` (archivo "Código") e `IA_PROA.gs` (archivo "IA_PROA": puntos para revisar de la IA, v1.33.0; sin `ANTHROPIC_API_KEY` el bot funciona igual que sin el archivo) |
 
 La misma hoja tiene vinculado otro script, **FORMULARIO PROA DOT**, que calcula los días de terapia. Son proyectos separados y este bot no lo toca.
 
@@ -40,7 +40,7 @@ Paso a paso:
 1. **Llega una solicitud.** Al enviarse el formulario, Google agrega una fila a la hoja y dispara el activador "Al enviar el formulario", que llama a `notificarNuevaRespuesta(e)`.
 2. **Se carga la lista de restringidos** desde la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` de la misma hoja (columna A, desde la fila 2). Si esa pestaña no existe, está vacía o falla la lectura, se usa `CONFIG.ANTIMICROBIANOS_RESTRINGIDOS_RESPALDO`, para que las alertas nunca dejen de funcionar por eso.
 3. **Se revisan los 3 antimicrobianos de la solicitud.** El formulario guarda el nombre con un código interno (`ERTAPENEM - UT-19973898-1`). `nombreLimpio()` quita todo desde ` - UT-` y la presentación (`AMPOLLA 100, 200`, `50, 70`, `TABLETA`…; v1.29.1), se pasa a mayúsculas y se marca como restringido si el nombre **contiene** alguno de la lista. Por eso `CASPOFUNGINA` cubre `CASPOFUNGINA 50, 70`, y `ANFOTERICINA` cubre la convencional y la liposomal.
-4. **Si ninguno es restringido, termina** sin enviar nada. Es lo más común: la mayoría de solicitudes son de cefepime, piperacilina/tazobactam, meropenem, etc. **`📆 REVISIÓN DE DURACIÓN DE TTO` (v1.27.0, antes "tratamiento prolongado"; solo si la solicitud no genera caso PROA, que ya trae la lista).** Si la solicitud es la **3.ª o más del mismo tratamiento continuo** y el paciente ya lleva **más de 10 días** (sumando los cambios entre fármacos, `seguimientoPaciente()`), la revisión queda pendiente en `REGISTRO_REVISIONES`, tenga o no restringido, y sale **al llegar la solicitud** (v1.31.0; antes a las 7:00), **un mensaje corto por paciente** (para que WhatsApp no lo corte con "Leer más"), con los días en negrita, cada solicitud con fechas, días y patología, y el total frente a la referencia de la patología más larga. Sin modelo, sin verdes y un paciente como máximo cada 7 días.
+4. **Si ninguno es restringido, termina** sin enviar nada. Es lo más común: la mayoría de solicitudes son de cefepime, piperacilina/tazobactam, meropenem, etc. **`📆 REVISIÓN DE DURACIÓN DE TTO` (v1.27.0, antes "tratamiento prolongado"; solo si la solicitud no genera caso PROA, que ya trae la lista).** Si la solicitud es la **3.ª o más del mismo tratamiento continuo** y el paciente ya lleva **más de 10 días** (sumando los cambios entre fármacos, `seguimientoPaciente()`), la revisión queda pendiente en `REGISTRO_REVISIONES`, tenga o no restringido, y sale **al llegar la solicitud** (v1.31.0; antes a las 7:00), **un mensaje corto por paciente** (para que WhatsApp no lo corte con "Leer más"), con los días en negrita, cada solicitud con fechas, días y patología, y el total frente a la referencia de la patología más larga. Sin verdes y un paciente como máximo cada 7 días.
 5. **Si hay al menos uno, arma el mensaje.** Además de historia clínica, edad y servicio, incluye lo que PROA interviene: peso y **mg/kg por dosis**, cama, indicación (empírico/etiológico/profiláctico), cultivos, origen (IAAS/comunidad), si fue un cambio de antimicrobiano y por qué, ajuste renal con depuración de creatinina, y un aviso cuando **no se pidió interconsulta a Infectología**. El diagnóstico se busca en la pestaña `CIE10` por su código (`G06.0` → `G060 - ABSCESO…`; `J40` → `J40X`); si no lo encuentra, deja lo que escribió el médico. Cada antimicrobiano restringido va con dosis, vía, frecuencia, días y **fecha fin prevista**; si la dosis queda fuera del rango de referencia de la pestaña `RANGOS_DOSIS`, se agrega `⚠️ … revisar`. Los antimicrobianos **no** restringidos de la misma solicitud salen como "Acompañante", para ver la combinación completa.
 6. **WhatsApp.** `enviarAlertaWhatsApp()` pone la firma en negrita arriba (`Bot PROA Antimicrobianos HDV` o lo que diga `GREENAPI_BOT_LABEL`) y el pie en cursiva abajo, y hace un `POST` a `sendMessage` de Green-API. Si Green-API responde con error o no hay conexión, lo deja en el registro sin detener la ejecución.
 
@@ -64,7 +64,7 @@ Si se cambia la lista de la pestaña, conviene actualizar también la de respald
 
 **Formato simple (v1.32.0).** Revisión de duración: paciente, diagnóstico, `⏱️` días que lleva y con esta orden, el motivo del color (la duración de referencia contra la que se compara), la lista de prescripciones sin códigos y, si un antimicrobiano se repite, los días por antimicrobiano. Caso PROA: un solo encabezado, las prescripciones anteriores a esta orden, el total con esta orden y los antimicrobianos en curso. Frecuencias de menos de 4 h salen con `⚠️ Verificar frecuencia`.
 
-Desde la v1.23.0 el caso PROA va **solo con datos** (`CONFIG.CASO_ANALISIS = false`): título, `📍` servicio y cama, `📋` diagnóstico, `📄` HC, edad, peso y especialidad, `🦠` aislamiento, cultivos, indicación y origen, interconsulta, cada antimicrobiano con los días en negrita y la lista numerada de prescripciones del tratamiento continuo con su total. Sin veredicto, sin pertinencia y sin IA; el análisis de las tablas queda en `REGISTRO_REVISIONES`.
+Desde la v1.23.0 el caso PROA va **solo con datos** (`CONFIG.CASO_ANALISIS = false`): título, `📍` servicio y cama, `📋` diagnóstico, `📄` HC, edad, peso y especialidad, `🦠` aislamiento, cultivos, indicación y origen, interconsulta, cada antimicrobiano con los días en negrita y la lista numerada de prescripciones del tratamiento continuo con su total. Sin veredicto ni pertinencia de las tablas (el análisis de las tablas queda en `REGISTRO_REVISIONES`). Con la IA activa se agregan, según el modo, los puntos para revisar (sección siguiente).
 
 | En el mensaje | Pregunta del formulario (título exacto) |
 |---|---|
@@ -120,6 +120,35 @@ La columna `TERMINACION` de la hoja es una fórmula y no llega con el formulario
 _Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado por el QF Juan Pablo Saavedra_
 ```
 
+### Puntos para revisar (IA, v1.33.0)
+
+El archivo `IA_PROA.gs` le pide a la API de Claude (modelo Opus, `claude-opus-5-5`, esfuerzo `high`) **como máximo 3 puntos para revisar** en cada mensaje que el bot ya va a enviar: el caso PROA y la revisión de duración. Una llamada como máximo por solicitud; las solicitudes que no generan mensaje no se analizan.
+
+La versión anterior (v1.9.0–v1.23.0) daba un veredicto por antimicrobiano (pertinente / verificar / no pertinente) y generó controversia con Infectología. Esta se diseñó para evitarlo:
+
+| | Antes (hasta v1.23.0) | Ahora (v1.33.0) |
+|---|---|---|
+| Qué devuelve | Veredicto y color por antimicrobiano | Hasta 3 datos para verificar, sin color ni veredicto; cero es válido y frecuente |
+| Fuente | Fichas y guías "si estaba seguro" | Solo el material del PROA: tabla de duración, fichas de `docs/`, análisis de las tablas o datos de la solicitud. Cada punto dice su fuente entre paréntesis y el código **descarta** el que cite otra cosa |
+| Tono | Libre | Pregunta o dato a confirmar; el código descarta "no pertinente", "inadecuado", "incorrecto", "injustificado", "erróneo". Con interconsulta a Infectología, el punto se plantea como algo a confirmar con Infectología |
+| Dónde sale | En el mensaje del grupo | `PRUEBA` por defecto: el grupo recibe el mensaje de siempre y **PRUEBA BOT** una copia con los puntos, para que el QF los valide antes de llevarlos al grupo |
+| Si falla | Análisis de las tablas | El mensaje sale igual, sin bloque; en `PRUEBA` el grupo no espera a la IA (se le envía primero) |
+
+En el mensaje (datos ficticios):
+
+```
+*🤖 Para revisar (IA)*
+🔎 ERTAPENEM · 21 d con foco de piel (referencia 5-7 d); ¿hay osteomielitis o absceso sin drenar? (tabla de duración)
+🔎 ERTAPENEM · BLEE sin KPC: cubre el aislado; confirmar con antibiograma (ficha Klebsiella pneumoniae)
+_Apoyo automático; la decisión es del equipo PROA_
+```
+
+En `REGISTRO_REVISIONES` quedan los puntos con su prioridad, los descartados y por qué, los datos que faltaron, el repaso del caso que hizo el modelo, los segundos que tardó, modelo, tokens y costo aproximado (columnas Modelo, Tokens de entrada/salida y Costo aproximado USD). Costo estimado: USD 0,05–0,15 por mensaje; con el volumen de noviembre (unos 24 mensajes en 15 días), alrededor de USD 3–7 al mes.
+
+A la API sale el caso **seudonimizado**: sin historia clínica, nombre, cama, EPS ni médico (hay una prueba que lo verifica). No evalúa dosis, ajuste renal ni frecuencias (los marca el bot) y no repite la revaluación a las 48-72 h.
+
+Para activarla: crear el archivo `IA_PROA` en el proyecto, pegar `IA_PROA.gs`, agregar `ANTHROPIC_API_KEY` en Propiedades del script (`IA_PROA_MODO` vacío = `PRUEBA`) y probar con `probarIaUltimaSolicitud()` (no envía nada). Para llevar los puntos al grupo, `IA_PROA_MODO` = `PRODUCCION`; para apagarla, `NO` o borrar la clave.
+
 ### Rangos de dosis (`⚠️ revisar`)
 
 La pestaña **`RANGOS_DOSIS`** de la matriz tiene una fila por antimicrobiano con `min_mg_kg_dosis`, `max_mg_kg_dosis`, `min_mg_dosis`, `max_mg_dosis`, `ajuste_renal` (SI/NO; si el prescriptor marca ajuste renal y la molécula no lo requiere, el mensaje lo dice) y `nota` con la fuente del rango (ficha FDA/EMA, consenso de vancomicina 2020, consenso de polimixinas 2019, IDSA 2024; detalle en `docs/antimicrobianos-restringidos.md`). Una dosis se acepta si cumple **cualquiera** de las reglas definidas para su molécula (así, 600 mg de linezolid en un adulto de 100 kg no marca aunque sean 6 mg/kg); solo se marca si falla en todas. Sin peso no se evalúa mg/kg; si una molécula no tiene reglas (Polimixina B, cuya dosis puede venir en UI) nunca se marca.
@@ -157,7 +186,15 @@ En el editor de Apps Script: **Configuración del proyecto → Propiedades del s
 | `GREENAPI_GROUP_CHATID` | sí | chatId del grupo de destino; siempre termina en `@g.us` |
 | `GREENAPI_BOT_LABEL` | no | Firma en negrita al inicio del mensaje (por defecto `Bot PROA Antimicrobianos HDV`) |
 
-Desde la v1.24.0 el bot no usa IA: `ANTHROPIC_API_KEY`, `IA_PROA_MODO`, `CLAUDE_MODEL`, `IA_DOCS_URL` y `GREENAPI_PRUEBA_CHATID` ya no se leen y conviene borrarlas.
+Puntos para revisar de la IA (`IA_PROA.gs`, opcional):
+
+| Propiedad | Obligatoria | Descripción |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | para la IA | Clave de la API de Claude (secreto). Sin ella no se llama a la API y el bot funciona como siempre |
+| `IA_PROA_MODO` | no | `PRUEBA` (por defecto): el grupo recibe el mensaje de siempre y PRUEBA BOT la copia con los puntos. `PRODUCCION`: los puntos van en el mensaje del grupo. `NO`: sin IA |
+| `IA_ESFUERZO` | no | `low`, `medium`, `high` (por defecto), `xhigh` o `max`. Si el registro muestra "tardó demasiado", bajar a `medium` |
+| `CLAUDE_MODEL` | no | Modelo; por defecto `claude-opus-5-5` |
+| `GREENAPI_PRUEBA_CHATID` | no | Grupo de la copia en modo `PRUEBA`; por defecto PRUEBA BOT. Debe terminar en `@g.us` |
 
 Para encontrar el chatId de un grupo sin riesgo de enviar nada, ejecutar `listarChatsGreenAPI()`: solo lee (`getChats`) y registra los grupos (`@g.us`).
 
@@ -185,6 +222,9 @@ El proyecto es independiente (no está vinculado a la hoja), así que el activad
 | `crearTriggerResumenProlongados()` | No (crea el activador) | Crea o recrea el activador diario de las 7:00; solo toca los de `enviarResumenProlongados` |
 | `probarResumenProlongados()` | **No** | Escribe en el registro de ejecución el resumen pendiente |
 | `probarUltimaSolicitud(fila)`, `probarUltimoProlongado()` | **No** | Escriben en el registro de ejecución los mensajes de una fila real (o de la última que alerta / la última con revisión por tratamiento prolongado) |
+| `probarIaUltimaSolicitud(fila)`, `probarIaUltimoProlongado()` (`IA_PROA.gs`) | **No** (llama a la API) | Igual, con la copia que vería PRUEBA BOT y lo que quedaría en el registro |
+| `probarRevisionIa()` (`IA_PROA.gs`) | **No** (llama a la API) | Puntos de la IA para 3 casos ficticios |
+| `enviarPruebaIaAPruebaBot()` (`IA_PROA.gs`) | Sí, solo a PRUEBA BOT | Un caso ficticio con los puntos de la IA, tal como llega a WhatsApp |
 | `formatearDiagnosticoCIE10()`, `buscarDescripcionCIE10()` | **No** | Cruce del diagnóstico con la pestaña `CIE10` (TextFinder + caché) |
 | `verificarEncabezados()` | **No** | Comprueba que todas las preguntas usadas existan en la fila 1 de la hoja |
 | `enviarAlertaWhatsApp(mensaje)` | Sí | Envío a Green-API con firma y pie |
@@ -203,7 +243,7 @@ El editor de Apps Script **no** se sincroniza con GitHub. Para cambiar el bot:
 
 1. Si solo cambia la lista de antimicrobianos o un rango de dosis, editar la pestaña `ANTIMICROBIANOS_RESTRINGIDOS` o `RANGOS_DOSIS`; no hace falta tocar el código.
 2. Para cambios de código, editar `Codigo.gs` en este repo y correr las pruebas locales.
-3. Copiar el cambio al editor (archivo "Código" del proyecto PROA ALERTAS) y guardar con Ctrl+S. No hace falta publicar: el activador usa siempre la última versión guardada.
+3. Copiar el cambio al editor (archivo "Código" del proyecto PROA ALERTAS, y "IA_PROA" si cambió `IA_PROA.gs`) y guardar con Ctrl+S. No hace falta publicar: el activador usa siempre la última versión guardada.
 4. Ejecutar `verificarEncabezados()` y `testConstruccionMensaje()` (no envían nada) y luego probar con `GREENAPI_GROUP_CHATID` en PRUEBA BOT antes de volver a producción.
 
 Al pegar texto con tildes o emojis, el editor a veces los daña. Los textos nuevos se escriben con escapes `\u` (como el pie) o con `String.fromCodePoint()`.
@@ -211,7 +251,7 @@ Al pegar texto con tildes o emojis, el editor a veces los daña. Los textos nuev
 ## Pruebas locales (sin red ni credenciales)
 
 ```bash
-node test/dry-run.js     # carga el Codigo.gs real con la hoja simulada: encabezados, filtro, CIE10, edad/peso/frecuencia, rangos de dosis y 4 mensajes
+node test/dry-run.js     # carga Codigo.gs e IA_PROA.gs reales con la hoja y las API simuladas: filtro, mensajes, seguimiento, revisión de duración y puntos de la IA
 node test/pie-firma.js   # pie de firma y filtro de los antimicrobianos nuevos
 ```
 

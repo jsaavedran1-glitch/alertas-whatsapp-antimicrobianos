@@ -2,6 +2,17 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.33.0] - 2026-11-22
+
+### Agregado (pedido del referente: análisis con Opus)
+- **Vuelve la IA, como puntos para revisar** (`IA_PROA.gs`, modelo `claude-opus-5-5`, esfuerzo `high`, salida estructurada y respaldo del servidor si el modelo declina). Como máximo 3 puntos por mensaje, cada uno con su fuente entre paréntesis; sin veredicto ni color, que fue lo que generó controversia con Infectología en la versión anterior.
+- **Fuentes controladas:** el modelo solo puede citar la tabla de duración, las fichas de `docs/` que aplican al caso, el análisis de las tablas o los datos de la solicitud. `puntosIa_()` descarta los puntos con otra fuente, con lenguaje de juicio o de un antimicrobiano que no está en la solicitud; quedan en el registro con el motivo.
+- **Modo `PRUEBA` por defecto** (`IA_PROA_MODO`): el grupo recibe primero el mensaje de siempre y PRUEBA BOT una copia con los puntos, para que el QF los valide. `PRODUCCION` los lleva al grupo; `NO` la apaga. Sin `ANTHROPIC_API_KEY` el bot no cambia.
+- Solo se analizan los mensajes que se envían (caso PROA y revisión de duración): una llamada como máximo por solicitud. Si la API falla, tarda o declina, el mensaje sale sin el bloque.
+- `REGISTRO_REVISIONES` vuelve a llenar Modelo, Tokens y Costo; el Detalle agrega los puntos, los descartados, los datos faltantes, el repaso del caso y los segundos.
+- `probarIaUltimaSolicitud(fila)` y `probarIaUltimoProlongado()`: la copia de PRUEBA BOT para una fila real, sin enviar nada. `IA_ESFUERZO` permite bajar el esfuerzo si la API tarda.
+- 4 pruebas nuevas con la API simulada (modo PRUEBA y PRODUCCION, revisión de duración, fallas y declinación, seudonimización, IA apagada).
+
 ## [1.32.0] - 2026-11-22
 
 ### Cambiado (los mensajes en el grupo resultaban confusos; formato elegido por el referente)

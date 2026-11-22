@@ -1,9 +1,9 @@
 // test/dry-run.js
 //
-// Carga el Codigo.gs REAL en Node con los servicios de Apps Script simulados
+// Carga el Codigo.gs y el IA_PROA.gs REALES en Node con los servicios de Apps Script simulados
 // (hoja con las pestanas ANTIMICROBIANOS_RESTRINGIDOS, CIE10 y RANGOS_DOSIS,
-// CacheService, Utilities) y verifica el filtro y el mensaje. No hay red,
-// credenciales ni envios.
+// CacheService, Utilities) y verifica el filtro, el mensaje y los puntos de la IA
+// (con la API simulada). No hay red, credenciales ni envios.
 //
 // Uso: node test/dry-run.js
 
@@ -12,6 +12,7 @@ var path = require('path');
 var assert = require('assert');
 
 var src = fs.readFileSync(path.join(__dirname, '..', 'Codigo.gs'), 'utf8');
+var srcIa = fs.readFileSync(path.join(__dirname, '..', 'IA_PROA.gs'), 'utf8');
 
 // ---- Hoja simulada --------------------------------------------------------
 var CIE10 = { B377: 'CANDIDIASIS, NO ESPECIFICADA', A419: 'SEPSIS, NO ESPECIFICADA', N390: 'INFECCION DE VIAS URINARIAS, SITIO NO ESPECIFICADO',
@@ -95,6 +96,7 @@ global.UrlFetchApp = { fetch: function () { throw new Error('UrlFetchApp no debe
 global.PropertiesService = { getScriptProperties: function () { return { getProperty: function () { return null; } }; } };
 
 (0, eval)(src);
+(0, eval)(srcIa);
 
 var fallos = 0;
 // En produccion el caso PROA va solo con datos (CONFIG.CASO_ANALISIS = false; tiene su propia prueba). Las demas
@@ -753,7 +755,7 @@ prueba('revision de duracion: vancomicina y linezolid solos no la generan, pero 
   finally { CONFIG.PROLONGADO_EXCLUIDOS = antes; }
 });
 
-prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, sin analisis ni modelo', function () {
+prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, sin analisis de las tablas', function () {
   CONFIG.CASO_ANALISIS = CASO_ANALISIS_PRODUCCION;
   assert.strictEqual(CONFIG.CASO_ANALISIS, false);
   var propsReal = global.PropertiesService;
@@ -771,9 +773,8 @@ prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, s
     incluye(m, '*🚨 CASO PROA · Ertapenem*\n📍 Hospitalización General Adulto (Salud Mental) · Cama 7\n📋 L031');
     incluye(m, '\n📄 HC 777009 · 62 años · 70 kg · Ortopedia\n🦠 BLEE · SECRECIÓN · Etiológico · COMUNIDAD\n⚠️ Sin interconsulta a Infectología\n\n💊 ERTAPENEM');
     ['Se sugiere', 'Acorde', '📏', '🟢', 'indicado', '🏥'].forEach(function (x) { noIncluye(m, x); });
-    // no se llama al modelo aunque haya clave; el registro sigue guardando el analisis de las tablas
-    var P = { GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test',
-      ANTHROPIC_API_KEY: 'clave-de-prueba', IA_PROA_MODO: 'PRODUCCION' };
+    // sin IA (sin ANTHROPIC_API_KEY) no se llama a ninguna API; el registro sigue guardando el analisis de las tablas
+    var P = { GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test' };
     global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
     HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
     conApiSimulada(function (llamadas) {
@@ -894,8 +895,181 @@ prueba('ninguna credencial hardcodeada y solo grupos @g.us', function () {
   assert.ok(!/https:\/\/\d+\.api\.greenapi\.com/.test(src));
   assert.ok(!/@c\.us/.test(src));
   assert.ok(/@g\.us/.test(src));
-  // sin IA: el bot no llama a la API de Anthropic ni lee ANTHROPIC_API_KEY
-  assert.ok(src.indexOf('anthropic') === -1 && src.indexOf('ANTHROPIC_API_KEY') === -1);
+  // la API de la IA solo se llama desde IA_PROA.gs y la clave sale de Propiedades del script
+  assert.ok(src.indexOf('api.anthropic.com') === -1 && src.indexOf('x-api-key') === -1);
+  assert.ok(srcIa.indexOf('getProperty("ANTHROPIC_API_KEY")') > -1);
+  assert.ok(!/sk-ant/.test(src + srcIa)); assert.ok(!/@c\.us/.test(srcIa)); assert.ok(/@g\.us$/.test(IA_CHAT_PRUEBA));
+});
+
+// ---- IA (IA_PROA.gs) con la API simulada ---------------------------------------------------------------
+// Green-API responde bien, las fichas se leen de docs/ del repositorio y la API de la IA devuelve respuesta(n).
+function conIaSimulada(respuesta, fn) {
+  var real = global.UrlFetchApp, peticiones = []; envios = [];
+  var r = function (codigo, texto) { return { getResponseCode: function () { return codigo; }, getContentText: function () { return texto; } }; };
+  global.UrlFetchApp = { fetch: function (url, op) {
+    if (url.indexOf('greenapi.test') > -1) { envios.push(JSON.parse(op.payload)); return r(200, JSON.stringify({ idMessage: 'MSG' + envios.length })); }
+    if (url.indexOf(IA_DOCS_URL) === 0) return r(200, fs.readFileSync(path.join(__dirname, '..', 'docs', url.slice(IA_DOCS_URL.length)), 'utf8'));
+    if (url === IA_URL) {
+      peticiones.push({ headers: op.headers, payload: op.payload, cuerpo: JSON.parse(op.payload) });
+      var x = typeof respuesta === 'function' ? respuesta(peticiones.length) : respuesta;
+      if (x instanceof Error) throw x;
+      return r(x.codigo || 200, typeof x.cuerpo === 'string' ? x.cuerpo : JSON.stringify(x.cuerpo));
+    }
+    throw new Error('URL inesperada: ' + url);
+  } };
+  try { fn(peticiones); } finally { global.UrlFetchApp = real; }
+}
+function respuestaIa(puntos, extra) {
+  return { cuerpo: Object.assign({ model: 'claude-opus-5-5', stop_reason: 'end_turn', usage: { input_tokens: 12000, output_tokens: 3000 },
+    content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify({ analisis: 'Repaso del caso.', puntos: puntos, datos_faltantes: ['antibiograma'] }) }] },
+    extra || {}) };
+}
+function propsIa(extra) {
+  var P = Object.assign({ GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test',
+    ANTHROPIC_API_KEY: 'clave-de-prueba' }, extra || {});
+  global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
+}
+function eventoCasoIa() {
+  var e = eventoSeguimiento('20/11/2026 10:00:00', '777010', 'L031', [['ERTAPENEM', '1000', '24', '21']]);
+  var nv = e.namedValues;
+  nv['Nombres y apellidos del paciente'] = ['PACIENTE FICTICIO']; nv['Nombre del médico que prescribe'] = ['DR FICTICIO'];
+  nv['EPS del paciente'] = ['EPS FICTICIA']; nv[CAMPOS.CAMA] = ['C99']; nv[CAMPOS.SERVICIO] = ['Hospitalización General Adulto'];
+  nv[CAMPOS.MICROORGANISMO] = ['Klebsiella pneumoniae BLEE']; nv[CAMPOS.INTERCONSULTA] = ['No'];
+  return e;
+}
+var PUNTO_DURACION = { antimicrobiano: 'ERTAPENEM', tema: 'duración', prioridad: 'alta',
+  observacion: '21 d con foco de piel (referencia 5-7 d); ¿hay osteomielitis o absceso sin drenar?', referencia: 'Tabla de duración' };
+var CHAT_PRUEBA_BOT = '120363412506101174@g.us';
+
+prueba('IA en modo PRUEBA: el grupo recibe el mensaje de siempre y PRUEBA BOT la copia con los puntos', function () {
+  var propsReal = global.PropertiesService;
+  propsIa();
+  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
+  try {
+    conIaSimulada(respuestaIa([
+      PUNTO_DURACION,
+      { antimicrobiano: 'ERTAPENEM', tema: 'espectro', prioridad: 'media', observacion: 'Es inadecuado usar ertapenem aquí', referencia: 'Ficha Ertapenem' },
+      { antimicrobiano: '', tema: 'indicación', prioridad: 'media', observacion: 'Las guías IDSA 2024 sugieren otro esquema', referencia: 'IDSA 2024' },
+      { antimicrobiano: 'MEROPENEM', tema: 'combinación', prioridad: 'media', observacion: 'duplica espectro', referencia: 'Datos de la solicitud' },
+      { antimicrobiano: 'ERTAPENEM', tema: 'cobertura', prioridad: 'media', observacion: 'BLEE sin KPC: cubre el aislado; confirmar con antibiograma', referencia: 'ficha de Klebsiella pneumoniae' }
+    ]), function (peticiones) {
+      notificarNuevaRespuesta(eventoCasoIa());
+      assert.strictEqual(envios.length, 2);
+      assert.strictEqual(envios[0].chatId, '111@g.us'); incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*'); noIncluye(envios[0].message, '🤖');
+      assert.strictEqual(envios[1].chatId, CHAT_PRUEBA_BOT);
+      assert.strictEqual(envios[1].message.indexOf(envios[0].message.split('\n\n_Ecosistema')[0]), 0, 'la copia empieza con el mismo mensaje');
+      incluye(envios[1].message, '\n\n*🤖 Para revisar (IA)*\n🔎 ERTAPENEM · 21 d con foco de piel (referencia 5-7 d); ¿hay osteomielitis o absceso sin drenar? (tabla de duración)\n' +
+        '🔎 ERTAPENEM · BLEE sin KPC: cubre el aislado; confirmar con antibiograma (ficha Klebsiella pneumoniae)\n_Apoyo automático; la decisión es del equipo PROA_');
+      ['inadecuado', 'IDSA 2024', 'MEROPENEM', 'duplica'].forEach(function (x) { noIncluye(envios[1].message, x); });
+      // la peticion: modelo, esfuerzo, salida estructurada, respaldo ante declinacion, sin razonamiento ni temperatura fijos
+      assert.strictEqual(peticiones.length, 1);
+      var c = peticiones[0].cuerpo;
+      assert.strictEqual(c.model, 'claude-opus-5-5'); assert.strictEqual(c.output_config.effort, 'high');
+      assert.strictEqual(c.output_config.format.type, 'json_schema'); assert.strictEqual(c.fallbacks, 'default');
+      assert.strictEqual(peticiones[0].headers['anthropic-beta'], 'server-side-fallback-2026-07-01'); assert.strictEqual(peticiones[0].headers['x-api-key'], 'clave-de-prueba');
+      assert.ok(!('thinking' in c) && !('temperature' in c));
+      incluye(c.system, 'TABLA DE DURACIÓN POR SÍNDROME'); incluye(c.system, '### 7. Ertapenem'); incluye(c.system, 'Klebsiella pneumoniae');
+      incluye(c.messages[0].content, 'Mensaje que el bot va a enviar: CASO PROA'); incluye(c.messages[0].content, '- Ficha Ertapenem\n');
+      // seudonimizado: sin historia clinica, nombre, medico, EPS ni cama
+      ['777010', 'PACIENTE FICTICIO', 'DR FICTICIO', 'EPS FICTICIA', 'C99'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
+    });
+    var reg = HOJAS['REGISTRO_REVISIONES']._filas, fila = reg[reg.length - 1], col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+    assert.strictEqual(fila[col('Enviado al grupo')], 'SI'); assert.strictEqual(fila[col('Destino')], 'PRODUCCION + PRUEBA BOT (IA)');
+    assert.strictEqual(fila[col('Modelo')], 'claude-opus-5-5'); assert.strictEqual(fila[col('Tokens de entrada')], 12000);
+    assert.strictEqual(fila[col('Tokens de salida')], 3000); assert.strictEqual(fila[col('Costo aproximado USD')], 0.108);
+    var d = fila[col('Detalle')];
+    incluye(d, '[alta] ERTAPENEM · duración: 21 d con foco de piel'); incluye(d, 'lenguaje de juicio'); incluye(d, 'sin referencia permitida: IDSA 2024');
+    incluye(d, 'antimicrobiano que no está en la solicitud'); incluye(d, 'Faltan: antibiograma'); incluye(d, 'Repaso: Repaso del caso.');
+  } finally { global.PropertiesService = propsReal; }
+});
+
+prueba('IA en modo PRODUCCION: los puntos van en el mensaje; sin puntos, con error o si declina, el mensaje sale igual', function () {
+  var propsReal = global.PropertiesService;
+  propsIa({ IA_PROA_MODO: 'produccion', IA_ESFUERZO: 'medium' });
+  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
+  var reg = HOJAS['REGISTRO_REVISIONES']._filas, col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+  var ultima = function () { return reg[reg.length - 1]; };
+  try {
+    conIaSimulada(respuestaIa([PUNTO_DURACION]), function (peticiones) {
+      notificarNuevaRespuesta(eventoCasoIa());
+      assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].chatId, '111@g.us');
+      incluye(envios[0].message, '*🤖 Para revisar (IA)*\n🔎 ERTAPENEM · 21 d'); assert.strictEqual(peticiones[0].cuerpo.output_config.effort, 'medium');
+      assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION (con puntos de IA)');
+    });
+    // sin puntos: nada de IA en el grupo
+    conIaSimulada(respuestaIa([]), function () {
+      notificarNuevaRespuesta(eventoCasoIa());
+      assert.strictEqual(envios.length, 1); noIncluye(envios[0].message, '🤖'); incluye(ultima()[col('Detalle')], 'sin puntos para revisar');
+    });
+    // error de la API, declinacion y respuesta cortada: el mensaje sale sin el bloque y el registro dice por que
+    [[{ codigo: 500, cuerpo: 'error' }, 'IA sin respuesta: HTTP 500'],
+     [respuestaIa([], { stop_reason: 'refusal', stop_details: { type: 'refusal', category: 'bio' } }), 'IA sin respuesta: el modelo declinó, categoría bio'],
+     [respuestaIa([], { stop_reason: 'max_tokens' }), 'IA sin respuesta: respuesta incompleta'],
+     [new Error('Timeout: ' + IA_URL), 'IA sin respuesta: tardó demasiado']].forEach(function (caso) {
+      conIaSimulada(caso[0], function () {
+        notificarNuevaRespuesta(eventoCasoIa());
+        assert.strictEqual(envios.length, 1); noIncluye(envios[0].message, '🤖'); incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*');
+        incluye(ultima()[col('Detalle')], caso[1]); assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Modelo')], '');
+      });
+    });
+    // si la API no acepta el respaldo, se repite sin el
+    conIaSimulada(function (n) { return n === 1 ? { codigo: 400, cuerpo: '{"error":{"message":"fallbacks: not supported"}}' } : respuestaIa([PUNTO_DURACION]); }, function (peticiones) {
+      notificarNuevaRespuesta(eventoCasoIa());
+      assert.strictEqual(peticiones.length, 2); assert.ok(!('fallbacks' in peticiones[1].cuerpo)); assert.ok(!('anthropic-beta' in peticiones[1].headers));
+      incluye(envios[0].message, '🤖');
+    });
+    // como maximo 3 puntos, los de prioridad alta primero; con respaldo vale el ultimo bloque de texto
+    var p = function (o, prio) { return { antimicrobiano: 'ERTAPENEM', tema: 'datos', prioridad: prio, observacion: o, referencia: 'Datos de la solicitud' }; };
+    var resp = respuestaIa([p('uno', 'media'), p('dos', 'media'), p('tres', 'alta'), p('cuatro', 'media')]);
+    resp.cuerpo.content = [{ type: 'text', text: '{"incompleto' }, { type: 'fallback', from: { model: 'claude-opus-5-5' }, to: { model: 'otro' } }].concat(resp.cuerpo.content);
+    conIaSimulada(resp, function () {
+      notificarNuevaRespuesta(eventoCasoIa());
+      var m = envios[0].message;
+      assert.ok(m.indexOf('· tres') < m.indexOf('· uno') && m.indexOf('· uno') < m.indexOf('· dos')); noIncluye(m, 'cuatro');
+      incluye(ultima()[col('Detalle')], 'cuatro (más de 3 puntos)');
+    });
+  } finally { global.PropertiesService = propsReal; }
+});
+
+prueba('IA en la revision de duracion (PRUEBA): mismo flujo y los puntos quedan en el Detalle despues del bloque', function () {
+  var propsReal = global.PropertiesService;
+  propsIa();
+  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  filas.push(filaMatriz('03/11/2026 08:00:00', '888050', [['MEROPENEM', '1000', '8', '7']]));
+  filas.push(filaMatriz('10/11/2026 08:00:00', '888050', [['MEROPENEM', '1000', '8', '7']]));
+  try {
+    conIaSimulada(respuestaIa([{ antimicrobiano: 'MEROPENEM', tema: 'duración', prioridad: 'alta', observacion: 'con esta orden llega a 21 d en piel; ¿hay foco sin controlar?',
+      referencia: 'Tabla de duración' }]), function (peticiones) {
+      notificarNuevaRespuesta(eventoSeguimiento('17/11/2026 08:00:00', '888050', 'L031', [['MEROPENEM', '1000', '8', '7']]));
+      assert.strictEqual(envios.length, 2);
+      incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*'); noIncluye(envios[0].message, '🤖');
+      assert.strictEqual(envios[1].chatId, CHAT_PRUEBA_BOT); incluye(envios[1].message, '🔎 MEROPENEM · con esta orden llega a 21 d en piel');
+      incluye(peticiones[0].cuerpo.messages[0].content, 'Mensaje que el bot va a enviar: REVISIÓN DE DURACIÓN');
+      incluye(peticiones[0].cuerpo.messages[0].content, 'TRATAMIENTO PROLONGADO: es la prescripción 3');
+      noIncluye(peticiones[0].cuerpo.messages[0].content, '- Ficha ');   // meropenem no tiene ficha: solo tabla, analisis y datos
+    });
+    var fila = HOJAS['REGISTRO_REVISIONES']._filas[1], col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+    assert.strictEqual(fila[col('Fuente del análisis')], 'TRATAMIENTO PROLONGADO'); assert.strictEqual(fila[col('Enviado al grupo')], 'SI');
+    assert.strictEqual(fila[col('Modelo')], 'claude-opus-5-5');
+    var d = fila[col('Detalle')];
+    assert.strictEqual(d.indexOf('HC 888050'), 0); incluye(d, '\nIA (');
+    // la revision sigue contando para no repetir al paciente en 7 dias
+    assert.strictEqual(prolongadoRevisadoReciente('888050', new Date(2026, 10, 18)), true);
+  } finally { global.PropertiesService = propsReal; }
+});
+
+prueba('IA apagada: sin ANTHROPIC_API_KEY o con IA_PROA_MODO = NO no se llama a la API', function () {
+  var propsReal = global.PropertiesService;
+  try {
+    [{ ANTHROPIC_API_KEY: '' }, { IA_PROA_MODO: 'NO' }].forEach(function (extra) {
+      propsIa(extra);
+      conIaSimulada(function () { throw new Error('no debia llamarse a la API'); }, function (peticiones) {
+        notificarNuevaRespuesta(eventoCasoIa());
+        assert.strictEqual(peticiones.length, 0); assert.strictEqual(envios.length, 1); noIncluye(envios[0].message, '🤖');
+      });
+    });
+  } finally { global.PropertiesService = propsReal; }
 });
 
 console.log();
