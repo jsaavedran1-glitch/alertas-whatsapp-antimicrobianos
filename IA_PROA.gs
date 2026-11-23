@@ -4,7 +4,7 @@
 //
 // Enfoque (v1.34.0, decision del referente): la IA ya no opina caso por caso. Una vez por semana (lunes,
 // INFORME_HORA, hora de Colombia) el bot envia un informe con las cifras de los ultimos INFORME_DIAS dias:
-// solicitudes, promedio y mediana de dias de tratamiento por antimicrobiano (v1.34.1 y v1.36.1), restringidos,
+// solicitudes, dias de tratamiento por antimicrobiano (mediana o promedio, INFORME_MEDIDA), restringidos,
 // servicios, tipo de indicacion, cultivos, interconsultas y tratamientos mas largos (tratamiento continuo por paciente).
 // Las cifras las calcula este codigo; la IA solo escribe la lectura (hallazgos y sugerencias para el comite) y el
 // codigo descarta cualquier frase con una cifra que no este en los datos o con lenguaje de juicio. Sin
@@ -24,13 +24,16 @@
 // ultimo numero y basta con pegar este. Si mayor.menor no coincide, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
 
-var VERSION_INFORME = "1.36.1";
+var VERSION_INFORME = "1.36.2";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
 var INFORME_HOJA = "INFORMES_PROA";
 var INFORME_FILAS_MAX = 4000;                     // filas de la matriz que se leen hacia atras (dos periodos + 60 d de historia)
 var INFORME_TOP = 5;
+// Medida de los dias por antimicrobiano (v1.36.2, decision del referente: una sola): "mediana" (por defecto; con pocos
+// pacientes un tratamiento muy largo no la mueve) o "promedio".
+var INFORME_MEDIDA = "mediana";
 var INFORME_MAX_HALLAZGOS = 4;
 var INFORME_MAX_SUGERENCIAS = 2;
 var INFORME_MAX_CARACTERES = 170;                 // por frase de la IA
@@ -58,7 +61,7 @@ var INFORME_REGLAS = [
   "",
   "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento por antimicrobiano, la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
   "",
-  "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. El promedio y la mediana de días de cada antimicrobiano cuentan, por paciente, sus prescripciones seguidas de ese antimicrobiano hasta el fin de su última orden del periodo; un promedio muy por encima de la mediana indica unos pocos tratamientos muy largos, y con pocos pacientes la mediana describe mejor; los tratamientos más largos suman el tratamiento continuo del paciente aunque cambie de antimicrobiano. Son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
+  "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los días de cada antimicrobiano (la medida que indica dias_por_antimicrobiano en los datos) cuentan, por paciente, sus prescripciones seguidas de ese antimicrobiano hasta el fin de su última orden del periodo; nómbrala tal cual (mediana o promedio); los tratamientos más largos suman el tratamiento continuo del paciente aunque cambie de antimicrobiano. Son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
   "",
   "Tono: neutro e institucional, en español corriente con tildes, sin markdown. Cada frase de máximo 150 caracteres. Sin culpar a servicios, especialidades ni personas; sin juicios sobre casos clínicos; sin palabras como \"inadecuado\", \"incorrecto\", \"injustificado\", \"no pertinente\", \"abuso\" o \"mal uso\". Si no hay nada notable, dilo en un hallazgo corto y no rellenes.",
   "",
@@ -191,7 +194,10 @@ function fechaDiaMes_(d) { return ("0" + d.getDate()).slice(-2) + "/" + ("0" + (
 
 function diasOrden_(v) { var d = numeroONulo(v); return (d !== null && d > 0 && d < 365) ? d : 0; }
 function promedio_(lista) { return lista.length ? Math.round(10 * lista.reduce(function(a, b) { return a + b; }, 0) / lista.length) / 10 : 0; }
-// Mediana (v1.36.1): con pocos pacientes, un tratamiento muy largo mueve el promedio y no la mediana.
+// Mediana: con pocos pacientes, un tratamiento muy largo mueve el promedio y no la mediana.
+// La medida elegida en INFORME_MEDIDA y el nombre de su campo en los datos.
+function medidaDias_(lista) { return INFORME_MEDIDA === "promedio" ? promedio_(lista) : mediana_(lista); }
+function campoMedida_() { return INFORME_MEDIDA === "promedio" ? "promedio_dias" : "mediana_dias"; }
 function mediana_(lista) {
   if (!lista.length) return 0;
   var o = lista.slice().sort(function(a, b) { return a - b; }), m = Math.floor(o.length / 2);
@@ -270,12 +276,14 @@ function datosInforme_(eventos, desde, hasta) {
 
   var tr = tratamientosDelPeriodo_(eventos, desde, hasta);
   var ams = Object.keys(tr.porAm).map(function(k) {
-    return { nombre: k, pacientes: tr.porAm[k].length, promedio_dias: promedio_(tr.porAm[k]), mediana_dias: mediana_(tr.porAm[k]),
-      restringido: !!entradaRestringida(k, lista) };
-  }).sort(function(a, b) { return b.pacientes - a.pacientes || b.promedio_dias - a.promedio_dias; });
+    var x = { nombre: k, pacientes: tr.porAm[k].length, restringido: !!entradaRestringida(k, lista) };
+    x[campoMedida_()] = medidaDias_(tr.porAm[k]);
+    return x;
+  }).sort(function(a, b) { return b.pacientes - a.pacientes || b[campoMedida_()] - a[campoMedida_()]; });
 
   return {
     periodo: fechaDiaMes_(desde) + "–" + fechaDiaMes_(new Date(hasta.getTime() - 864e5)),
+    dias_por_antimicrobiano: INFORME_MEDIDA === "promedio" ? "promedio por paciente" : "mediana por paciente",
     solicitudes: n,
     pacientes: Object.keys(hcs).length,
     solicitudes_con_restringido: conRestringido,
@@ -303,12 +311,10 @@ function mensajeInforme_(a, ant, ia) {
   lineas.push(E(0x1F4DD) + " " + a.solicitudes + " solicitudes" + sem(ant.solicitudes) + " · " + a.pacientes + " pacientes · " +
     a.solicitudes_con_restringido + " con restringido" + sem(ant.solicitudes_con_restringido));
   var f = function(x) { return formatoNumero(x, 1) + " d"; };
-  // "12 / 9 d (49)": promedio / mediana (pacientes); un solo numero si coinciden
-  var conPacientes = function(x) {
-    return x.nombre + " " + (x.promedio_dias === x.mediana_dias ? f(x.promedio_dias) : formatoNumero(x.promedio_dias, 1) + " / " + f(x.mediana_dias)) +
-      " (" + x.pacientes + ")";
-  };
-  lineas.push(E(0x1F48A) + " Días de tratamiento por antimicrobiano, promedio / mediana (pacientes): " + a.antimicrobianos.slice(0, 4).map(conPacientes).join(" · "));
+  // "CEFEPIME 9 d (49)": la medida de INFORME_MEDIDA (pacientes)
+  var conPacientes = function(x) { return x.nombre + " " + f(x[campoMedida_()]) + " (" + x.pacientes + ")"; };
+  lineas.push(E(0x1F48A) + " " + (INFORME_MEDIDA === "promedio" ? "Promedio" : "Mediana") + " de días de tratamiento por antimicrobiano (pacientes): " +
+    a.antimicrobianos.slice(0, 4).map(conPacientes).join(" · "));
   if (a.restringidos.length) lineas.push(E(0x1F512) + " Restringidos: " + a.restringidos.slice(0, 4).map(conPacientes).join(" · "));
   lineas.push(E(0x1F3E5) + " Servicios: " + a.servicios.slice(0, 3).map(function(x) { return x.nombre + " " + x.porcentaje + "%"; }).join(" · "));
   lineas.push(E(0x1F9EB) + " Empírico " + a.indicacion.empirico_pct + "% (" + a.indicacion.empiricos_sin_cultivo_pct + "% sin cultivos) · Etiológico " +

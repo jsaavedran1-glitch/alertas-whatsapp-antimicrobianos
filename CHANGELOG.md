@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.2] - 2026-11-23 (solo IA_PROA.gs)
+
+### Cambiado (decisión del referente: una sola medida)
+- Los días por antimicrobiano del informe (`💊` y `🔒`) muestran **solo la mediana**: `💊 Mediana de días de tratamiento por antimicrobiano (pacientes): CEFEPIME 9 d (49)`. Con pocos pacientes, un tratamiento muy largo no la mueve. `INFORME_MEDIDA = "promedio"` (al inicio de `IA_PROA.gs`) vuelve al promedio. La IA recibe solo la medida elegida.
+
 ## [1.36.1] - 2026-11-23 (solo IA_PROA.gs)
 
 ### Agregado (auditoría, punto 6)
