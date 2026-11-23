@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.14';
+var VERSION_BOT = '1.36.15';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -184,7 +184,40 @@ var CONFIG = {
     { am: 'POLIMIXINA B', micro: 'ACINETOBACTER|PSEUDOMONA|KPC|NDM|METALO|CARBAPENEM|PANRESIST|XDR|MDR', sindromes: [], reserva: 'gramnegativos resistentes a carbapenémicos, como último recurso' }
   ],
   // Frecuencia menor que esta (horas) se marca para verificar: "VANCOMICINA c/3 h" suele ser un error de digitacion.
-  FRECUENCIA_MINIMA_H: 4
+  FRECUENCIA_MINIMA_H: 4,
+
+  // ---- Ajuste renal (v1.36.15, MODO PRUEBA) ----
+  // Con la pregunta "Creatinina sérica (mg/dL)" (formulario del 2026-11-23) el bot estima la depuracion de creatinina
+  // (Cockcroft-Gault, adultos) y compara cada antimicrobiano de la solicitud con esta tabla (fichas tecnicas FDA;
+  // docs/ajuste-renal.md; PENDIENTE de validacion por el comite PROA). Con AJUSTE_RENAL_ENVIAR = false solo deja una fila
+  // en REGISTRO_REVISIONES (fuente AJUSTE RENAL) para medir cuantos avisos sirven; no envia nada. No evalua a pacientes en
+  // terapia de reemplazo renal (la dosis depende de la tecnica) ni a menores de 18 anos. Vancomicina: por niveles, no
+  // por tabla. am: inicio del nombre; tramos de menor a mayor depuracion (ml/min, hasta 'cl' inclusive): intervaloMin
+  // (horas entre dosis), dosisMax (mg por dosis), diariaMax (mg/dia); ref: lo que indica la ficha para ese tramo.
+  AJUSTE_RENAL_ACTIVO: true,
+  AJUSTE_RENAL_ENVIAR: false,
+  AJUSTE_RENAL: [
+    { am: 'CEFEPIME', tramos: [{ cl: 10, intervaloMin: 24, dosisMax: 1000, ref: '0,25-1 g c/24 h' },
+      { cl: 29, intervaloMin: 24, ref: '0,5-2 g c/24 h' }, { cl: 60, intervaloMin: 12, ref: '0,5-2 g c/12-24 h (2 g c/12 h si el régimen era 2 g c/8 h)' }] },
+    { am: 'MEROPENEM', tramos: [{ cl: 9, intervaloMin: 24, ref: 'mitad de la dosis c/24 h' },
+      { cl: 25, intervaloMin: 12, ref: 'mitad de la dosis c/12 h' }, { cl: 50, intervaloMin: 12, ref: 'la misma dosis c/12 h' }] },
+    { am: 'PIPERACILINA', tramos: [{ cl: 19, diariaMax: 9000, ref: '2,25 g c/6-8 h' },
+      { cl: 40, diariaMax: 13500, ref: '2,25-3,375 g c/6 h' }] },
+    { am: 'ERTAPENEM', tramos: [{ cl: 30, dosisMax: 500, ref: '500 mg c/24 h' }] },
+    { am: 'CEFTAZIDIMA / AVIBACTAM', tramos: [{ cl: 15, intervaloMin: 24, dosisMax: 940, ref: '0,94 g c/24 h' },
+      { cl: 30, intervaloMin: 12, dosisMax: 940, ref: '0,94 g c/12 h' }, { cl: 50, dosisMax: 1250, ref: '1,25 g c/8 h' }] },
+    { am: 'CEFTAZIDIMA', tramos: [{ cl: 15, intervaloMin: 24, dosisMax: 500, ref: '0,5 g c/24 h' },
+      { cl: 30, intervaloMin: 24, ref: '1 g c/24 h' }, { cl: 50, intervaloMin: 12, ref: '1 g c/12 h' }] },
+    { am: 'AZTREONAM', tramos: [{ cl: 9, dosisMax: 500, ref: '25 % de la dosis habitual después de la dosis de carga' },
+      { cl: 30, dosisMax: 1000, ref: '50 % de la dosis habitual después de la dosis de carga' }] },
+    { am: 'LEVOFLOXACINO', tramos: [{ cl: 49, diariaMax: 375, ref: '750 mg c/48 h o 250 mg c/24 h después de la dosis de carga' }] },
+    { am: 'CIPROFLOXACINO', tramos: [{ cl: 29, intervaloMin: 18, ref: 'c/18-24 h' }] },
+    { am: 'DAPTOMICINA', tramos: [{ cl: 29, intervaloMin: 48, ref: 'la misma dosis (mg/kg) c/48 h' }] }
+  ],
+  // Antimicrobianos con presentacion oral de biodisponibilidad alta: si van IV y el paciente tolera la via oral (pregunta
+  // del 2026-11-23), el caso PROA y la revision lo informan (v1.36.15).
+  ORAL_BIODISPONIBLE: ['LINEZOLID', 'CIPROFLOXACINO', 'LEVOFLOXACINO', 'MOXIFLOXACINO', 'FLUCONAZOL', 'VORICONAZOL',
+    'METRONIDAZOL', 'CLINDAMICINA', 'TRIMETOPRIM', 'DOXICICLINA', 'RIFAMPICINA']
 };
 
 /* =====================================================================
@@ -230,7 +263,13 @@ var CAMPOS = {
   RAZON_CAMBIO: 'Si fue cambiado, cual fue la razón?',
   INTERCONSULTA: '¿Solicitó interconsulta por infectología en Dinámica Gerencial?',
   ESPECIALIDAD: 'Especialidad que prescribe',
-  SERVICIO: 'Servicio actual'
+  SERVICIO: 'Servicio actual',
+  SEXO: 'Sexo',
+  // preguntas agregadas al formulario el 2026-11-23 (v1.36.15); quedan al final de la hoja
+  CREATININA: 'Creatinina sérica (mg/dL)',
+  TRR: '¿Terapia de reemplazo renal?',
+  TOLERA_VO: '¿Tolera la vía oral o por sonda?',
+  FENOTIPO: 'Fenotipo de resistencia del aislamiento'
 };
 
 var SLOTS = [
@@ -448,6 +487,8 @@ function notificarNuevaRespuesta(e) {
   notificarCaso_(e, coincidencias);
   // Mensaje aparte, tenga o no restringido: tratamiento continuo largo con varias solicitudes.
   notificarTratamientoProlongado(e, coincidencias);
+  // Ajuste renal (v1.36.15): en modo prueba solo deja la fila en el registro.
+  notificarAjusteRenal_(e, coincidencias);
 }
 
 // Caso PROA. Si no sale, queda en el registro solo cuando hay un restringido que dispara alerta (con el motivo: no
@@ -1684,6 +1725,8 @@ function revisionProlongado(e, coincidenciasOpt) {
     return am.nombre + ' ' + (d !== null ? formatoNumero(d, 2) + ' mg' : am.dosis) + ' ' + viaCorta(am.via) + ' ' + frecuenciaCorta(am.frecuencia);
   }).join(' + '), inicio: fechaSolicitud.getTime(), dias: diasOrden }, false).forEach(function(l) { bloque.push(l); });
   actuales.forEach(function(am) { if (avisoFrecuencia(am)) bloque.push(E(0x26A0) + E(0xFE0F) + ' ' + avisoFrecuencia(am)); });
+  var viaOral = lineaViaOral(e, actuales);
+  if (viaOral) bloque.push(viaOral);
   var dentro = seguimientoPaciente(e).dentroDeDias.filter(function(x) { return x.antifungico === p.antifungico; });
   if (dentro.length) bloque.push(lineaDentroDeDias(dentro));
   var porAm = lineaPorAntimicrobiano(p.episodio, actuales, false);
@@ -1744,11 +1787,128 @@ function prolongadoRevisadoReciente(hc, fecha) {
     var fila = hoja.getRange(celda.getRow(), 1, 1, ENCABEZADOS_REGISTRO.length).getValues()[0];
     var f = fechaDe(fila[col('Marca temporal de la solicitud')]);
     var estado = String(fila[col('Enviado al grupo')]);
-    return estado === 'SI' && f && Math.abs(fecha.getTime() - f.getTime()) < dias * 24 * 3600 * 1000;
+    return estado === 'SI' && fila[col('Fuente del análisis')] !== FUENTE_AJUSTE_RENAL &&
+      f && Math.abs(fecha.getTime() - f.getTime()) < dias * 24 * 3600 * 1000;
   });
 }
 
 var FUENTE_PROLONGADO = 'TRATAMIENTO PROLONGADO';
+var FUENTE_AJUSTE_RENAL = 'AJUSTE RENAL';
+
+/* =====================================================================
+   Ajuste renal, via oral y fenotipo (preguntas agregadas al formulario el 2026-11-23, v1.36.15)
+   ===================================================================== */
+
+// Texto de la terapia de reemplazo renal ('' si no tiene o no se respondio).
+function terapiaReemplazoRenal(e) {
+  var v = String(campoDelEvento((e && e.namedValues) || {}, CAMPOS.TRR) || '').trim();
+  return (!v || v === '-' || /^no$/i.test(v)) ? '' : v;
+}
+
+// Depuracion de creatinina estimada con Cockcroft-Gault (ml/min) a partir de la creatinina serica del formulario, la edad
+// en anos, el peso (real) y el sexo: { valor, creatinina, edad, peso, femenino } o null si falta un dato, si es menor de
+// 18 anos o si algun valor no es plausible. En obesidad el peso real la sobreestima.
+function depuracionEstimada(e) {
+  var v = (e && e.namedValues) || {};
+  var cr = numeroONulo(campoDelEvento(v, CAMPOS.CREATININA));
+  var edad = numeroONulo(campoDelEvento(v, CAMPOS.EDAD_ANIOS));
+  var peso = pesoKgDesde(campoDelEvento(v, CAMPOS.PESO_KG), campoDelEvento(v, CAMPOS.PESO_G));
+  var femenino = normalizarTexto(campoDelEvento(v, CAMPOS.SEXO)).indexOf('FEM') === 0;
+  if (cr === null || cr < 0.1 || cr > 20 || edad === null || edad < 18 || edad > 120 || peso === null || peso < 30 || peso > 250) return null;
+  return { valor: (140 - edad) * peso / (72 * cr) * (femenino ? 0.85 : 1), creatinina: cr, edad: edad, peso: peso, femenino: femenino };
+}
+
+// Entrada de CONFIG.AJUSTE_RENAL para un antimicrobiano (la de nombre mas largo que coincide con el inicio).
+function reglaAjusteRenal(nombre) {
+  var n = normalizarTexto(nombre), mejor = null;
+  (CONFIG.AJUSTE_RENAL || []).forEach(function(r) { if (n.indexOf(r.am) === 0 && (!mejor || r.am.length > mejor.am.length)) mejor = r; });
+  return mejor;
+}
+
+// Compara un antimicrobiano con su tramo de la tabla para la depuracion `cl`: null si no tiene regla, si la depuracion
+// no exige ajuste o si la dosis cumple; si no, { nombre, tramo, texto }.
+function hallazgoAjusteRenal(am, cl) {
+  var regla = reglaAjusteRenal(am.nombre);
+  if (!regla) return null;
+  var tramo = null, desde = 0;
+  for (var i = 0; i < regla.tramos.length; i++) {
+    if (cl <= regla.tramos[i].cl) { tramo = regla.tramos[i]; break; }
+    desde = regla.tramos[i].cl + 1;
+  }
+  if (!tramo) return null;
+  var h = frecuenciaHoras(am.frecuencia), d = numeroONulo(am.dosis);
+  var falla = (tramo.intervaloMin && h !== null && h < tramo.intervaloMin) || (tramo.dosisMax && d !== null && d > tramo.dosisMax) ||
+    (tramo.diariaMax && d !== null && h !== null && h > 0 && d * 24 / h > tramo.diariaMax);
+  if (!falla) return null;
+  var rango = desde > 0 ? desde + '-' + tramo.cl : 'hasta ' + tramo.cl;
+  return { nombre: am.nombre, tramo: tramo, texto: am.nombre + ' ' + (d !== null ? formatoNumero(d, 2) + ' mg' : am.dosis) + ' ' +
+    frecuenciaCorta(am.frecuencia) + ': con depuración ' + rango + ' ml/min la ficha técnica indica ' + tramo.ref };
+}
+
+// Revision de ajuste renal de una solicitud: { hallazgos, bloque, mensaje, depuracion } o null si no se puede evaluar
+// (sin creatinina, menor de 18 anos, en terapia de reemplazo renal) o si no hay nada que verificar.
+function revisionAjusteRenal(e) {
+  if (!CONFIG.AJUSTE_RENAL_ACTIVO || terapiaReemplazoRenal(e)) return null;
+  var dep = depuracionEstimada(e);
+  if (!dep) return null;
+  var hallazgos = leerSlots(e).map(function(am) { return hallazgoAjusteRenal(am, dep.valor); }).filter(Boolean);
+  if (!hallazgos.length) return null;
+  var valores = e.namedValues || {};
+  var campo = function(clave) { return campoDelEvento(valores, CAMPOS[clave]) || '-'; };
+  var E = function(cp) { return String.fromCodePoint(cp); };
+  var servicio = campo('SERVICIO'), cama = campo('CAMA');
+  var bloque = ['HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
+    (servicio !== '-' ? ' · ' + servicio : '') + (cama !== '-' ? ' · Cama ' + cama : ''),
+    E(0x1F4A7) + ' Creatinina ' + formatoNumero(dep.creatinina, 2) + ' mg/dL · depuración estimada ' + formatoNumero(dep.valor, 0) +
+      ' ml/min (Cockcroft-Gault, ' + formatoNumero(dep.peso, 1) + ' kg, ' + (dep.femenino ? 'mujer' : 'hombre') + ')']
+    .concat(hallazgos.map(function(x) { return E(0x26A0) + E(0xFE0F) + ' ' + x.texto + '; se sugiere verificar'; }));
+  return { hallazgos: hallazgos, bloque: bloque, depuracion: dep,
+    mensaje: '*' + E(0x1F4A7) + ' VERIFICAR AJUSTE RENAL*\n*' + bloque[0] + '*\n' + bloque.slice(1).join('\n') };
+}
+
+// Modo prueba (CONFIG.AJUSTE_RENAL_ENVIAR = false): una fila en REGISTRO_REVISIONES, sin enviar. Nunca interrumpe el flujo.
+function notificarAjusteRenal_(e, coincidencias) {
+  try {
+    var r = revisionAjusteRenal(e);
+    if (!r) return;
+    var envio = CONFIG.AJUSTE_RENAL_ENVIAR ? enviarAlertaWhatsApp(r.mensaje, { sinFirma: true }) : null;
+    registrarRevision(e, coincidencias || filtrarAntimicrobianosRestringidos(e), { fuente: FUENTE_AJUSTE_RENAL, nivelFinal: 1,
+      detalle: r.bloque.join('\n'), enviado: !!(envio && envio.ok),
+      destino: CONFIG.AJUSTE_RENAL_ENVIAR ? 'PRODUCCION' : 'prueba: no se envía (AJUSTE_RENAL_ENVIAR = false)' });
+  } catch (err) {
+    Logger.log('Revision de ajuste renal no disponible: ' + err);
+  }
+}
+
+// "💊 Tolera la vía oral (sí, por sonda): LINEZOLID tiene presentación oral con biodisponibilidad alta" si algun
+// antimicrobiano de CONFIG.ORAL_BIODISPONIBLE va IV y el paciente tolera la via oral; '' si no.
+function lineaViaOral(e, ams) {
+  var tolera = String(campoDelEvento((e && e.namedValues) || {}, CAMPOS.TOLERA_VO) || '').trim();
+  if (!/^s/i.test(normalizarTexto(tolera))) return '';
+  var nombres = [];
+  (ams || []).forEach(function(am) {
+    var n = normalizarTexto(am.nombre);
+    if (normalizarTexto(am.via).indexOf('INTRAVEN') !== 0 || nombres.indexOf(am.nombre) > -1) return;
+    if ((CONFIG.ORAL_BIODISPONIBLE || []).some(function(x) { return n.indexOf(x) === 0; })) nombres.push(am.nombre);
+  });
+  if (!nombres.length) return '';
+  return String.fromCodePoint(0x1F48A) + ' Tolera la vía oral (' + tolera.charAt(0).toLowerCase() + tolera.slice(1) + '): ' + nombres.join(', ') +
+    (nombres.length > 1 ? ' tienen' : ' tiene') + ' presentación oral con biodisponibilidad alta';
+}
+
+// Fenotipo del aislamiento para la linea 🦠: "BLEE", "carbapenemasa", "SAMR", "sensible", "antibiograma pendiente"; ''
+// si no hay aislamiento o no se respondio.
+function fenotipoCorto(valor) {
+  var v = String(valor || '').trim(), n = normalizarTexto(v);
+  if (!v || v === '-' || n.indexOf('SIN AISLAMIENTO') === 0) return '';
+  if (n.indexOf('PENDIENTE') === 0) return 'antibiograma pendiente';
+  if (n.indexOf('SENSIBLE') === 0) return 'sensible';
+  if (n.indexOf('CARBAPENEMASA') === 0) return 'carbapenemasa';
+  if (n.indexOf('SAMR') === 0) return 'SAMR';
+  if (n.indexOf('ENTEROCOCO RESISTENTE') === 0) return 'ERV';
+  if (n.indexOf('OTRO') === 0) return 'otro mecanismo de resistencia';
+  return v;
+}
 
 var ENCABEZADOS_REGISTRO = ['Fecha de registro', 'Marca temporal de la solicitud', 'Historia clínica', 'Servicio', 'Especialidad', 'Diagnóstico',
   'Microorganismo', 'Tipo de indicación', 'Antimicrobianos restringidos', 'Acompañantes', 'Semáforo tablas', 'Semáforo final', 'Fuente del análisis',
@@ -1792,7 +1952,7 @@ function registrarRevision(e, coincidencias, datos) {
 // Frecuencia que casi seguro es un error de digitacion (pedido del referente, 2026-11-22): mas de una dosis cada
 // CONFIG.FRECUENCIA_MINIMA_H horas, p. ej. "VANCOMICINA c/3 h". Es un dato a verificar, no un juicio clinico. '' si no aplica.
 function avisoFrecuencia(am) {
-  var n = numeroONulo(String(am.frecuencia || '').replace(/[^\d.,]/g, ''));
+  var n = frecuenciaHoras(am.frecuencia);
   if (n === null || n <= 0 || n >= (CONFIG.FRECUENCIA_MINIMA_H || 0)) return '';
   return 'Verificar frecuencia de ' + am.nombre + ': ' + frecuenciaCorta(am.frecuencia);
 }
@@ -1832,8 +1992,18 @@ function viaCorta(via) {
 function frecuenciaCorta(valor) {
   var s = String(valor || '').trim();
   if (!s || s === '-') return '-';
-  var m = s.match(/^(?:cada\s+)?(\d+(?:[.,]\d+)?)\s*(?:h|hr|hrs|hora|horas)?\.?$/i);
-  return m ? 'c/' + m[1].replace('.', ',') + ' h' : s;
+  var h = frecuenciaHoras(s);
+  return h !== null ? 'c/' + formatoNumero(h, 1) + ' h' : s;
+}
+
+// Horas entre dosis: "8", "cada 8 h", "48HORAS", "48 (interdiaria)" e "Interdiaria" (48). null si la opcion no es un
+// intervalo: "3 dosis y suspender", "Dosis única", "Infusión extendida" (v1.36.15: antes "3 dosis y suspender" contaba
+// como c/3 h).
+function frecuenciaHoras(valor) {
+  var s = String(valor || '').trim();
+  if (/^interdiari[ao]$/i.test(s)) return 48;
+  var m = s.match(/^(?:cada\s+)?(\d+(?:[.,]\d+)?)\s*(?:h|hr|hrs|hora|horas)?\.?\s*(?:\(\s*interdiari[ao]\s*\))?$/i);
+  return m ? numeroONulo(m[1]) : null;
 }
 
 // "1000 mg (14,3 mg/kg) IV c/24 h"
@@ -1871,6 +2041,8 @@ function lineasPaciente(campo, pesoKg) {
     ' · ' + ((pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-') + (especialidad !== '-' ? ' · ' + especialidad : ''));
   // "BETALACTAMASA DE AMPLIO ESPECTRO" -> "BLEE" (solo en el mensaje)
   var micro = String(campo('MICROORGANISMO')).replace(/beta ?-?lactamasas? de (amplio espectro|espectro extendido|espectro ampliado|espectro amplio)/gi, 'BLEE');
+  var fenotipo = fenotipoCorto(campo('FENOTIPO'));
+  if (fenotipo) micro = (micro && micro !== '-' && !/^NINGUN/i.test(micro) ? micro + ' ' : '') + '(' + fenotipo + ')';
   lineas.push(E(0x1F9A0) + ' ' + [micro, campo('CULTIVOS'), tipoIndicacionTexto(campo('TIPO_INDICACION')), campo('ORIGEN')]
     .filter(function(x) { return x && x !== '-'; }).join(' · '));
   var conInterconsulta = esSi(campo('INTERCONSULTA'));
@@ -1917,7 +2089,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
   lineasPaciente(campo, pesoKg).forEach(function(l) { lineas.push(l); });
   var tipoIndicacion = tipoIndicacionTexto(campo('TIPO_INDICACION'));
 
-  if (esSi(campo('AJUSTE_RENAL')) || esSi(campo('FALLA_HEPATICA'))) {
+  var trr = terapiaReemplazoRenal(e);
+  if (esSi(campo('AJUSTE_RENAL')) || esSi(campo('FALLA_HEPATICA')) || trr) {
     var extras = [];
     if (esSi(campo('AJUSTE_RENAL'))) {
       // Sin el valor de depuracion (DepCr): decision del referente PROA, 2026-11-07.
@@ -1929,6 +2102,9 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
       if (sinAjuste.length) texto += ' · ' + sinAjuste.join(', ') + ' no requiere ajuste renal';
       extras.push(texto);
     }
+    // la terapia de reemplazo renal cambia la dosis (pregunta del 2026-11-23); la creatinina y la depuracion estimada no
+    // van en el mensaje (decision del 2026-11-07): las usa la revision de ajuste renal
+    if (trr) extras.push('Terapia de reemplazo renal: ' + trr);
     if (esSi(campo('FALLA_HEPATICA'))) extras.push('Falla hepática: Sí');
     lineas.push(E(0x1F4A7) + ' ' + extras.join(' · '));
   }
@@ -1946,6 +2122,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
       (am.delDia ? ' · otra solicitud de hoy' : ''));
     if (avisoFrecuencia(am)) lineas.push('   ' + adv + ' ' + avisoFrecuencia(am));
   });
+  var viaOral = lineaViaOral(e, esquemas);
+  if (viaOral) lineas.push(viaOral);
   seguimientoPaciente(e).lineas.forEach(function(l) { lineas.push(l); });
 
   if (cuerpoAnalisis.length) lineas.push('');

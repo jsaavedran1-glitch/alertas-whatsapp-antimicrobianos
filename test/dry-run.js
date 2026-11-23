@@ -49,6 +49,8 @@ var ENCABEZADOS_REALES = ['Marca temporal', 'Dirección de correo electrónico',
   'Nombre Antimicrobiano 1', 'Dosis en miligramos o UI AB1', 'Vía de adminsitración de  AM1', 'Frecuencia AM 1 (En Horas)', 'Días ordenados AM1', 'TERMINACION ',
   'Nombre Antimicrobiano 2', 'Dosis en miligramos o UI AM2', 'Vía de adminsitración de  AM2', 'Frecuencia AM 2 (En horas)', 'Días ordenados AM2',
   'Nombre Antimicrobiano 3', 'Dosis en miligramos o UI AM3', 'Vía de adminsitración de  AM3', 'Frecuencia AM 3 (En horas)', 'Días ordenados AM 3',
+  // preguntas agregadas el 2026-11-23: Google las inserto antes de las columnas manuales Estado y Observacion
+  'Creatinina sérica (mg/dL)', '¿Terapia de reemplazo renal?', '¿Tolera la vía oral o por sonda?', 'Fenotipo de resistencia del aislamiento',
   'Estado', 'Observacion a la solicitud'];
 
 var RESTRINGIDOS = ['CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'CASPOFUNGINA',
@@ -614,6 +616,72 @@ prueba('formularios separados entre dias: lo que sigue dentro de sus dias se inf
   filas.push(filaMatriz('28/10/2026 08:00:00', '889011', [['MEROPENEM', '1000', '8', '7']]));
   var e2 = eventoSeguimiento('01/11/2026 10:00:00', '889011', 'J189', [['VANCOMICINA', '1000', '12', '7']]);
   assert.deepStrictEqual(seguimientoPaciente(e2).dentroDeDias.map(function (x) { return x.nombre; }), ['MEROPENEM']);
+});
+
+prueba('formulario del 2026-11-23: frecuencias nuevas, fenotipo, terapia de reemplazo renal y via oral', function () {
+  // frecuencias: "48 (interdiaria)" es c/48 h; "3 dosis y suspender" no es un intervalo (antes contaba como c/3 h)
+  assert.strictEqual(frecuenciaCorta('48 (interdiaria)'), 'c/48 h'); assert.strictEqual(frecuenciaCorta('Interdiaria'), 'c/48 h');
+  assert.strictEqual(frecuenciaCorta('36'), 'c/36 h'); assert.strictEqual(frecuenciaCorta('3 dosis y suspender'), '3 dosis y suspender');
+  assert.strictEqual(frecuenciaHoras('Infusión extendida'), null); assert.strictEqual(frecuenciaHoras('Dosis única'), null);
+  assert.strictEqual(avisoFrecuencia({ nombre: 'VANCOMICINA', frecuencia: '3 dosis y suspender' }), '');
+  assert.strictEqual(avisoFrecuencia({ nombre: 'VANCOMICINA', frecuencia: '3' }), 'Verificar frecuencia de VANCOMICINA: c/3 h');
+  // caso PROA: fenotipo junto al aislamiento, terapia de reemplazo renal y via oral; la creatinina no va en el mensaje
+  var e = eventoSeguimiento('20/11/2026 10:00:00', '889020', 'A419', [['CEFTAZIDIMA / AVIBACTAM', '2500', '8', '14'], ['LINEZOLID', '600', '12', '14']]);
+  var nv = e.namedValues;
+  nv[CAMPOS.MICROORGANISMO] = ['Klebsiella pneumoniae']; nv[CAMPOS.FENOTIPO] = ['Carbapenemasa (KPC, NDM, OXA-48)'];
+  nv[CAMPOS.TRR] = ['Hemodiálisis intermitente']; nv[CAMPOS.TOLERA_VO] = ['Sí, por sonda']; nv[CAMPOS.CREATININA] = ['4.1']; nv[CAMPOS.SEXO] = ['MASCULINO'];
+  var m = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
+  incluye(m, '🦠 Klebsiella pneumoniae (carbapenemasa)'); incluye(m, '💧 Terapia de reemplazo renal: Hemodiálisis intermitente');
+  incluye(m, '💊 Tolera la vía oral (sí, por sonda): LINEZOLID tiene presentación oral con biodisponibilidad alta');
+  noIncluye(m, 'Creatinina'); noIncluye(m, 'depuración');
+  assert.strictEqual(fenotipoCorto('Sin aislamiento'), ''); assert.strictEqual(fenotipoCorto('Pendiente'), 'antibiograma pendiente');
+  assert.strictEqual(fenotipoCorto('SAMR (S. aureus meticilino resistente)'), 'SAMR'); assert.strictEqual(fenotipoCorto('BLEE'), 'BLEE');
+  // sin la respuesta de via oral o si no tolera, no hay linea
+  nv[CAMPOS.TOLERA_VO] = ['No']; assert.strictEqual(lineaViaOral(e, leerSlots(e)), '');
+  nv[CAMPOS.TOLERA_VO] = ['']; assert.strictEqual(lineaViaOral(e, leerSlots(e)), '');
+});
+
+prueba('ajuste renal en modo prueba: Cockcroft-Gault, tabla por tramos y solo una fila en el registro', function () {
+  var ev = function (hc, ams, extra) {
+    var e = eventoSeguimiento('20/11/2026 10:00:00', hc, 'J189', ams);   // 60 anos, 70 kg
+    var nv = e.namedValues; nv[CAMPOS.SEXO] = ['MASCULINO']; nv[CAMPOS.CREATININA] = ['2']; nv[CAMPOS.TRR] = ['No'];
+    Object.keys(extra || {}).forEach(function (k) { nv[k] = [extra[k]]; });
+    return e;
+  };
+  // (140 - 60) x 70 / (72 x 2) = 38,9 ml/min; mujer x 0,85 = 33,1
+  assert.strictEqual(Math.round(depuracionEstimada(ev('889030', [['MEROPENEM', '1000', '8', '7']])).valor * 10) / 10, 38.9);
+  var muj = {}; muj[CAMPOS.SEXO] = 'FEMENINO';
+  assert.strictEqual(Math.round(depuracionEstimada(ev('889030', [['MEROPENEM', '1000', '8', '7']], muj)).valor * 10) / 10, 33.1);
+  var r = revisionAjusteRenal(ev('889031', [['MEROPENEM', '1000', '8', '7'], ['CEFEPIME', '2000', '8', '7'], ['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]));
+  assert.deepStrictEqual(r.hallazgos.map(function (x) { return x.nombre; }), ['MEROPENEM', 'CEFEPIME', 'PIPERACILINA / TAZOBACTAM']);
+  assert.strictEqual(r.hallazgos[0].texto, 'MEROPENEM 1000 mg c/8 h: con depuración 26-50 ml/min la ficha técnica indica la misma dosis c/12 h');
+  incluye(r.hallazgos[1].texto, 'con depuración 30-60 ml/min'); incluye(r.hallazgos[2].texto, 'PIPERACILINA / TAZOBACTAM 4500 mg c/6 h: con depuración 20-40 ml/min');
+  incluye(r.bloque[1], '💧 Creatinina 2 mg/dL · depuración estimada 39 ml/min (Cockcroft-Gault, 70 kg, hombre)');
+  incluye(r.mensaje, '*💧 VERIFICAR AJUSTE RENAL*'); noIncluye(r.mensaje, 'no pertinente');
+  // dosis ya ajustadas: nada que verificar
+  assert.strictEqual(revisionAjusteRenal(ev('889032', [['MEROPENEM', '1000', '12', '7'], ['PIPERACILINA / TAZOBACTAM', '4500', '8', '7'], ['CEFEPIME', '2000', '12', '7']])), null);
+  // sin evaluar: terapia de reemplazo renal, menor de 18 anos, sin creatinina, antimicrobiano sin regla, depuracion normal
+  var hd = {}; hd[CAMPOS.TRR] = 'Hemodiálisis intermitente'; var nino = {}; nino[CAMPOS.EDAD_ANIOS] = '12'; var sinCr = {}; sinCr[CAMPOS.CREATININA] = '';
+  var normal = {}; normal[CAMPOS.CREATININA] = '0.8';
+  [hd, nino, sinCr, normal].forEach(function (x) { assert.strictEqual(revisionAjusteRenal(ev('889033', [['MEROPENEM', '1000', '8', '7']], x)), null); });
+  assert.strictEqual(revisionAjusteRenal(ev('889034', [['LINEZOLID', '600', '12', '7']])), null);
+  // flujo: sin restringido ni revision de duracion, deja solo la fila del ajuste renal y no envia nada
+  var propsReal = global.PropertiesService;
+  var P = { GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test' };
+  global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
+  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
+  var reg = HOJAS['REGISTRO_REVISIONES']._filas, col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+  try {
+    conApiSimulada(function () {
+      notificarNuevaRespuesta(ev('889035', [['MEROPENEM', '1000', '8', '7']]));
+      assert.strictEqual(envios.length, 0); assert.strictEqual(reg.length, 2);
+      assert.strictEqual(reg[1][col('Fuente del análisis')], 'AJUSTE RENAL'); assert.strictEqual(reg[1][col('Enviado al grupo')], 'NO');
+      incluye(reg[1][col('Destino')], 'prueba: no se envía'); incluye(reg[1][col('Detalle')], 'MEROPENEM 1000 mg c/8 h: con depuración 26-50');
+      // con la dosis ajustada no queda fila
+      notificarNuevaRespuesta(ev('889036', [['MEROPENEM', '1000', '12', '7']]));
+      assert.strictEqual(reg.length, 2);
+    });
+  } finally { global.PropertiesService = propsReal; }
 });
 
 prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, al momento, sin verdes ni repetidos', function () {

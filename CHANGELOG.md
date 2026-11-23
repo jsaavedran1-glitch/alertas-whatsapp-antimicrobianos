@@ -2,6 +2,16 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.15] - 2026-11-23 (solo Codigo.gs)
+
+### Agregado (formulario actualizado el 2026-11-23)
+- **Preguntas nuevas del formulario** en `CAMPOS`: `Creatinina sérica (mg/dL)`, `¿Terapia de reemplazo renal?`, `¿Tolera la vía oral o por sonda?` y `Fenotipo de resistencia del aislamiento`. Google las insertó en la hoja en AU-AX, antes de las columnas manuales "Estado" y "Observación a la solicitud", que pasaron a AY-AZ (el bot y el dashboard leen por nombre; un script que lea esas dos columnas por número debe revisarse).
+- **Revisión de ajuste renal en MODO PRUEBA** (`revisionAjusteRenal()`, `CONFIG.AJUSTE_RENAL`, `docs/ajuste-renal.md`): con la creatinina nueva estima la depuración (Cockcroft-Gault, adultos) y compara cefepime, meropenem, piperacilina/tazobactam, ertapenem, ceftazidima, ceftazidima/avibactam, aztreonam, levofloxacino, ciprofloxacino y daptomicina con su tramo de la ficha técnica. No evalúa terapia de reemplazo renal, menores de 18 años ni vancomicina. Con `AJUSTE_RENAL_ENVIAR = false` solo deja una fila en `REGISTRO_REVISIONES` (fuente `AJUSTE RENAL`); no envía nada. Esas filas no cuentan para la regla de 7 días de la revisión de duración. Tabla pendiente de validación por el comité.
+- **Caso PROA y revisión:** el fenotipo va junto al aislamiento (`🦠 Klebsiella pneumoniae (carbapenemasa)`); la terapia de reemplazo renal va en la línea 💧; si el paciente tolera la vía oral y hay un antimicrobiano IV con presentación oral de biodisponibilidad alta (`CONFIG.ORAL_BIODISPONIBLE`: linezolid, quinolonas, etc.), la línea `💊 Tolera la vía oral (sí, por sonda): LINEZOLID tiene presentación oral con biodisponibilidad alta`. La creatinina y la depuración estimada no van en el mensaje (decisión del 2026-11-07); las usa la revisión renal.
+
+### Corregido
+- Frecuencias del formulario nuevo (`frecuenciaHoras()`): "48 (interdiaria)" e "Interdiaria" son c/48 h; "3 dosis y suspender" ya no cuenta como c/3 h (antes disparaba "Verificar frecuencia"). 36 y 72 se leen como intervalos.
+
 ## [1.36.14] - 2026-11-23 (solo Codigo.gs)
 
 ### Agregado (decisión del referente)
