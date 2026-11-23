@@ -29,7 +29,7 @@
 // ultimo numero y basta con pegar este. Si mayor.menor no coincide, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
 
-var VERSION_INFORME = "1.36.19";
+var VERSION_INFORME = "1.36.20";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
@@ -64,9 +64,9 @@ var INFORME_INDICADORES = ["duracion", "antimicrobianos", "restringidos", "servi
 var INFORME_REGLAS = [
   "Apoyas al comité del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia. Recibes los indicadores de un periodo, calculados por el bot a partir del formulario de solicitud de antimicrobianos (todas las solicitudes, no solo restringidos), junto con los del periodo anterior. Escribes la lectura que acompaña al informe en el grupo de WhatsApp del PROA, donde están la infectóloga, el químico farmacéutico y el equipo del programa.",
   "",
-  "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. El bot abre la lectura con la comparación de solicitudes y pacientes frente al periodo anterior: no la repitas. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento por antimicrobiano, la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
+  "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. El bot abre la lectura con la comparación de solicitudes y pacientes frente al periodo anterior: no la repitas. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento por antimicrobiano, la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos o con cultivos pendientes de toma, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
   "",
-  "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%); en las sugerencias puedes nombrar intervalos clínicos en horas (revaloración a las 48-72 h). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los días de cada antimicrobiano (la medida que indica dias_por_antimicrobiano en los datos) cuentan, por paciente, sus prescripciones seguidas de ese antimicrobiano hasta el fin de su última orden del periodo; nómbrala tal cual (mediana o promedio); los tratamientos más largos suman el tratamiento continuo del paciente aunque cambie de antimicrobiano. Son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
+  "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%); en las sugerencias puedes nombrar intervalos clínicos en horas (revaloración a las 48-72 h). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los días de cada antimicrobiano (la medida que indica dias_por_antimicrobiano en los datos) cuentan, por paciente, sus prescripciones seguidas de ese antimicrobiano hasta el fin de su última orden del periodo; nómbrala tal cual (mediana o promedio); los tratamientos más largos suman el tratamiento continuo del paciente aunque cambie de antimicrobiano. Son días ordenados, no administrados. Los empíricos sin cultivos son los que no tienen ningún cultivo solicitado; los pendientes de toma (cultivos ya pedidos que aún no se toman) se cuentan aparte. Esa opción existe en el formulario desde el 23/11/2026: si los sin cultivos bajan frente a un periodo anterior a esa fecha, puede deberse a la opción nueva y no a un cambio en la práctica. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
   "",
   "Tono: neutro e institucional, en español corriente con tildes, sin markdown. Cada frase de máximo 150 caracteres. Sin culpar a servicios, especialidades ni personas; sin juicios sobre casos clínicos; sin palabras como \"inadecuado\", \"incorrecto\", \"injustificado\", \"no pertinente\", \"abuso\" o \"mal uso\". Si no hay nada notable, dilo en un hallazgo corto y no rellenes.",
   "",
@@ -286,10 +286,17 @@ function servicioCorto(s) {
     .replace(/^Unidad de Cuidados Intermedios\s*/i, "Intermedios ").replace(/^Hospitalizaci[oó]n\s+/i, "Hosp. ").trim() || "Sin servicio";
 }
 
-// Sin cultivos: el campo vacio o solo con "NINGUNO", "pendiente", puntos o comas ("NINGUNO, ", ".."). "UROCULTIVO, NINGUNO" si tiene.
-function sinCultivos(valor) {
-  return !normalizarTexto(valor).replace(/\b(NINGUNO|NINGUNA|NO|NA|PENDIENTES?|SIN|CULTIVOS?)\b/g, " ").replace(/[^A-Z0-9]/g, "");
+// Cultivos de la solicitud (v1.36.20): "tomados" si nombra algun cultivo ("UROCULTIVO, NINGUNO" y "HEMOCULTIVO,
+// SOLICITADOS (PENDIENTES DE TOMA)" cuentan como tomados); "pendientes" con la opcion SOLICITADOS (PENDIENTES DE TOMA)
+// del formulario (desde el 2026-11-23) o el texto "pendiente" / "no aun"; "ninguno" si esta vacio, "NINGUNO", puntos o comas.
+function estadoCultivos_(valor) {
+  var t = normalizarTexto(valor);
+  var pendiente = /\bPENDIENTES?\b|\bNO AUN\b|\bAUN NO\b/.test(t);
+  var resto = t.replace(/\b(NINGUNO|NINGUNA|NO|NA|AUN|PENDIENTES?|SIN|CULTIVOS?|SOLICITADOS?|DE|TOMA)\b/g, " ").replace(/[^A-Z0-9]/g, "");
+  return resto ? "tomados" : pendiente ? "pendientes" : "ninguno";
 }
+// Sin cultivos: no se solicito ninguno (los pendientes de toma se cuentan aparte).
+function sinCultivos(valor) { return estadoCultivos_(valor) === "ninguno"; }
 
 function fechaDiaMes_(d) { return ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2); }
 
@@ -351,7 +358,7 @@ function tratamientosDelPeriodo_(eventos, desde, hasta) {
 function datosInforme_(eventos, desde, hasta) {
   var lista = obtenerAntimicrobianosRestringidos();
   var porServicio = {}, hcs = {}, tipos = { "Empírico": 0, "Etiológico": 0, "Profiláctico": 0 };
-  var n = 0, conRestringido = 0, conInterconsulta = 0, empiricoSinCultivo = 0, profilaxisLarga = 0;
+  var n = 0, conRestringido = 0, conInterconsulta = 0, empiricoSinCultivo = 0, empiricoPendiente = 0, profilaxisLarga = 0;
   eventos.forEach(function(e) {
     if (e.fecha < desde || e.fecha >= hasta) return;
     var slots = leerSlots(e);
@@ -364,7 +371,11 @@ function datosInforme_(eventos, desde, hasta) {
     porServicio[servicio] = (porServicio[servicio] || 0) + 1;
     var tipo = tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION));
     if (tipo in tipos) tipos[tipo]++;
-    if (tipo === "Empírico" && sinCultivos(c(CAMPOS.CULTIVOS))) empiricoSinCultivo++;
+    if (tipo === "Empírico") {
+      var cultivos = estadoCultivos_(c(CAMPOS.CULTIVOS));
+      if (cultivos === "ninguno") empiricoSinCultivo++;
+      if (cultivos === "pendientes") empiricoPendiente++;
+    }
     var restringido = false, profLarga = false;
     slots.forEach(function(am) {
       var entrada = entradaRestringida(am.nombre, lista);
@@ -393,7 +404,8 @@ function datosInforme_(eventos, desde, hasta) {
     servicios: Object.keys(porServicio).map(function(k) { return { nombre: k, solicitudes: porServicio[k], porcentaje: porcentaje(porServicio[k], n) }; })
       .sort(function(a, b) { return b.solicitudes - a.solicitudes; }).slice(0, 6),
     indicacion: { empirico_pct: porcentaje(tipos["Empírico"], n), etiologico_pct: porcentaje(tipos["Etiológico"], n),
-      profilactico_pct: porcentaje(tipos["Profiláctico"], n), empiricos_sin_cultivo_pct: porcentaje(empiricoSinCultivo, tipos["Empírico"]) },
+      profilactico_pct: porcentaje(tipos["Profiláctico"], n), empiricos_sin_cultivo_pct: porcentaje(empiricoSinCultivo, tipos["Empírico"]),
+      empiricos_pendientes_toma_pct: porcentaje(empiricoPendiente, tipos["Empírico"]) },
     restringidos_con_interconsulta_pct: porcentaje(conInterconsulta, conRestringido),
     profilaxis_mas_de_1_dia: profilaxisLarga,
     tratamientos_largos: tr.largos.slice(0, INFORME_TOP)
@@ -418,7 +430,9 @@ function mensajeInforme_(a, ant, ia) {
     a.antimicrobianos.slice(0, 4).map(conPacientes).join(" · "));
   if (a.restringidos.length) lineas.push(E(0x1F512) + " Restringidos: " + a.restringidos.slice(0, 4).map(conPacientes).join(" · "));
   lineas.push(E(0x1F3E5) + " Servicios: " + a.servicios.slice(0, 3).map(function(x) { return x.nombre + " " + x.porcentaje + "%"; }).join(" · "));
-  lineas.push(E(0x1F9EB) + " Empírico " + a.indicacion.empirico_pct + "% (" + a.indicacion.empiricos_sin_cultivo_pct + "% sin cultivos) · Etiológico " +
+  // "(58% sin cultivos, 6% pendientes de toma)": los pendientes solo si hay
+  var pendientes = a.indicacion.empiricos_pendientes_toma_pct ? ", " + a.indicacion.empiricos_pendientes_toma_pct + "% pendientes de toma" : "";
+  lineas.push(E(0x1F9EB) + " Empírico " + a.indicacion.empirico_pct + "% (" + a.indicacion.empiricos_sin_cultivo_pct + "% sin cultivos" + pendientes + ") · Etiológico " +
     a.indicacion.etiologico_pct + "% · Profiláctico " + a.indicacion.profilactico_pct + "%" +
     (a.profilaxis_mas_de_1_dia ? " · " + a.profilaxis_mas_de_1_dia + " con profilaxis de más de 1 día" : ""));
   if (a.solicitudes_con_restringido) lineas.push(E(0x1F9EA) + " Restringidos con interconsulta a Infectología: " + a.restringidos_con_interconsulta_pct + "%");

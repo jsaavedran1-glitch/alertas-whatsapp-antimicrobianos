@@ -1313,6 +1313,10 @@ prueba('informe semanal: cifras de la semana calculadas por el codigo, sin IA si
       conApiInforme(function () { throw new Error('no debia llamarse a la API'); }, function (peticiones) {
         var inf = construirInformeProa_(LUNES_23_11, 7);
         assert.strictEqual(inf.mensaje, CIFRAS_SEMANA);
+        assert.strictEqual(inf.actual.indicacion.empiricos_pendientes_toma_pct, 0);
+        // con pendientes de toma, van junto a los sin cultivos
+        var conPendientes = JSON.parse(JSON.stringify(inf.actual)); conPendientes.indicacion.empiricos_pendientes_toma_pct = 25;
+        incluye(mensajeInforme_(conPendientes, inf.anterior, null), '🧫 Empírico 57% (50% sin cultivos, 25% pendientes de toma) · Etiológico 29%');
         assert.strictEqual(inf.anterior.periodo, '09/11–15/11'); assert.strictEqual(inf.anterior.solicitudes, 3);
         noIncluye(inf.mensaje, 'Caso PROA'); noIncluye(inf.mensaje, 'Datos por corregir');
         assert.strictEqual(peticiones.length, 0);
@@ -1330,8 +1334,16 @@ prueba('informe semanal: cifras de la semana calculadas por el codigo, sin IA si
     // nombres de servicio y cultivos tal como vienen en la matriz real
     assert.strictEqual(servicioCorto('Unidad de Cuidado Crítico UCI B'), 'UCI B'); assert.strictEqual(servicioCorto('Unidad de Cuidado Crítico PEDIATRÍA'), 'UCI PEDIATRÍA');
     assert.strictEqual(servicioCorto('Unidad de Cuidados Intermedios UCI NEO 1/2'), 'Intermedios UCI NEO 1/2'); assert.strictEqual(servicioCorto(''), 'Sin servicio');
-    ['NINGUNO', 'NINGUNO, ', '..', '', 'pendiente'].forEach(function (v) { assert.strictEqual(sinCultivos(v), true, v); });
+    ['NINGUNO', 'NINGUNO, ', '..', ''].forEach(function (v) { assert.strictEqual(sinCultivos(v), true, v); });
     ['UROCULTIVO, NINGUNO', 'CULTIVO DE LCR ', 'SECRECIÓN'].forEach(function (v) { assert.strictEqual(sinCultivos(v), false, v); });
+    // v1.36.20: la opcion SOLICITADOS (PENDIENTES DE TOMA) se cuenta aparte de los sin cultivos
+    ['SOLICITADOS (PENDIENTES DE TOMA)', 'NINGUNO, SOLICITADOS (PENDIENTES DE TOMA)', 'pendiente', 'NO AUN '].forEach(function (v) {
+      assert.strictEqual(estadoCultivos_(v), 'pendientes', v); assert.strictEqual(sinCultivos(v), false, v);
+    });
+    ['HEMOCULTIVO, SOLICITADOS (PENDIENTES DE TOMA)', 'CULTIVO DE ARTEJOS DE PIE IZQUIERDO', 'LÍQUIDO PERITONEAL '].forEach(function (v) {
+      assert.strictEqual(estadoCultivos_(v), 'tomados', v);
+    });
+    assert.strictEqual(estadoCultivos_('NINGUNO'), 'ninguno');
     // semana sin solicitudes
     var vacia = datosInforme_([], new Date(2026, 10, 16), new Date(2026, 10, 23));
     assert.strictEqual(mensajeInforme_(vacia, vacia, null), '*📊 INFORME SEMANAL PROA · 16/11–22/11*\nSin solicitudes en el formulario en este periodo (sem. ant. 0).');

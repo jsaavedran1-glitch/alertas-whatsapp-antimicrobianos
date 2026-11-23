@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.20] - 2026-11-23 (solo IA_PROA.gs)
+
+### Agregado (decisión del referente)
+- Cultivos **pendientes de toma**, separados de los "sin cultivos" (`estadoCultivos_()`): la opción nueva `SOLICITADOS (PENDIENTES DE TOMA)` de "Cultivos tomados:" (y el texto "pendiente" o "no aún") cuenta como pendiente si no hay ningún cultivo tomado; con un cultivo tomado cuenta como tomado. "Sin cultivos" queda solo para NINGUNO o vacío. Antes "pendiente" se sumaba a los sin cultivos y "NO AUN" contaba como cultivo tomado.
+- Informe semanal: `🧫 Empírico 84% (58% sin cultivos, 6% pendientes de toma)`; los pendientes solo aparecen si hay. La IA recibe `empiricos_pendientes_toma_pct` y se le advierte que una baja de los sin cultivos frente a semanas anteriores al 23/11 puede deberse a la opción nueva.
+- El análisis de pertinencia y los mensajes del caso PROA no cambian: muestran el texto del campo tal como viene.
+
 ## [1.36.19] - 2026-11-23 (solo IA_PROA.gs)
 
 ### Cambiado (decisión del referente)
