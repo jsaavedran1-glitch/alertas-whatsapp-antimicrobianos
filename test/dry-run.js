@@ -51,6 +51,7 @@ var ENCABEZADOS_REALES = ['Marca temporal', 'Dirección de correo electrónico',
   'Nombre Antimicrobiano 3', 'Dosis en miligramos o UI AM3', 'Vía de adminsitración de  AM3', 'Frecuencia AM 3 (En horas)', 'Días ordenados AM 3',
   // preguntas agregadas el 2026-11-23: Google las inserto antes de las columnas manuales Estado y Observacion
   'Creatinina sérica (mg/dL)', '¿Terapia de reemplazo renal?', '¿Tolera la vía oral o por sonda?', 'Fenotipo de resistencia del aislamiento',
+  'Foco infeccioso principal', '¿Sepsis o choque séptico?',   // segunda edicion del 2026-11-23
   'Estado', 'Observacion a la solicitud'];
 
 var RESTRINGIDOS = ['CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'CASPOFUNGINA',
@@ -639,6 +640,41 @@ prueba('formulario del 2026-11-23: frecuencias nuevas, fenotipo, terapia de reem
   // sin la respuesta de via oral o si no tolera, no hay linea
   nv[CAMPOS.TOLERA_VO] = ['No']; assert.strictEqual(lineaViaOral(e, leerSlots(e)), '');
   nv[CAMPOS.TOLERA_VO] = ['']; assert.strictEqual(lineaViaOral(e, leerSlots(e)), '');
+});
+
+prueba('foco infeccioso del formulario: define la duracion de referencia por encima del CIE10; sepsis en el caso', function () {
+  var ev = function (hc, dx, foco, ams, sepsis) {
+    var e = eventoSeguimiento('20/11/2026 10:00:00', hc, dx, ams || [['CEFEPIME', '2000', '8', '7']]);
+    e.namedValues[CAMPOS.FOCO] = [foco]; e.namedValues[CAMPOS.SEPSIS] = [sepsis || 'No'];
+    return e;
+  };
+  var enc = function (e) { return analisisPertinenciaDesdeEvento(e, []).encabezadoDias; };
+  // un CIE10 sin referencia (fiebre) toma la del foco; el foco manda sobre un CIE10 de otro sindrome
+  incluye(enc(ev('889040', 'R509', 'Neumonía adquirida en la comunidad')), 'Neumonía: 5-7 d');
+  incluye(enc(ev('889041', 'N390', 'Piel y tejidos blandos')), 'Infección de piel y tejidos blandos: 5-7 d');
+  // foco con varias filas: el CIE10 elige dentro del grupo; si no, la fila por defecto
+  incluye(enc(ev('889042', 'G060 absceso intracraneal', 'Sistema nervioso central (meningitis, absceso)')), 'Absceso cerebral');
+  incluye(enc(ev('889043', 'R509', 'Sistema nervioso central (meningitis, absceso)')), 'Meningitis bacteriana');
+  incluye(enc(ev('889044', 'M009 artritis septica', 'Osteomielitis / artritis séptica')), 'Artritis séptica');
+  // "Otro" o sin foco: el CIE10, como antes
+  incluye(enc(ev('889045', 'N390', 'Otro')), 'Infección urinaria');
+  incluye(enc(ev('889046', 'N390', '')), 'Infección urinaria');
+  // la revision de duracion usa el foco de cada solicitud previa y el de la actual, y muestra la linea 🎯
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  var conFoco = function (fecha, hc, ams, dx, foco) {
+    var f = filaMatriz(fecha, hc, ams); f[ENCABEZADOS_REALES.indexOf(CAMPOS.DIAGNOSTICO)] = dx; f[ENCABEZADOS_REALES.indexOf(CAMPOS.FOCO)] = foco; return f;
+  };
+  filas.push(conFoco('10/10/2026 08:00:00', '889047', [['CEFAZOLINA', '2000', '8', '14']], 'R509', 'Osteomielitis / artritis séptica'));
+  filas.push(conFoco('24/10/2026 08:00:00', '889047', [['CEFAZOLINA', '2000', '8', '7']], 'R509', 'Osteomielitis / artritis séptica'));
+  var e7 = ev('889047', 'R509', 'Osteomielitis / artritis séptica', [['CEFAZOLINA', '2000', '8', '7']], 'Sepsis');
+  e7.namedValues['Marca temporal'] = ['01/11/2026 10:00:00'];
+  var r7 = revisionProlongado(e7, []);
+  assert.strictEqual(r7.nivel, 0); incluye(r7.bloque.join('\n'), '🎯 Foco: Osteomielitis / artritis séptica · Sepsis');
+  incluye(r7.bloque[r7.bloque.length - 1], '📏 Osteomielitis / espondilodiscitis 42 d');
+  // el caso PROA muestra el foco y el choque, y el diagnostico tal como se escribio (sin la marca interna)
+  var m = construirMensajeDesdeEvento(ev('889048', 'J189', 'Neumonía nosocomial o asociada a ventilador', [['MEROPENEM', '1000', '8', '7'], ['ERTAPENEM', '1000', '24', '7']], 'Choque séptico'));
+  incluye(m, '📋 J189 · Neumonia, no especificada\n🎯 Foco: Neumonía nosocomial o asociada a ventilador · Choque séptico'); noIncluye(m, '§');
+  assert.strictEqual(lineaFoco(ev('889049', 'J189', '', null, 'No')), '');
 });
 
 prueba('ajuste renal en modo prueba: Cockcroft-Gault, tabla por tramos y solo una fila en el registro', function () {

@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.16] - 2026-11-23 (solo Codigo.gs)
+
+### Agregado (segunda edición del formulario, 2026-11-23)
+- Preguntas `Foco infeccioso principal` y `¿Sepsis o choque séptico?` en `CAMPOS` (en la hoja quedaron en AY-AZ; "Estado" y "Observación a la solicitud" pasaron a BA-BB).
+- **El foco define la duración de referencia** por encima del CIE10 (`FOCO_A_SINDROME`, `dxParaSindrome()`): en el caso PROA, en la revisión de duración y en cada solicitud previa del tratamiento continuo que traiga foco. Con un foco de varias filas (SNC: meningitis o absceso; osteomielitis o artritis; infección fúngica invasiva) el CIE10 elige dentro del grupo y, si no, la fila por defecto (meningitis, osteomielitis; la fúngica sin defecto). "Otro", "Profilaxis quirúrgica" (va por el tipo de indicación) y las solicitudes antiguas sin foco siguen con el CIE10 como antes. Los mensajes muestran el diagnóstico tal como se escribió.
+- Caso PROA y revisión: línea `🎯 Foco: Neumonía nosocomial o asociada a ventilador · Choque séptico` (la sepsis solo si no es "No").
+
 ## [1.36.15] - 2026-11-23 (solo Codigo.gs)
 
 ### Agregado (formulario actualizado el 2026-11-23)

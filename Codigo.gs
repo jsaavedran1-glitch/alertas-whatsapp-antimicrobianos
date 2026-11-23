@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.15';
+var VERSION_BOT = '1.36.16';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -269,8 +269,33 @@ var CAMPOS = {
   CREATININA: 'Creatinina sérica (mg/dL)',
   TRR: '¿Terapia de reemplazo renal?',
   TOLERA_VO: '¿Tolera la vía oral o por sonda?',
-  FENOTIPO: 'Fenotipo de resistencia del aislamiento'
+  FENOTIPO: 'Fenotipo de resistencia del aislamiento',
+  // agregadas el 2026-11-23 en una segunda edicion (v1.36.16)
+  FOCO: 'Foco infeccioso principal',
+  SEPSIS: '¿Sepsis o choque séptico?'
 };
+
+// Foco infeccioso del formulario -> fila (clave) de PERTINENCIA_DURACION (v1.36.16). Con varias claves, el diagnostico
+// CIE10 elige entre ellas; si no, 'defecto' (o, sin defecto, la duracion la decide el CIE10 como antes). Sin entrada
+// ("Otro", "Profilaxis quirurgica": la profilaxis va por el tipo de indicacion) la decide el CIE10.
+var FOCO_A_SINDROME = [
+  ['NEUMONIA ADQUIRIDA EN LA COMUNIDAD', ['NEUMONIA']],
+  ['NEUMONIA NOSOCOMIAL', ['NEUMONIA']],
+  ['EMPIEMA', ['EMPIEMA']],
+  ['INFECCION URINARIA', ['ITU']],
+  ['INFECCION INTRAABDOMINAL', ['INTRAABDOMINAL']],
+  ['PIEL Y TEJIDOS BLANDOS', ['PIEL']],
+  ['PIE DIABETICO', ['PIE_DIABETICO']],
+  ['INFECCION DEL SITIO OPERATORIO', ['ISO']],
+  ['OSTEOMIELITIS', ['OSTEOMIELITIS', 'ARTRITIS'], 'OSTEOMIELITIS'],
+  ['INFECCION DE PROTESIS', ['PROTESIS']],
+  ['BACTERIEMIA / SEPSIS SIN FOCO', ['BACTERIEMIA']],
+  ['BACTERIEMIA ASOCIADA A CATETER', ['CATETER']],
+  ['ENDOCARDITIS', ['ENDOCARDITIS']],
+  ['SISTEMA NERVIOSO CENTRAL', ['MENINGITIS', 'ABSCESO_CEREBRAL'], 'MENINGITIS'],
+  ['NEUTROPENIA FEBRIL', ['NEUTROPENIA']],
+  ['INFECCION FUNGICA INVASIVA', ['CANDIDEMIA', 'CRIPTOCOCOSIS', 'HISTOPLASMOSIS', 'ASPERGILOSIS']]
+];
 
 var SLOTS = [
   { nombre: 'Nombre Antimicrobiano 1', dosis: 'Dosis en miligramos o UI AB1', via: 'Vía de adminsitración de  AM1', frecuencia: 'Frecuencia AM 1 (En Horas)', dias: 'Días ordenados AM1' },
@@ -1090,6 +1115,17 @@ function escribirPertinencia(hoja) {
 // primero las palabras clave, que pueden ser mas precisas ("SEPSIS URINARIA" es ITU aunque el cruce de A419), y el
 // codigo solo si ninguna coincide.
 function sindromePara(diagnosticoCrudo, tabla) {
+  // "§FOCO:..§ J189": el foco del formulario manda (dxParaSindrome, v1.36.16)
+  var marca = String(diagnosticoCrudo || '').match(/^§FOCO:([^§]*)§\s*/);
+  if (marca) {
+    var entrada = entradaFoco(marca[1]), resto = String(diagnosticoCrudo).slice(marca[0].length);
+    var porCie = sindromePara(resto, tabla);
+    if (!entrada) return porCie;
+    var fila = function(clave) { return tabla.filter(function(f) { return f.clave === clave; })[0] || null; };
+    if (porCie && entrada[1].indexOf(porCie.clave) > -1) return porCie;
+    if (entrada[1].length === 1) return fila(entrada[1][0]) || porCie;
+    return entrada[2] ? (fila(entrada[2]) || porCie) : porCie;
+  }
   var resuelto = resolverCIE10(diagnosticoCrudo), codigo = resuelto.codigo;
   var porCodigo = function() {
     var mejor = null, largo = 0;
@@ -1112,6 +1148,20 @@ function sindromePara(diagnosticoCrudo, tabla) {
     return mejor;
   };
   return resuelto.via === 'texto' ? (porPalabras() || porCodigo()) : (porCodigo() || porPalabras());
+}
+
+// Entrada de FOCO_A_SINDROME para el texto del foco, o null.
+function entradaFoco(foco) {
+  var n = normalizarTexto(foco);
+  if (!n) return null;
+  return FOCO_A_SINDROME.filter(function(x) { return n.indexOf(x[0]) === 0; })[0] || null;
+}
+
+// Diagnostico para la referencia de duracion: con foco, "§FOCO:<foco>§ <diagnostico>" (sindromePara lo lee primero); sin
+// foco, el diagnostico tal cual. Solo para la logica de duracion: los mensajes muestran el diagnostico escrito.
+function dxParaSindrome(diagnostico, foco) {
+  var f = String(foco || '').trim();
+  return (f && f !== '-') ? '§FOCO:' + f + '§ ' + String(diagnostico || '') : diagnostico;
 }
 
 // Aislamiento en mayusculas y sin tildes, con el mecanismo de resistencia escrito en palabras llevado a su sigla.
@@ -1504,7 +1554,7 @@ function seguimientoPaciente(e) {
         var nombre = nombreLimpio(dato(slot.nombre));
         if (!nombre || nombre === '-') return;
         var p = { fecha: fecha, nombre: nombre, dias: numeroONulo(dato(slot.dias)), diasTexto: dato(slot.dias), dosis: dato(slot.dosis),
-          via: dato(slot.via), frecuencia: dato(slot.frecuencia), dx: dato(CAMPOS.DIAGNOSTICO) };
+          via: dato(slot.via), frecuencia: dato(slot.frecuencia), dx: dxParaSindrome(dato(CAMPOS.DIAGNOSTICO), dato(CAMPOS.FOCO)) };
         previas.push(p);
         items.push(nombre + ' ' + (p.dosis || '-') + ' mg cada ' + (p.frecuencia || '-') + ' h por ' + (p.dias !== null ? formatoNumero(p.dias, 0) + ' d' : '-'));
       });
@@ -1705,7 +1755,7 @@ function revisionProlongado(e, coincidenciasOpt) {
   var dxActual = campoDelEvento(valores, CAMPOS.DIAGNOSTICO);
   var actuales = leerSlots(e).filter(function(am) { return esAntifungico(am.nombre) === p.antifungico; });
 
-  var dur = duracionFrenteReferencia(p.episodio.solicitudes.map(function(x) { return x.dx; }).concat([dxActual]),
+  var dur = duracionFrenteReferencia(p.episodio.solicitudes.map(function(x) { return x.dx; }).concat([dxParaSindrome(dxActual, campoDelEvento(valores, CAMPOS.FOCO))]),
     tipoIndicacionTexto(campo('TIPO_INDICACION')), p.antifungico, p.proyectado);
   var nivel = dur.nivel >= 0 ? dur.nivel : 1;   // sin referencia para sus patologias, se sugiere verificar
 
@@ -1715,6 +1765,8 @@ function revisionProlongado(e, coincidenciasOpt) {
   var bloque = ['HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
     (servicio !== '-' ? ' · ' + servicio : '') + (cama !== '-' ? ' · Cama ' + cama : '')];
   bloque.push(E(0x1F4CB) + ' ' + diagnosticoCorto(dxActual || '-'));
+  var foco = lineaFoco(e);
+  if (foco) bloque.push(foco);
   bloque.push(E(0x23F1) + E(0xFE0F) + ' Lleva ' + formatoNumero(p.dias, 0) + ' d de ' + tipo +
     (p.proyectado > p.dias ? '; con esta orden llegaría a ' + formatoNumero(p.proyectado, 0) + ' d' : ''));
   var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
@@ -1896,6 +1948,17 @@ function lineaViaOral(e, ams) {
     (nombres.length > 1 ? ' tienen' : ' tiene') + ' presentación oral con biodisponibilidad alta';
 }
 
+// "🎯 Foco: Neumonía adquirida en la comunidad · Choque séptico" ('' sin foco ni sepsis). fuente: el evento o la funcion
+// campo(clave) del mensaje.
+function lineaFoco(fuente) {
+  var leer = typeof fuente === 'function' ? fuente : function(clave) { return campoDelEvento((fuente && fuente.namedValues) || {}, CAMPOS[clave]) || '-'; };
+  var foco = String(leer('FOCO') || '').trim(), sepsis = String(leer('SEPSIS') || '').trim();
+  var partes = [];
+  if (foco && foco !== '-') partes.push('Foco: ' + foco);
+  if (sepsis && sepsis !== '-' && !/^no$/i.test(sepsis)) partes.push(sepsis);
+  return partes.length ? String.fromCodePoint(0x1F3AF) + ' ' + partes.join(' · ') : '';
+}
+
 // Fenotipo del aislamiento para la linea 🦠: "BLEE", "carbapenemasa", "SAMR", "sensible", "antibiograma pendiente"; ''
 // si no hay aislamiento o no se respondio.
 function fenotipoCorto(valor) {
@@ -1974,7 +2037,8 @@ function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var micro = campoDelEvento(valores, CAMPOS.MICROORGANISMO);
   var esquemas = coincidencias.concat(acompanantesDe(e));
   asignarCursos(esquemas, seguimientoPaciente(e));
-  return analisisPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
+  return analisisPertinencia(dxParaSindrome(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), campoDelEvento(valores, CAMPOS.FOCO)),
+    tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
     micro === '-' ? '' : micro, esquemas, { cultivos: campoDelEvento(valores, CAMPOS.CULTIVOS) });
 }
 
@@ -2037,6 +2101,7 @@ function lineasPaciente(campo, pesoKg) {
   var cama = campo('CAMA'), especialidad = campo('ESPECIALIDAD');
   var lineas = [E(0x1F4CD) + ' ' + campo('SERVICIO') + (cama !== '-' ? ' · Cama ' + cama : '')];
   lineas.push(E(0x1F4CB) + ' ' + diagnosticoCorto(campo('DIAGNOSTICO')));
+  if (lineaFoco(campo)) lineas.push(lineaFoco(campo));
   lineas.push(E(0x1F4C4) + ' HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
     ' · ' + ((pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-') + (especialidad !== '-' ? ' · ' + especialidad : ''));
   // "BETALACTAMASA DE AMPLIO ESPECTRO" -> "BLEE" (solo en el mensaje)
