@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.18] - 2026-11-23 (solo IA_PROA.gs)
+
+### Cambiado (decisión del referente, tras el primer informe en producción)
+- Informe semanal: la primera línea queda `📝 186 solicitudes (sem. ant. 167) · 144 pacientes`, sin "15 con restringido (sem. ant. 7)". Ponía solicitudes junto a pacientes y se leía como 15 pacientes (eran 15 solicitudes de 12 pacientes); además no incluía vancomicina ni linezolid, que sí aparecen en la línea de restringidos.
+- La IA ya no recibe ese número (`datosParaIa_`), para que no lo comente ("las solicitudes con restringido, de 7 a 15"). Sigue recibiendo el porcentaje de interconsulta a Infectología en restringidos, que el informe muestra.
+
 ## [1.36.17] - 2026-11-23 (solo Codigo.gs)
 
 ### Agregado (tercera edición del formulario)

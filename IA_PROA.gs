@@ -29,7 +29,7 @@
 // ultimo numero y basta con pegar este. Si mayor.menor no coincide, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
 
-var VERSION_INFORME = "1.36.11";
+var VERSION_INFORME = "1.36.18";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
@@ -409,8 +409,8 @@ function mensajeInforme_(a, ant, ia) {
     lineas.push("Sin solicitudes en el formulario en este periodo" + sem(ant.solicitudes) + ".");
     return lineas.join("\n");
   }
-  lineas.push(E(0x1F4DD) + " " + a.solicitudes + " solicitudes" + sem(ant.solicitudes) + " · " + a.pacientes + " pacientes · " +
-    a.solicitudes_con_restringido + " con restringido" + sem(ant.solicitudes_con_restringido));
+  // sin el numero de solicitudes con restringido (decision del referente, 2026-11-23): mezclaba solicitudes y pacientes
+  lineas.push(E(0x1F4DD) + " " + a.solicitudes + " solicitudes" + sem(ant.solicitudes) + " · " + a.pacientes + " pacientes");
   var f = function(x) { return formatoNumero(x, 1) + " d"; };
   // "CEFEPIME 9 d (49)": la medida de INFORME_MEDIDA (pacientes)
   var conPacientes = function(x) { return x.nombre + " " + f(x[campoMedida_()]) + " (" + x.pacientes + ")"; };
@@ -438,10 +438,12 @@ function mensajeInforme_(a, ant, ia) {
   return lineas.join("\n");
 }
 
-// Lo que va a la API: los indicadores sin historia clinica (los tratamientos largos sin HC).
+// Lo que va a la API: los indicadores sin historia clinica (los tratamientos largos sin HC) y sin el numero de
+// solicitudes con restringido, que el informe ya no muestra (la IA lo comentaba: "de 7 a 15, cifras aun pequenas").
 function datosParaIa_(d) {
   var copia = JSON.parse(JSON.stringify(d));
   copia.tratamientos_largos.forEach(function(x) { delete x.hc; });
+  delete copia.solicitudes_con_restringido;
   return copia;
 }
 

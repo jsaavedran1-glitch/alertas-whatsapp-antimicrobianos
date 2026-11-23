@@ -1297,7 +1297,7 @@ function conSemanaFicticia(fn) {
 // 1003: 3 d; 1005: ertapenem 5 d; 1006: ertapenem 7 d; 1004: caspofungina 14 d.
 // Ertapenem: mediana de 18, 5 y 7 = 7 d (el promedio seria 10). Mas largos: 18, 16 y 14 d.
 var CIFRAS_SEMANA = '*📊 INFORME SEMANAL PROA · 16/11–22/11*\n' +
-  '📝 7 solicitudes (sem. ant. 3) · 6 pacientes · 5 con restringido (sem. ant. 1)\n' +
+  '📝 7 solicitudes (sem. ant. 3) · 6 pacientes\n' +
   '💊 Mediana de días de tratamiento por antimicrobiano (pacientes): ERTAPENEM 7 d (3) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)\n' +
   '🔒 Restringidos: ERTAPENEM 7 d (3) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)\n' +
   '🏥 Servicios: UCI A 71% · Hosp. Medicina Interna 14% · Cirugía 14%\n' +
@@ -1369,6 +1369,8 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
         incluye(c.messages[0].content, '"solicitudes": 7'); incluye(c.messages[0].content, '"mediana_dias": 7');
         incluye(c.messages[0].content, '"dias_por_antimicrobiano": "mediana por paciente"'); noIncluye(c.messages[0].content, 'promedio_dias');
         noIncluye(c.messages[0].content, 'tratamiento_continuo'); incluye(c.messages[0].content, '"periodo": "09/11–15/11"');
+        // la IA no recibe el numero de solicitudes con restringido (el informe no lo muestra); si el porcentaje de interconsulta
+        noIncluye(c.messages[0].content, 'solicitudes_con_restringido'); incluye(c.messages[0].content, '"restringidos_con_interconsulta_pct": 60');
         ['1001', '1002', '1004', '1006', '2002', '"hc"'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
       });
       var fila = HOJAS['INFORMES_PROA']._filas[1];

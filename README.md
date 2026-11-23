@@ -137,7 +137,7 @@ Ejemplo con datos ficticios:
 
 ```
 *📊 INFORME SEMANAL PROA · 16/11–22/11*
-📝 6 solicitudes (sem. ant. 3) · 5 pacientes · 4 con restringido (sem. ant. 1)
+📝 6 solicitudes (sem. ant. 3) · 5 pacientes
 💊 Mediana de días de tratamiento por antimicrobiano (pacientes): ERTAPENEM 7 d (3) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)
 🔒 Restringidos: ERTAPENEM 7 d (3) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)
 🏥 Servicios: UCI A 67% · Hosp. Medicina Interna 17% · Cirugía 17%
