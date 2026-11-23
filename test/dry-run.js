@@ -1220,26 +1220,89 @@ prueba('lectura de la IA: intervalos en horas se aceptan; dias o porcentajes que
   incluye(l.descartados.join(' | '), 'cifra que no está en los datos: 25');
 });
 
-prueba('crearTriggerInformeProa deja un solo activador semanal (lunes 7:00, hora de Colombia)', function () {
-  var activadores = [{ f: 'enviarInformeSemanalProa' }, { f: 'notificarNuevaRespuesta' }].map(function (x) { return { getHandlerFunction: function () { return x.f; } }; });
-  var creado = null, real = global.ScriptApp;
+prueba('crearTriggerInformeProa deja un activador semanal (lunes 7:00) y uno mensual (dia 1, 7:00), hora de Colombia', function () {
+  var activadores = [{ f: 'enviarInformeSemanalProa' }, { f: 'enviarIndicadorMensualProa' }, { f: 'notificarNuevaRespuesta' }]
+    .map(function (x) { return { getHandlerFunction: function () { return x.f; } }; });
+  var creados = [], real = global.ScriptApp, logReal = Logger.log;
   global.ScriptApp = {
     WeekDay: { MONDAY: 'MONDAY' },
     getProjectTriggers: function () { return activadores.slice(); },
     deleteTrigger: function (t) { activadores.splice(activadores.indexOf(t), 1); },
     newTrigger: function (f) {
       var cfg = { f: f };
-      var b = { timeBased: function () { return b; }, onWeekDay: function (d) { cfg.dia = d; return b; }, atHour: function (h) { cfg.hora = h; return b; },
-        inTimezone: function (z) { cfg.zona = z; return b; },
-        create: function () { creado = cfg; var t = { getHandlerFunction: function () { return f; } }; activadores.push(t); return t; } };
+      var b = { timeBased: function () { return b; }, onWeekDay: function (d) { cfg.dia = d; return b; }, onMonthDay: function (d) { cfg.diaMes = d; return b; },
+        atHour: function (h) { cfg.hora = h; return b; }, inTimezone: function (z) { cfg.zona = z; return b; },
+        create: function () { creados.push(cfg); var t = { getHandlerFunction: function () { return f; } }; activadores.push(t); return t; } };
       return b;
     }
   };
+  Logger.log = function () {};
   try {
     crearTriggerInformeProa();
-    assert.deepStrictEqual(activadores.map(function (t) { return t.getHandlerFunction(); }).sort(), ['enviarInformeSemanalProa', 'notificarNuevaRespuesta']);
-    assert.deepStrictEqual(creado, { f: 'enviarInformeSemanalProa', dia: 'MONDAY', hora: 7, zona: 'America/Bogota' });
-  } finally { global.ScriptApp = real; }
+    crearTriggerInformeProa();   // se puede repetir: no duplica
+    assert.deepStrictEqual(activadores.map(function (t) { return t.getHandlerFunction(); }).sort(),
+      ['enviarIndicadorMensualProa', 'enviarInformeSemanalProa', 'notificarNuevaRespuesta']);
+    assert.deepStrictEqual(creados.slice(-2), [{ f: 'enviarInformeSemanalProa', dia: 'MONDAY', hora: 7, zona: 'America/Bogota' },
+      { f: 'enviarIndicadorMensualProa', diaMes: 1, hora: 7, zona: 'America/Bogota' }]);
+  } finally { global.ScriptApp = real; Logger.log = logReal; }
+});
+
+// ---- Indicador mensual: solicitudes con razon del cambio "POR INTERVENCION PROA" ----------------------------
+prueba('indicador mensual: solicitudes "POR INTERVENCION PROA" del mes cerrado, el anterior y la tendencia de 6 meses', function () {
+  var matrizReal = HOJAS['Respuestas de formulario 1'], informesReal = HOJAS['INFORMES_PROA'], propsReal = global.PropertiesService;
+  var R = 'Si fue cambiado, cual fue la razón?', CF = [['CEFEPIME', '2000', '8', '7']];
+  var fila = function (fecha, razon, ams) { var o = {}; o[R] = razon; return filaInforme(fecha, '3001', o, ams || CF); };
+  HOJAS['Respuestas de formulario 1'] = hojaDeFilas([ENCABEZADOS_REALES,
+    fila('15/05/2026 08:00:00', 'POR INTERVENCIÓN PROA'),                    // antes de la tendencia: no cuenta
+    fila('10/06/2026 08:00:00', 'POR INTERVENCIÓN PROA'),
+    fila('05/09/2026 08:00:00', 'POR INTERVENCIÓN PROA'), fila('06/09/2026 08:00:00', 'CONDICIÓN PROPIA DE PACIENTE'),
+    fila('10/10/2026 08:00:00', 'POR INTERVENCIÓN PROA'), fila('11/10/2026 08:00:00', 'CONDICIÓN PROPIA DE PACIENTE'),
+    fila('12/10/2026 08:00:00', 'POR ANTIBIOGRAMA'),
+    fila('02/11/2026 08:00:00', 'POR INTERVENCIÓN PROA'), fila('03/11/2026 08:00:00', 'POR INTERVENCIÓN PROA'),
+    fila('04/11/2026 08:00:00', ' Por intervencion  proa'),                  // sin tilde, minusculas y espacios: cuenta
+    fila('05/11/2026 08:00:00', 'CONDICIÓN PROPIA DE PACIENTE'),
+    fila('20/11/2026 08:00:00', 'POR INTERVENCIÓN PROA', []),                // sin antimicrobiano: no es solicitud
+    fila('30/11/2026 23:30:00', 'POR INTERVENCIÓN PROA'),
+    fila('01/12/2026 06:00:00', 'POR INTERVENCIÓN PROA')                     // mes en curso
+  ]);
+  delete HOJAS['INFORMES_PROA'];
+  var esperado = '*📈 INDICADOR MENSUAL PROA · noviembre 2026*\n' +
+    '🤝 Solicitudes por intervención PROA: *4* de 5 (80%) · octubre 1 de 3 (33,3%)\n' +
+    '📅 Últimos 6 meses: jun 1 · jul 0 · ago 0 · sep 1 · oct 1 · nov 4\n' +
+    '_Razón del cambio «Por intervención PROA» que marca el médico en el formulario; las suspensiones no pasan por el formulario._';
+  propsInforme({ ANTHROPIC_API_KEY: '' });
+  try {
+    var ind = construirIndicadorMensual_(new Date(2026, 11, 1, 7, 0, 0));
+    assert.strictEqual(ind.mensaje, esperado);
+    assert.strictEqual(ind.periodo, 'noviembre 2026');
+    assert.deepStrictEqual([ind.enCurso.nombre, ind.enCurso.proa, ind.enCurso.solicitudes], ['diciembre', 1, 1]);
+    // cambio de año: el 1 de enero informa diciembre y la tendencia va de julio a diciembre
+    var enero = construirIndicadorMensual_(new Date(2027, 0, 1, 7, 0, 0));
+    assert.strictEqual(enero.periodo, 'diciembre 2026');
+    assert.deepStrictEqual(enero.meses.map(function (m) { return m.nombre; }), ['julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']);
+    // el activador lo envia al destino del informe semanal (PRUEBA BOT por defecto) y deja su fila en INFORMES_PROA, sin IA
+    conApiInforme(function () { throw new Error('el indicador mensual no llama a la IA'); }, function (peticiones) {
+      enviarIndicadorMensual_(new Date(2026, 11, 1, 7, 0, 0));
+      assert.strictEqual(peticiones.length, 0);
+      assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].chatId, CHAT_PRUEBA_BOT);
+      assert.strictEqual(envios[0].message, esperado + '\n\n_Ecosistema de Vigilancia Digital Servicio Farmacéutico · QF JPSN_');
+      var f = HOJAS['INFORMES_PROA']._filas[1];
+      assert.strictEqual(f[1], 'noviembre 2026 (indicador mensual)'); assert.strictEqual(f[2], 'PRUEBA BOT'); assert.strictEqual(f[3], 'SI');
+      assert.strictEqual(f[4], esperado); assert.strictEqual(f[5], ''); assert.strictEqual(f[10], 'Código v' + VERSION_BOT + ' · IA_PROA v' + VERSION_INFORME);
+      noIncluye(f[4], '3001');
+    });
+    // la prueba no envia nada y muestra el mes en curso
+    var log = [], logReal = Logger.log;
+    Logger.log = function () { log.push(Array.prototype.slice.call(arguments).join(' | ')); };
+    conApiInforme({}, function () {
+      try { probarIndicadorMensual(); } finally { Logger.log = logReal; }
+      assert.strictEqual(envios.length, 0);
+    });
+    incluye(log.join('\n'), 'PRUEBA (no se envió nada)'); incluye(log.join('\n'), 'INDICADOR MENSUAL PROA');
+  } finally {
+    HOJAS['Respuestas de formulario 1'] = matrizReal; global.PropertiesService = propsReal;
+    if (informesReal) HOJAS['INFORMES_PROA'] = informesReal; else delete HOJAS['INFORMES_PROA'];
+  }
 });
 
 console.log();

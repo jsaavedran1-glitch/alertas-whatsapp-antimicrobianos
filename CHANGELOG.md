@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.9] - 2026-11-23 (solo IA_PROA.gs)
+
+### Agregado (decisión del referente)
+- **Indicador mensual PROA:** el día 1 de cada mes a las 7:00, al mismo destino del informe semanal (`INFORME_PROA_DESTINO`, hoy PRUEBA BOT), un mensaje con las solicitudes del mes que terminó con razón del cambio **"POR INTERVENCIÓN PROA"**: número, total de solicitudes del mes y porcentaje, el mes anterior y la tendencia de los últimos 6 meses (`INDICADOR_MESES`). Lo calcula el código, sin IA; deja su fila en `INFORMES_PROA` con el periodo "mes año (indicador mensual)". Cuenta las solicitudes con algún antimicrobiano (la misma definición del informe semanal) y lee solo cuatro columnas de la matriz. Se queda corto frente a la realidad: la pregunta es obligatoria, la mayoría responde "Condición propia del paciente" y una suspensión no genera formulario. En los datos reales: 83 solicitudes en los últimos 90 días; 37 en septiembre, 21 en octubre y 25 en noviembre hasta el 22.
+- `crearTriggerInformeProa()` crea ahora los dos activadores (semanal y mensual) y se puede repetir sin duplicarlos. Hay que ejecutarlo una vez más después de pegar esta versión.
+- `probarIndicadorMensual()` (no envía nada; muestra también la cifra parcial del mes en curso) y `enviarIndicadorMensualAPruebaBot()` (solo a PRUEBA BOT).
+
 ## [1.36.8] - 2026-11-23 (solo Codigo.gs; la pestaña ya cambió)
 
 ### Agregado (decisión del referente)

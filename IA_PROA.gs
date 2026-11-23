@@ -1,5 +1,5 @@
 // =====================================================================
-// IA_PROA.gs - Informe semanal PROA para el comite, con lectura asistida por IA (API de Claude).
+// IA_PROA.gs - Informe semanal PROA para el comite, con lectura asistida por IA (API de Claude), e indicador mensual.
 // Servicio Farmaceutico - Hospital Departamental de Villavicencio E.S.E.
 //
 // Enfoque (v1.34.0, decision del referente): la IA ya no opina caso por caso. Una vez por semana (lunes,
@@ -10,6 +10,10 @@
 // codigo descarta cualquier frase con una cifra que no este en los datos o con lenguaje de juicio. Sin
 // ANTHROPIC_API_KEY, o si la API falla, el informe sale igual, solo con las cifras.
 //
+// Indicador mensual (v1.36.9, decision del referente): el dia 1 de cada mes, a la misma hora y al mismo destino, las
+// solicitudes del mes que termino con razon del cambio "POR INTERVENCION PROA", con el mes anterior y la tendencia de
+// INDICADOR_MESES meses. Lo calcula el codigo, sin IA.
+//
 // Propiedades del script:
 //   ANTHROPIC_API_KEY        opcional: la lectura de la IA. Sin ella, informe solo con cifras.
 //   INFORME_PROA_DESTINO     PRUEBA (por defecto): el informe va a PRUEBA BOT. PRODUCCION: al grupo PROA.
@@ -18,13 +22,14 @@
 //   GREENAPI_PRUEBA_CHATID   opcional; por defecto IA_CHAT_PRUEBA (PRUEBA BOT).
 //
 // A la API solo salen cifras agregadas: sin historia clinica, nombres, camas ni medicos.
-// Activador: crearTriggerInformeProa() (una vez). Prueba sin enviar nada: probarInformeProa(dias).
+// Activadores: crearTriggerInformeProa() (una vez; crea el semanal y el mensual). Prueba sin enviar nada: probarInformeProa(dias)
+// y probarIndicadorMensual().
 // Usa funciones de Codigo.gs (la regla del tratamiento continuo, entre otras). VERSION_INFORME y VERSION_BOT comparten
 // mayor.menor (1.36): un cambio en los dos archivos sube la menor y se pegan juntos; uno solo en este archivo sube su
 // ultimo numero y basta con pegar este. Si mayor.menor no coincide, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
 
-var VERSION_INFORME = "1.36.3";
+var VERSION_INFORME = "1.36.9";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
@@ -124,20 +129,117 @@ function enviarInformeAPruebaBot(dias) {
   Logger.log("PRUEBA BOT: " + JSON.stringify(envio) + "\n" + textoRegistroIa_(inf.ia));
 }
 
-// Crea (o recrea) el activador del informe: lunes a las INFORME_HORA, hora de Colombia. Solo toca los activadores
-// de este proyecto que llaman a enviarInformeSemanalProa.
+// Crea (o recrea) los activadores de los informes, hora de Colombia: el semanal (lunes a las INFORME_HORA) y el indicador
+// mensual (dia 1 a las INFORME_HORA). Solo toca los activadores de este proyecto que llaman a esas dos funciones.
 function crearTriggerInformeProa() {
+  var funciones = ["enviarInformeSemanalProa", "enviarIndicadorMensualProa"];
   ScriptApp.getProjectTriggers().forEach(function(t) {
-    if (t.getHandlerFunction() === "enviarInformeSemanalProa") ScriptApp.deleteTrigger(t);
+    if (funciones.indexOf(t.getHandlerFunction()) > -1) ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger("enviarInformeSemanalProa").timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(INFORME_HORA)
     .inTimezone("America/Bogota").create();
+  ScriptApp.newTrigger("enviarIndicadorMensualProa").timeBased().onMonthDay(1).atHour(INFORME_HORA)
+    .inTimezone("America/Bogota").create();
+  Logger.log("Activadores creados: informe semanal (lunes, " + INFORME_HORA + ":00) e indicador mensual (día 1, " + INFORME_HORA +
+    ":00), hora de Colombia.");
 }
 
 function destinoInforme_() {
   var props = PropertiesService.getScriptProperties();
   if (String(props.getProperty("INFORME_PROA_DESTINO") || "").trim().toUpperCase() === "PRODUCCION") return { nombre: "PRODUCCION", chatId: null };
   return { nombre: "PRUEBA BOT", chatId: props.getProperty("GREENAPI_PRUEBA_CHATID") || IA_CHAT_PRUEBA };
+}
+
+// =====================================================================
+// Indicador mensual: solicitudes "POR INTERVENCION PROA"
+// =====================================================================
+// La razon la marca el medico en la pregunta "Si fue cambiado, cual fue la razon?" del formulario. Cuenta las solicitudes
+// con algun antimicrobiano (la misma definicion del informe semanal) por mes calendario. Se queda corto: la pregunta es
+// obligatoria y la mayoria responde "Condicion propia del paciente", y una suspension no genera formulario.
+var INDICADOR_MESES = 6;                              // meses de la tendencia, terminando en el mes que se informa
+var INDICADOR_RAZON_PROA = /INTERVENCION\s+PROA/;     // sobre la razon normalizada (sin tildes, en mayusculas)
+var MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+// Activador mensual (dia 1 a las INFORME_HORA): el indicador del mes que termino, al destino del informe semanal
+// (INFORME_PROA_DESTINO), con su fila en INFORMES_PROA.
+function enviarIndicadorMensualProa() { enviarIndicadorMensual_(new Date()); }
+
+function enviarIndicadorMensual_(hoy) {
+  var ind = construirIndicadorMensual_(hoy);
+  var destino = destinoInforme_();
+  var envio = enviarAlertaWhatsApp(ind.mensaje, { chatId: destino.chatId, sinFirma: true });
+  registrarInforme_({ actual: { periodo: ind.periodo + " (indicador mensual)" }, mensaje: ind.mensaje }, destino.nombre, !!(envio && envio.ok));
+}
+
+// Escribe en el registro de ejecucion el indicador del ultimo mes cerrado y la cifra parcial del mes en curso. No envia nada.
+function probarIndicadorMensual() {
+  var ind = construirIndicadorMensual_(new Date());
+  Logger.log("PRUEBA (no se envió nada) · " + textoVersiones_() + " · destino configurado: %s\n\n%s\n\n▶ Mes en curso (parcial): %s",
+    destinoInforme_().nombre, ind.mensaje, ind.enCurso.nombre + " " + ind.enCurso.proa + fraccionIndicador_(ind.enCurso));
+}
+
+// Envia SOLO a PRUEBA BOT (IA_CHAT_PRUEBA fijo) el indicador del ultimo mes cerrado, para verlo en WhatsApp.
+function enviarIndicadorMensualAPruebaBot() {
+  var envio = enviarAlertaWhatsApp(construirIndicadorMensual_(new Date()).mensaje, { chatId: IA_CHAT_PRUEBA, sinFirma: true });
+  Logger.log("PRUEBA BOT: " + JSON.stringify(envio));
+}
+
+// { mensaje, periodo ("noviembre 2026"), meses: los INDICADOR_MESES meses cerrados (el ultimo es el que se informa), cada uno
+// { nombre, anio, solicitudes, proa }, enCurso: el mes de `hoy`, parcial }.
+function construirIndicadorMensual_(hoy) {
+  var meses = [];
+  for (var k = INDICADOR_MESES; k >= 0; k--) {
+    var desde = new Date(hoy.getFullYear(), hoy.getMonth() - k, 1);
+    meses.push({ desde: desde, hasta: new Date(desde.getFullYear(), desde.getMonth() + 1, 1), nombre: MESES_ES[desde.getMonth()],
+      anio: desde.getFullYear(), solicitudes: 0, proa: 0 });
+  }
+  solicitudesConRazon_(meses[0].desde).forEach(function(s) {
+    meses.forEach(function(m) { if (s.fecha >= m.desde && s.fecha < m.hasta) { m.solicitudes++; if (s.proa) m.proa++; } });
+  });
+  var enCurso = meses.pop(), mes = meses[meses.length - 1], anterior = meses[meses.length - 2];
+  return { mensaje: mensajeIndicadorMensual_(mes, anterior, meses), periodo: mes.nombre + " " + mes.anio, meses: meses, enCurso: enCurso };
+}
+
+// " de 773 (2,7%)"
+function fraccionIndicador_(m) {
+  return " de " + m.solicitudes + " (" + formatoNumero(m.solicitudes ? 100 * m.proa / m.solicitudes : 0, 1) + "%)";
+}
+
+function mensajeIndicadorMensual_(mes, anterior, meses) {
+  var E = function(cp) { return String.fromCodePoint(cp); };
+  return [
+    "*" + E(0x1F4C8) + " INDICADOR MENSUAL PROA · " + mes.nombre + " " + mes.anio + "*",
+    E(0x1F91D) + " Solicitudes por intervención PROA: *" + mes.proa + "*" + fraccionIndicador_(mes) + " · " + anterior.nombre + " " +
+      anterior.proa + fraccionIndicador_(anterior),
+    E(0x1F4C5) + " Últimos " + meses.length + " meses: " + meses.map(function(m) { return m.nombre.slice(0, 3) + " " + m.proa; }).join(" · "),
+    "_Razón del cambio «Por intervención PROA» que marca el médico en el formulario; las suspensiones no pasan por el formulario._"
+  ].join("\n");
+}
+
+// [{ fecha, proa }] de las solicitudes con algun antimicrobiano desde `desde`. Lee solo la marca temporal, la razon del
+// cambio y los nombres de los antimicrobianos, desde la primera fila del periodo.
+function solicitudesConRazon_(desde) {
+  var hoja = libroProa().getSheetByName(CONFIG.HOJA_RESPUESTAS);
+  var ultima = hoja ? hoja.getLastRow() : 0;
+  if (ultima < 2) return [];
+  var encabezados = hoja.getRange(1, 1, 1, hoja.getLastColumn()).getValues()[0].map(normalizarClave);
+  var col = function(nombre) { return encabezados.indexOf(normalizarClave(nombre)); };
+  var cFecha = col("Marca temporal"), cRazon = col(CAMPOS.RAZON_CAMBIO);
+  var cNombres = SLOTS.map(function(s) { return col(s.nombre); }).filter(function(c) { return c > -1; });
+  if (cFecha < 0 || cRazon < 0 || !cNombres.length) return [];
+  var fechas = hoja.getRange(2, cFecha + 1, ultima - 1, 1).getValues().map(function(f) { return fechaDe(f[0]); });
+  var i0 = -1;
+  for (var i = 0; i < fechas.length && i0 < 0; i++) if (fechas[i] && fechas[i] >= desde) i0 = i;
+  if (i0 < 0) return [];
+  var columna = function(c) { return hoja.getRange(2 + i0, c + 1, fechas.length - i0, 1).getDisplayValues(); };
+  var razones = columna(cRazon), nombres = cNombres.map(columna), res = [];
+  for (var j = 0; j < fechas.length - i0; j++) {
+    var f = fechas[i0 + j];
+    if (!f || f < desde) continue;
+    var conAm = nombres.some(function(c) { var v = String(c[j][0] || "").trim(); return v && v !== "-"; });
+    if (conAm) res.push({ fecha: f, proa: INDICADOR_RAZON_PROA.test(normalizarTexto(razones[j][0])) });
+  }
+  return res;
 }
 
 // =====================================================================
@@ -480,7 +582,7 @@ function textoRegistroIa_(ia) {
     (l.analisis ? " · Razonamiento (resumen): " + l.analisis : "");
 }
 
-// Una fila por informe en la pestana INFORMES_PROA (la crea si no existe). Nunca interrumpe el envio.
+// Una fila por informe (semanal o indicador mensual) en la pestana INFORMES_PROA (la crea si no existe). Nunca interrumpe el envio.
 var ENCABEZADOS_INFORMES = ["Fecha", "Periodo", "Destino", "Enviado", "Mensaje", "IA: descartados y repaso", "Modelo", "Tokens de entrada",
   "Tokens de salida", "Costo aproximado USD", "Versión"];
 
@@ -491,7 +593,8 @@ function registrarInforme_(inf, destino, enviado) {
     if (!hoja) { hoja = libro.insertSheet(INFORME_HOJA); hoja.appendRow(ENCABEZADOS_INFORMES); }
     else if (hoja.getLastColumn() < ENCABEZADOS_INFORMES.length) hoja.getRange(1, 1, 1, ENCABEZADOS_INFORMES.length).setValues([ENCABEZADOS_INFORMES]);
     var ia = inf.ia && inf.ia.lectura ? inf.ia : null;
-    hoja.appendRow([new Date(), inf.actual.periodo, destino, enviado ? "SI" : "NO", inf.mensaje, textoRegistroIa_(inf.ia).slice(0, 5000),
+    // el indicador mensual no lleva IA: esa columna queda vacia
+    hoja.appendRow([new Date(), inf.actual.periodo, destino, enviado ? "SI" : "NO", inf.mensaje, inf.ia === undefined ? "" : textoRegistroIa_(inf.ia).slice(0, 5000),
       ia ? ia.modelo : "", ia ? ia.entrada : "", ia ? ia.salida : "", ia ? ia.costo : "", textoVersiones_()]);
   } catch (err) {
     Logger.log("No se pudo registrar el informe: " + err);

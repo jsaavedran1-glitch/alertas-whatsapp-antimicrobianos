@@ -159,6 +159,10 @@ La IA no escribe su razonamiento en la respuesta: el modelo declina ese pedido (
 
 Para activarlo: crear el archivo `IA_PROA` en el proyecto, pegar `IA_PROA.gs`, agregar `ANTHROPIC_API_KEY` en Propiedades del script, revisar el informe con `probarInformeProa()` (no envía nada) y ejecutar una vez `crearTriggerInformeProa()`.
 
+### Indicador mensual
+
+El día 1 de cada mes a las 7:00, al mismo destino del informe semanal, el bot envía las solicitudes del mes que terminó cuya razón del cambio es **"POR INTERVENCIÓN PROA"** (la marca el médico en "Si fue cambiado, ¿cuál fue la razón?"): número, total de solicitudes y porcentaje, el mes anterior y la tendencia de 6 meses. Lo calcula el código, sin IA. Es una cifra que se queda corta: la pregunta es obligatoria, la mayoría responde "Condición propia del paciente" y una suspensión no genera formulario. Prueba sin enviar nada: `probarIndicadorMensual()`.
+
 ### Cruce del diagnóstico con la pestaña CIE10 (v1.35.0)
 
 Cuando el médico escribe el diagnóstico sin código (en la matriz, uno de cada cinco), el bot busca sus palabras en las descripciones de la pestaña `CIE10`:
@@ -238,7 +242,7 @@ Para encontrar el chatId de un grupo sin riesgo de enviar nada, ejecutar `listar
 
 El proyecto es independiente (no está vinculado a la hoja), así que el activador "Al enviar el formulario" **no** se puede crear desde la pantalla de Activadores. Se creó una sola vez ejecutando `crearTriggerFormSubmit()`. No volver a ejecutarla: crearía un segundo activador y cada alerta llegaría duplicada.
 
-El informe semanal tiene su propio activador (lunes a las 7:00), que se crea una vez con `crearTriggerInformeProa()`. Esa función sí se puede repetir: borra el anterior antes de crear el nuevo.
+El informe semanal (lunes a las 7:00) y el indicador mensual (día 1 a las 7:00) tienen sus propios activadores, que se crean con `crearTriggerInformeProa()`. Esa función sí se puede repetir: borra los anteriores antes de crear los nuevos.
 
 ## Funciones
 
@@ -261,7 +265,10 @@ El informe semanal tiene su propio activador (lunes a las 7:00), que se crea una
 | `enviarInformeSemanalProa()` (`IA_PROA.gs`) | Sí (según `INFORME_PROA_DESTINO`) | La llama el activador de los lunes: informe de los 7 días anteriores; deja una fila en `INFORMES_PROA` |
 | `probarInformeProa(dias)` (`IA_PROA.gs`) | **No** (llama a la API si hay clave) | Escribe en el registro de ejecución el informe de los últimos `dias` días (7 por defecto) |
 | `enviarInformeAPruebaBot(dias)` (`IA_PROA.gs`) | Sí, solo a PRUEBA BOT | El informe tal como llega a WhatsApp |
-| `crearTriggerInformeProa()` (`IA_PROA.gs`) | No (crea el activador) | Crea o recrea el activador de los lunes a las 7:00; solo toca los de `enviarInformeSemanalProa` |
+| `crearTriggerInformeProa()` (`IA_PROA.gs`) | No (crea los activadores) | Crea o recrea el activador de los lunes y el del día 1 de cada mes, a las 7:00; solo toca los de `enviarInformeSemanalProa` y `enviarIndicadorMensualProa` |
+| `enviarIndicadorMensualProa()` (`IA_PROA.gs`) | Sí (según `INFORME_PROA_DESTINO`) | La llama el activador del día 1: solicitudes "POR INTERVENCIÓN PROA" del mes que terminó; deja una fila en `INFORMES_PROA` |
+| `probarIndicadorMensual()` (`IA_PROA.gs`) | **No** | Escribe en el registro de ejecución el indicador del último mes cerrado y la cifra parcial del mes en curso |
+| `enviarIndicadorMensualAPruebaBot()` (`IA_PROA.gs`) | Sí, solo a PRUEBA BOT | El indicador mensual tal como llega a WhatsApp |
 | `formatearDiagnosticoCIE10()`, `buscarDescripcionCIE10()`, `resolverCIE10()`, `cruceCIE10PorTexto()` | **No** | Cruce del diagnóstico con la pestaña `CIE10`: por código (TextFinder + caché) y, sin código, por palabras |
 | `probarCruceCIE10(filas)` | **No** | Escribe en el registro de ejecución cómo se cruzan los diagnósticos de las últimas solicitudes |
 | `verificarEncabezados()` | **No** | Comprueba que todas las preguntas usadas existan en la fila 1 de la hoja |
