@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.0';
+var VERSION_BOT = '1.36.4';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -432,11 +432,13 @@ function notificarNuevaRespuesta(e) {
   notificarTratamientoProlongado(e, coincidencias);
 }
 
+// Caso PROA. Si no sale, queda en el registro solo cuando hay un restringido que dispara alerta (con el motivo: no
+// supera CONFIG.CASO_DIAS_MINIMOS). Vancomicina o linezolid solos no dejan fila (v1.36.4): no generan mensaje y eran dos
+// de cada tres filas del registro.
 function notificarCaso_(e, coincidencias) {
   if (!generaCasoProa(e, coincidencias)) {
-    if (coincidencias.length > 0) registrarRevision(e, coincidencias, { enviado: false,
-      destino: debeAlertar(coincidencias) ? 'no se envía: ' + formatoNumero(diasCasoProa(e, coincidencias), 0) + ' d (caso PROA desde más de ' +
-        CONFIG.CASO_DIAS_MINIMOS + ' d)' : '' });
+    if (debeAlertar(coincidencias)) registrarRevision(e, coincidencias, { enviado: false,
+      destino: 'no se envía: ' + formatoNumero(diasCasoProa(e, coincidencias), 0) + ' d (caso PROA desde más de ' + CONFIG.CASO_DIAS_MINIMOS + ' d)' });
     return;
   }
   // El mensaje ya se encabeza con "CASO PROA": no lleva la linea de titulo del bot.
@@ -1669,7 +1671,7 @@ var ENCABEZADOS_REGISTRO = ['Fecha de registro', 'Marca temporal de la solicitud
   'Detalle', 'Solicitudes previas', 'Enviado al grupo', 'Destino', 'Modelo', 'Tokens de entrada', 'Tokens de salida', 'Costo aproximado USD',
   'Días de tratamiento continuo'];
 
-// Una fila por solicitud con antimicrobiano restringido en la pestana CONFIG.HOJA_REGISTRO (la crea si no
+// Una fila por solicitud con restringido que dispara alerta y por revision de duracion en la pestana CONFIG.HOJA_REGISTRO (la crea si no
 // existe). datos: { tablas, revision, detalle, enviado, destino, costo }. Nunca interrumpe el flujo.
 function registrarRevision(e, coincidencias, datos) {
   if (!CONFIG.REGISTRO_ACTIVO) return;

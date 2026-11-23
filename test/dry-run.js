@@ -819,6 +819,23 @@ prueba('caso PROA solo con datos (produccion): ubicacion y diagnostico arriba, s
   } finally { CONFIG.CASO_ANALISIS = true; global.PropertiesService = propsReal; }
 });
 
+prueba('registro: vancomicina o linezolid solos no dejan fila; un restringido de 14 d o menos si, con el motivo', function () {
+  var propsReal = global.PropertiesService;
+  var P = { GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test' };
+  global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
+  HOJAS['REGISTRO_REVISIONES'] = hojaDeFilas([ENCABEZADOS_REGISTRO.slice()], true);
+  var reg = HOJAS['REGISTRO_REVISIONES']._filas, col = function (n) { return ENCABEZADOS_REGISTRO.indexOf(n); };
+  try {
+    conApiSimulada(function () {
+      notificarNuevaRespuesta(eventoSeguimiento('20/11/2026 10:00:00', '888060', 'L031', [['VANCOMICINA', '1000', '12', '7']]));
+      notificarNuevaRespuesta(eventoSeguimiento('20/11/2026 10:00:00', '888061', 'J189', [['LINEZOLID', '600', '12', '7'], ['CEFEPIME', '2000', '8', '7']]));
+      assert.strictEqual(envios.length, 0); assert.strictEqual(reg.length, 1, 'sin filas nuevas');
+      notificarNuevaRespuesta(eventoSeguimiento('20/11/2026 10:00:00', '888062', 'L031', [['ERTAPENEM', '1000', '24', '7']]));
+      assert.strictEqual(reg.length, 2); incluye(reg[1][col('Destino')], 'no se envía: 7 d');
+    });
+  } finally { global.PropertiesService = propsReal; }
+});
+
 prueba('registro: una fila por revision en REGISTRO_REVISIONES', function () {
   delete HOJAS['REGISTRO_REVISIONES'];
   var e = eventoSeguimiento('14/11/2026 08:00:00', '123456', 'N390', [['ERTAPENEM', '1000', '24', '7']]);

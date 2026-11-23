@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.4] - 2026-11-23 (solo Codigo.gs)
+
+### Cambiado (auditoría, punto 5)
+- Las solicitudes cuyo único restringido es vancomicina o linezolid (sin alerta propia) ya no dejan fila en `REGISTRO_REVISIONES`. No generan mensaje, nada las lee (ni el informe semanal ni la regla de 7 días) y eran 47 de las 70 filas de la semana del 16 al 22/11. Siguen registrándose los casos PROA, los restringidos que no superan 14 d (con el motivo) y las revisiones de duración. Las filas anteriores no se tocan.
+
 ## [1.36.3] - 2026-11-23 (solo IA_PROA.gs)
 
 ### Corregido
