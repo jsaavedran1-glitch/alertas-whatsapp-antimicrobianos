@@ -2,6 +2,14 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.1] - 2026-11-23 (solo IA_PROA.gs)
+
+### Agregado (auditoría, punto 6)
+- **Mediana junto al promedio** en las líneas `💊` y `🔒` del informe semanal: `CEFEPIME 12 / 9 d (49)` = promedio / mediana (pacientes); un solo número si coinciden. Con pocos pacientes, un tratamiento muy largo mueve el promedio y no la mediana. La IA recibe la mediana y sabe que un promedio muy por encima de ella indica unos pocos tratamientos largos.
+
+### Cambiado
+- Las versiones de `Codigo.gs` e `IA_PROA.gs` comparten mayor.menor (1.36). Un cambio que toca un solo archivo sube su último número y basta con pegar ese archivo. El aviso de versiones compara mayor.menor.
+
 ## [1.36.0] - 2026-11-23
 
 ### Cambiado (auditoría: mantenimiento, sin cambios en los mensajes)

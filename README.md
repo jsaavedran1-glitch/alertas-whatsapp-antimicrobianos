@@ -124,7 +124,7 @@ _Ecosistema de Vigilancia Digital del Servicio Farmacéutico HDV · Desarrollado
 
 La IA ya **no opina caso por caso** (decisión del referente: el caso lo valora Infectología). Su papel es el informe del programa: los **lunes a las 7:00** (hora de Colombia) el bot envía un mensaje con las cifras de los 7 días anteriores y, debajo, una lectura corta escrita por Claude (modelo Opus, `claude-opus-5-5`).
 
-- **Las cifras las calcula el código**, no la IA, a partir de todas las solicitudes del formulario (no solo restringidos): solicitudes, pacientes y solicitudes con restringido (frente a la semana anterior); **promedio de días de tratamiento por antimicrobiano** (por paciente, solo los días de ese antimicrobiano) con el número de pacientes; restringidos con su promedio; servicios; empírico, etiológico y profiláctico (con el % de empíricos sin cultivos); profilaxis de más de 1 día; interconsulta a Infectología en restringidos y los **tratamientos más largos**.
+- **Las cifras las calcula el código**, no la IA, a partir de todas las solicitudes del formulario (no solo restringidos): solicitudes, pacientes y solicitudes con restringido (frente a la semana anterior); **promedio y mediana de días de tratamiento por antimicrobiano** (por paciente, solo los días de ese antimicrobiano; v1.36.1) con el número de pacientes, p. ej. `CEFEPIME 12 / 9 d (49)`, y un solo número si coinciden. Un promedio muy por encima de la mediana indica unos pocos tratamientos muy largos. Restringidos con su promedio y mediana; servicios; empírico, etiológico y profiláctico (con el % de empíricos sin cultivos); profilaxis de más de 1 día; interconsulta a Infectología en restringidos y los **tratamientos más largos**.
 - **Cómo se cuentan los días** (mismas reglas que el "⏱️ Con esta orden: N d" del caso PROA): para cada paciente con alguna orden en la semana se toma su última orden de la semana y se retrocede por sus órdenes anteriores (hasta 60 días): una orden anterior es parte del mismo tratamiento si termina (fecha + días ordenados + 3 días de tolerancia) en o después del inicio ya encontrado, y entonces el inicio se corre hacia atrás. Los días son los días calendario desde ese inicio hasta el fin de la última orden (incluye los días que faltan por administrar). En **Más largos** se suma el tratamiento continuo aunque cambie de antimicrobiano (antibacterianos y antifúngicos por separado; se muestra el mayor de cada paciente, los 3 mayores de la semana, con el servicio de su última orden); en el promedio por antimicrobiano, solo las órdenes de ese antimicrobiano.
 - **La IA solo escribe la lectura:** 2 a 4 hallazgos y hasta 2 sugerencias de programa para el comité (educación, auditoría de una molécula, protocolo, formulario), nunca sobre un paciente.
 - **El código revisa cada frase de la IA.** Descarta la que traiga una cifra que no esté en los datos (la IA no puede calcular ni inventar números) y la que tenga lenguaje de juicio ("inadecuado", "abuso", "mal uso"…). Lo descartado queda en la pestaña `INFORMES_PROA` con el motivo.
@@ -138,8 +138,8 @@ Ejemplo con datos ficticios:
 ```
 *📊 INFORME SEMANAL PROA · 16/11–22/11*
 📝 6 solicitudes (sem. ant. 3) · 5 pacientes · 4 con restringido (sem. ant. 1)
-💊 Promedio de días por antimicrobiano (pacientes): ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)
-🔒 Restringidos: ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)
+💊 Días de tratamiento por antimicrobiano, promedio / mediana (pacientes): ERTAPENEM 10 / 7 d (3) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)
+🔒 Restringidos: ERTAPENEM 10 / 7 d (3) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)
 🏥 Servicios: UCI A 67% · Hosp. Medicina Interna 17% · Cirugía 17%
 🧫 Empírico 50% (67% sin cultivos) · Etiológico 33% · Profiláctico 17% · 1 con profilaxis de más de 1 día
 🧪 Restringidos con interconsulta a Infectología: 50%
@@ -147,7 +147,7 @@ Ejemplo con datos ficticios:
 
 *🤖 Lectura de la semana (IA)*
 • UCI A concentró el 67% de las solicitudes de la semana
-• Ertapenem promedió 11,5 días en 2 pacientes
+• Ertapenem promedió 10 días en 3 pacientes, con mediana de 7
 *Para el comité*
 • Revisar con UCI A la toma de cultivos antes del tratamiento empírico
 _Cifras del formulario; lectura automática para el comité PROA_
@@ -232,7 +232,7 @@ Para encontrar el chatId de un grupo sin riesgo de enviar nada, ejecutar `listar
 
 ## Versión
 
-`VERSION_BOT` (al inicio de `Codigo.gs`) y `VERSION_INFORME` (al inicio de `IA_PROA.gs`) deben ser iguales: los dos archivos se pegan juntos. `probarUltimaSolicitud()`, `probarCruceCIE10()` y `probarInformeProa()` escriben la versión en el registro de ejecución, y la pestaña `INFORMES_PROA` la guarda en la columna `Versión`. Si no coinciden, el bot lo avisa. Una prueba local comprueba que el `CHANGELOG.md` empiece por esa versión.
+`VERSION_BOT` (al inicio de `Codigo.gs`) y `VERSION_INFORME` (al inicio de `IA_PROA.gs`) comparten mayor.menor (p. ej. 1.36). Un cambio en los dos archivos sube la menor y se pegan juntos. Un cambio en uno solo sube su último número y basta con pegar ese archivo. `probarUltimaSolicitud()`, `probarCruceCIE10()` y `probarInformeProa()` escriben la versión en el registro de ejecución, y la pestaña `INFORMES_PROA` la guarda en la columna `Versión`. Si mayor.menor no coincide, el bot lo avisa. Una prueba local comprueba que el `CHANGELOG.md` empiece por la mayor de las dos versiones.
 
 ## Activador
 

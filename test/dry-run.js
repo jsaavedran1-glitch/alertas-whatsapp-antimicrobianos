@@ -679,15 +679,25 @@ prueba('una sola regla de continuidad (mensajes e informe) y codigo retirado en 
   assert.ok(!('PROLONGADO_RESUMEN_DIARIO' in CONFIG) && !('ENCABEZADOS_DESTACADOS' in CONFIG));
 });
 
-prueba('version: Codigo.gs e IA_PROA.gs de la misma version, y aviso si no coinciden', function () {
-  assert.ok(/^\d+\.\d+\.\d+$/.test(VERSION_BOT)); assert.strictEqual(VERSION_INFORME, VERSION_BOT);
-  assert.strictEqual(avisoVersiones_(), ''); assert.strictEqual(textoVersiones_(), 'Código v' + VERSION_BOT + ' · IA_PROA v' + VERSION_BOT);
+prueba('mediana de dias: robusta ante un tratamiento muy largo', function () {
+  assert.strictEqual(mediana_([18, 5, 7]), 7); assert.strictEqual(mediana_([18, 5]), 11.5); assert.strictEqual(mediana_([]), 0);
+  assert.strictEqual(mediana_([7, 7, 7, 60]), 7); assert.strictEqual(promedio_([7, 7, 7, 60]), 20.3);
+});
+
+prueba('version: Codigo.gs e IA_PROA.gs con la misma mayor.menor, y aviso si no coinciden', function () {
+  var menor = function (v) { return v.split('.').slice(0, 2).join('.'); };
+  assert.ok(/^\d+\.\d+\.\d+$/.test(VERSION_BOT) && /^\d+\.\d+\.\d+$/.test(VERSION_INFORME));
+  assert.strictEqual(menor(VERSION_INFORME), menor(VERSION_BOT));
+  assert.strictEqual(avisoVersiones_(), ''); assert.strictEqual(textoVersiones_(), 'Código v' + VERSION_BOT + ' · IA_PROA v' + VERSION_INFORME);
   var antes = VERSION_INFORME;
   VERSION_INFORME = '0.0.1';
   try { incluye(avisoVersiones_(), 'no coinciden: pegue los dos archivos de la misma versión'); } finally { VERSION_INFORME = antes; }
-  // el CHANGELOG empieza por la version del codigo
+  // el CHANGELOG empieza por la mayor de las dos versiones
+  var num = function (v) { return v.split('.').map(Number); };
+  var a = num(VERSION_BOT), b = num(VERSION_INFORME), mayor = VERSION_BOT;
+  for (var i = 0; i < 3; i++) { if (a[i] !== b[i]) { mayor = b[i] > a[i] ? VERSION_INFORME : VERSION_BOT; break; } }
   var changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
-  incluye(changelog.split('\n## [')[1], VERSION_BOT + ']');
+  incluye(changelog.split('\n## [')[1], mayor + ']');
 });
 
 prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolongado sin enviar nada', function () {
@@ -1038,6 +1048,7 @@ function conSemanaFicticia(fn) {
     filaInforme('19/11/2026 11:00:00', '1003', x('Cirugía', PRO, '', 'No', 'T814'), [['CEFAZOLINA', '2000', '8', '3']]),
     filaInforme('20/11/2026 14:00:00', '1005', x(UCI, EMP, '..', 'No', 'L031'), [['ERTAPENEM', '1000', '24', '5']]),
     filaInforme('21/11/2026 12:00:00', '1004', x(UCI, ETI, 'HEMOCULTIVO', 'Sí', 'B377'), [['CASPOFUNGINA', '70', '24', '14']]),
+    filaInforme('21/11/2026 13:00:00', '1006', x(UCI, EMP, 'HEMOCULTIVO', 'Sí', 'L031'), [['ERTAPENEM', '1000', '24', '7']]),
     filaInforme('23/11/2026 06:00:00', '1009', x(UCI, EMP, 'NINGUNO', 'No', 'L031'), [['ERTAPENEM', '1000', '24', '7']])   // hoy: no entra
   ]);
   delete HOJAS['INFORMES_PROA'];
@@ -1048,14 +1059,15 @@ function conSemanaFicticia(fn) {
 }
 // 1001: ertapenem desde el 07/11 (renovaciones dentro de la tolerancia) hasta el fin de su orden del 18/11 = 18 d;
 // 1002: piperacilina/tazobactam desde el 08/11 y meropenem + vancomicina el 17/11 = 16 d de antibiotico (7 d de cada uno);
-// 1003: 3 d; 1005: 5 d; 1004: caspofungina 14 d. Ertapenem: (18 + 5) / 2 = 11,5 d. Mas largos: 18, 16 y 14 d.
+// 1003: 3 d; 1005: ertapenem 5 d; 1006: ertapenem 7 d; 1004: caspofungina 14 d.
+// Ertapenem: promedio (18 + 5 + 7) / 3 = 10 d, mediana 7 d. Mas largos: 18, 16 y 14 d.
 var CIFRAS_SEMANA = '*📊 INFORME SEMANAL PROA · 16/11–22/11*\n' +
-  '📝 6 solicitudes (sem. ant. 3) · 5 pacientes · 4 con restringido (sem. ant. 1)\n' +
-  '💊 Promedio de días por antimicrobiano (pacientes): ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)\n' +
-  '🔒 Restringidos: ERTAPENEM 11,5 d (2) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)\n' +
-  '🏥 Servicios: UCI A 67% · Hosp. Medicina Interna 17% · Cirugía 17%\n' +
-  '🧫 Empírico 50% (67% sin cultivos) · Etiológico 33% · Profiláctico 17% · 1 con profilaxis de más de 1 día\n' +
-  '🧪 Restringidos con interconsulta a Infectología: 50%\n' +
+  '📝 7 solicitudes (sem. ant. 3) · 6 pacientes · 5 con restringido (sem. ant. 1)\n' +
+  '💊 Días de tratamiento por antimicrobiano, promedio / mediana (pacientes): ERTAPENEM 10 / 7 d (3) · CASPOFUNGINA 14 d (1) · MEROPENEM 7 d (1) · VANCOMICINA 7 d (1)\n' +
+  '🔒 Restringidos: ERTAPENEM 10 / 7 d (3) · CASPOFUNGINA 14 d (1) · VANCOMICINA 7 d (1)\n' +
+  '🏥 Servicios: UCI A 71% · Hosp. Medicina Interna 14% · Cirugía 14%\n' +
+  '🧫 Empírico 57% (50% sin cultivos) · Etiológico 29% · Profiláctico 14% · 1 con profilaxis de más de 1 día\n' +
+  '🧪 Restringidos con interconsulta a Infectología: 60%\n' +
   '⏳ Más largos: HC 1001 UCI A *18 d* · HC 1002 Hosp. Medicina Interna *16 d* · HC 1004 UCI A *14 d*';
 
 prueba('informe semanal: cifras de la semana calculadas por el codigo, sin IA si no hay clave', function () {
@@ -1097,17 +1109,17 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
   try {
     conSemanaFicticia(function () {
       conApiInforme(respuestaInforme([
-        { indicador: 'servicios', texto: 'UCI A concentró el 67 % de las solicitudes de la semana.' },
+        { indicador: 'servicios', texto: 'UCI A concentró el 71 % de las solicitudes de la semana.' },
         { indicador: 'comparacion', texto: 'Las solicitudes subieron un 66% frente a la semana anterior' },
-        { indicador: 'antimicrobianos', texto: 'Ertapenem promedió 11.5 días en 2 pacientes' },
+        { indicador: 'antimicrobianos', texto: 'Ertapenem promedió 10 días en 3 pacientes, con mediana de 7' },
         { indicador: 'duracion', texto: 'El tratamiento antibiótico continuo promedió 10,5 días por paciente' },
         { indicador: 'servicios', texto: 'Hay abuso de carbapenémicos en UCI A' }
       ], [{ texto: 'Revisar con UCI A la toma de cultivos antes del tratamiento empírico' }]), function (peticiones) {
         enviarInforme_(LUNES_23_11);
         assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].chatId, CHAT_PRUEBA_BOT);
         assert.strictEqual(envios[0].message.indexOf(CIFRAS_SEMANA), 0);
-        incluye(envios[0].message, CIFRAS_SEMANA + '\n\n*🤖 Lectura de la semana (IA)*\n• UCI A concentró el 67% de las solicitudes de la semana\n' +
-          '• Ertapenem promedió 11,5 días en 2 pacientes\n*Para el comité*\n' +
+        incluye(envios[0].message, CIFRAS_SEMANA + '\n\n*🤖 Lectura de la semana (IA)*\n• UCI A concentró el 71% de las solicitudes de la semana\n' +
+          '• Ertapenem promedió 10 días en 3 pacientes, con mediana de 7\n*Para el comité*\n' +
           '• Revisar con UCI A la toma de cultivos antes del tratamiento empírico\n_Cifras del formulario; lectura automática para el comité PROA_');
         noIncluye(envios[0].message, '66%'); noIncluye(envios[0].message, 'abuso');
         // la peticion: modelo, esfuerzo, salida estructurada, respaldo; solo cifras agregadas, sin historias clinicas
@@ -1119,9 +1131,10 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
         // el razonamiento no se pide en la respuesta (se declina como reasoning_extraction): se lee del resumen de thinking
         assert.deepStrictEqual(c.thinking, { type: 'adaptive', display: 'summarized' }); assert.ok(!('temperature' in c));
         assert.ok(!('analisis' in c.output_config.format.schema.properties)); noIncluye(c.system, 'analisis');
-        incluye(c.messages[0].content, '"solicitudes": 6'); incluye(c.messages[0].content, '"promedio_dias": 11.5');
+        incluye(c.messages[0].content, '"solicitudes": 7'); incluye(c.messages[0].content, '"promedio_dias": 10');
+        incluye(c.messages[0].content, '"mediana_dias": 7');
         noIncluye(c.messages[0].content, 'tratamiento_continuo'); incluye(c.messages[0].content, '"periodo": "09/11–15/11"');
-        ['1001', '1002', '1004', '2002', '"hc"'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
+        ['1001', '1002', '1004', '1006', '2002', '"hc"'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
       });
       var fila = HOJAS['INFORMES_PROA']._filas[1];
       assert.strictEqual(fila[6], 'claude-opus-5-5'); assert.strictEqual(fila[7], 12000); assert.strictEqual(fila[8], 3000); assert.strictEqual(fila[9], 0.108);
@@ -1135,10 +1148,10 @@ prueba('informe semanal: destino PRODUCCION, reintento con esfuerzo medio si tar
   try {
     conSemanaFicticia(function () {
       propsInforme({ INFORME_PROA_DESTINO: 'produccion' });
-      conApiInforme(function (n) { return n === 1 ? new Error('Timeout: ' + IA_URL) : respuestaInforme([{ indicador: 'servicios', texto: 'UCI A concentró el 67% de las solicitudes' }]); },
+      conApiInforme(function (n) { return n === 1 ? new Error('Timeout: ' + IA_URL) : respuestaInforme([{ indicador: 'servicios', texto: 'UCI A concentró el 71% de las solicitudes' }]); },
         function (peticiones) {
           enviarInforme_(LUNES_23_11);
-          assert.strictEqual(envios[0].chatId, '111@g.us'); incluye(envios[0].message, '• UCI A concentró el 67% de las solicitudes');
+          assert.strictEqual(envios[0].chatId, '111@g.us'); incluye(envios[0].message, '• UCI A concentró el 71% de las solicitudes');
           assert.strictEqual(peticiones.length, 2); assert.strictEqual(peticiones[1].cuerpo.output_config.effort, 'medium');
           assert.strictEqual(HOJAS['INFORMES_PROA']._filas[1][2], 'PRODUCCION');
         });
