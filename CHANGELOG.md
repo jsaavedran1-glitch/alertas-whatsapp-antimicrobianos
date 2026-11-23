@@ -2,6 +2,22 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.12] - 2026-11-23 (solo Codigo.gs)
+
+### Corregido (auditoría, decisión del referente)
+- **Combinaciones registradas en dos formularios el mismo día.** Antes, una solicitud posterior del mismo día reemplazaba a la anterior, así que el bot se quedaba con una sola. En 90 días hubo 99 días-paciente en que la última solicitud dejaba por fuera un antimicrobiano de la anterior; 78 no estaban marcadas como CAMBIO, y los pares más frecuentes eran combinaciones: cefepime → vancomicina (10), vancomicina → cefepime (8), meropenem → linezolid (7). Efectos: en la revisión por tratamiento prolongado faltaba el otro antimicrobiano en la lista de prescripciones y en "Por antimicrobiano" (el 20/11, una vancomicina de un paciente de UCI); en el caso PROA, la pertinencia veía medio esquema (p. ej. "vancomicina sola frente a gramnegativo" con el cefepime en otro formulario).
+- Regla nueva (`combinarMismoDia()`): la solicitud posterior del mismo día **se suma** a las anteriores, salvo que las reemplace:
+  - viene marcada como CAMBIO (reemplaza lo anterior de su tipo: antibacteriano o antifúngico);
+  - es el mismo antimicrobiano (otra presentación o una corrección: ciprofloxacino tableta → ampolla);
+  - es de la misma familia (`CONFIG.MISMO_DIA_FAMILIAS`): betalactámicos (cefepime → meropenem, piperacilina/tazobactam → cefepime) o anti-grampositivos (vancomicina → linezolid);
+  - excepto las combinaciones buscadas (`CONFIG.MISMO_DIA_COMBINACIONES`): ceftazidima/avibactam con aztreonam y ampicilina con una cefalosporina.
+  Comprobada sobre los 90 días: los pares de betalactámicos sin CAMBIO son cambios (cefepime → meropenem, piperacilina/tazobactam → cefepime) y el resto, combinaciones.
+- **Caso PROA:** lo que sigue vigente de otras solicitudes de hoy del mismo paciente va como acompañante (`➕ CEFEPIME 2000 mg IV c/8 h · 7 d hasta 12/11 · otra solicitud de hoy`) y cuenta en la pertinencia, la sugerencia de terapia combinada y las advertencias. Lo reemplazado no sale como "en curso". En el registro, la columna Acompañantes lo marca "(otra solicitud de hoy)".
+- Sin cambios: qué solicitudes generan caso PROA o revisión (sigue siendo una revisión por paciente y día), los días de tratamiento continuo y el informe semanal.
+
+### Retirado
+- `enviarEjemploAlGrupo()`: enviaba un caso ficticio de daptomicina al grupo de `GREENAPI_GROUP_CHATID`, que es el de producción, y dejaba una fila falsa en el registro. Para ver un mensaje en WhatsApp queda `enviarPruebaCeftazidimaAPruebaBot()`, solo a PRUEBA BOT.
+
 ## [1.36.11] - 2026-11-23 (solo IA_PROA.gs)
 
 ### Cambiado (pedido del referente)

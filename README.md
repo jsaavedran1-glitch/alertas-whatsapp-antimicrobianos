@@ -278,9 +278,9 @@ El informe semanal (lunes a las 7:00) y el indicador mensual (día 1 a las 7:00)
 | `eventoPruebaDaptomicina()`, `eventoPruebaCeftazidimaAvibactam()`, `eventoPruebaPediatrico()`, `eventoPruebaVancomicinaSola()`, `eventoPruebaSinRestringidos()` | **No** | Datos ficticios de prueba |
 | `testConstruccionMensaje()` | **No** | Escribe en el registro los 3 mensajes de prueba (y confirma que ceftriaxona no alerta) |
 | `testCruceCIE10()` | **No** | Verifica en el registro el cruce con la pestaña `CIE10` (incluye `G06.0` y `J40`) |
-| `enviarEjemploAlGrupo()` | Sí | Envía el caso ficticio de daptomicina al grupo configurado |
+| `enviarPruebaCeftazidimaAPruebaBot()` | Sí, solo a PRUEBA BOT | El caso ficticio de ceftazidima/avibactam tal como llega a WhatsApp |
 
-Antes de ejecutar `enviarEjemploAlGrupo()`, confirmar que `GREENAPI_GROUP_CHATID` apunta a PRUEBA BOT (`120363412506101174@g.us`).
+`enviarEjemploAlGrupo()` se retiró en la v1.36.12: enviaba un caso ficticio al grupo de `GREENAPI_GROUP_CHATID`, que es el de producción. Las pruebas que envían algo van solo a PRUEBA BOT, con el chat fijo en el código.
 
 ## Cómo se actualiza el bot
 

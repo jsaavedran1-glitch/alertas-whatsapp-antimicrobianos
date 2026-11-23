@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.8';
+var VERSION_BOT = '1.36.12';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -74,6 +74,16 @@ var CONFIG = {
   // Una orden continua el tratamiento anterior si empieza hasta N dias despues de su fin (las renovaciones
   // suelen llegar tarde: con 2 dias se perdio un curso de ertapenem de 24 dias, caso del 2026-11-15).
   SEGUIMIENTO_TOLERANCIA_DIAS: 3,
+  // Solicitudes del mismo dia (v1.36.12, decision del referente): una posterior se suma a las anteriores, porque hay
+  // combinaciones registradas en formularios separados (cefepime en uno y vancomicina en otro: 78 casos en 90 dias). La
+  // reemplaza si esta marcada como CAMBIO, si es el mismo antimicrobiano (otra presentacion o una correccion) o si es de
+  // la misma familia (cefepime -> meropenem, vancomicina -> linezolid). Familias: expresiones sobre la primera palabra
+  // del nombre. Combinaciones: pares de la misma familia que se dan a proposito y se suman.
+  MISMO_DIA_FAMILIAS: [
+    '^(CEF|PENICILIN|BENCILPENICILIN|AMOXICILIN|AMPICILIN|SULTAMICILIN|OXACILIN|DICLOXACILIN|NAFCILIN|PIPERACILIN)|PENEM$|^AZTREONAM$',
+    '^(VANCOMICINA|LINEZOLID|DAPTOMICINA|TEICOPLANINA)$'
+  ],
+  MISMO_DIA_COMBINACIONES: [['AVIBACTAM', 'AZTREONAM'], ['AMPICILINA', 'CEF']],
   // Caso PROA solo con datos (decision del referente, 2026-11-16): sin el bloque de pertinencia ni el veredicto.
   // El analisis de las tablas se sigue guardando en REGISTRO_REVISIONES; true lo devuelve al mensaje.
   // La IA no analiza casos (decision del referente: el caso lo valora Infectologia); solo escribe la lectura del
@@ -871,6 +881,13 @@ function acompanantesNoRestringidos(e) {
   return leerSlots(e).filter(function(am) { return !esRestringido(am.nombre, lista); });
 }
 
+// Acompanantes del caso: los no restringidos de esta solicitud y lo que sigue vigente de otras solicitudes de hoy del
+// mismo paciente (combinaciones registradas en formularios separados, v1.36.12), estos con delDia: true.
+function acompanantesDe(e) {
+  var nombres = leerSlots(e).map(function(am) { return am.nombre; });
+  return acompanantesNoRestringidos(e).concat(seguimientoPaciente(e).delDia.filter(function(am) { return nombres.indexOf(am.nombre) === -1; }));
+}
+
 /* =====================================================================
    Formato de los datos del mensaje
    ===================================================================== */
@@ -1372,6 +1389,33 @@ function diasTratamientoPrevio(ordenes, t) {
   return diaCalendario(t) - diaCalendario(inicioTratamientoContinuo(ordenes, t));
 }
 
+// Solicitudes del mismo dia (CONFIG.MISMO_DIA_FAMILIAS): lo que sigue vigente de las anteriores (previos) al llegar
+// otra (nuevos), la posterior al final. Items con .nombre. esCambio: la nueva vino marcada como CAMBIO y reemplaza todo lo
+// anterior de su tipo (antibacteriano o antifungico).
+function combinarMismoDia(previos, nuevos, esCambio) {
+  var quedan = previos.filter(function(p) {
+    return !nuevos.some(function(n) {
+      return reemplazaMismoDia(p.nombre, n.nombre) || (esCambio && esAntifungico(n.nombre) === esAntifungico(p.nombre));
+    });
+  });
+  return quedan.concat(nuevos);
+}
+
+// true si `nuevo`, solicitado el mismo dia, reemplaza a `anterior`: el mismo antimicrobiano (primera palabra del nombre:
+// CIPROFLOXACINO TABLETA -> CIPROFLOXACINO AMPOLLA) o la misma familia, salvo una combinacion buscada.
+function reemplazaMismoDia(anterior, nuevo) {
+  var a = normalizarTexto(anterior), n = normalizarTexto(nuevo);
+  var ma = a.split(/[\s\/]+/)[0], mn = n.split(/[\s\/]+/)[0];
+  if (!ma || !mn) return false;
+  if (ma === mn) return true;
+  var combinacion = (CONFIG.MISMO_DIA_COMBINACIONES || []).some(function(c) {
+    return (a.indexOf(c[0]) > -1 && n.indexOf(c[1]) > -1) || (a.indexOf(c[1]) > -1 && n.indexOf(c[0]) > -1);
+  });
+  return !combinacion && (CONFIG.MISMO_DIA_FAMILIAS || []).some(function(f) { var r = new RegExp(f); return r.test(ma) && r.test(mn); });
+}
+
+function esSolicitudCambio(indicacion) { return normalizarTexto(indicacion) === 'CAMBIO'; }
+
 // Solicitudes previas de la misma historia clinica en los ultimos CONFIG.SEGUIMIENTO_DIAS dias.
 // Devuelve { previas, lineas (para el mensaje), historia (texto de cada solicitud previa, en orden),
 // porAm: { nombre: { inicio, transcurridos, proyectado } } }. La duracion se cuenta sobre el tratamiento
@@ -1379,7 +1423,7 @@ function diasTratamientoPrevio(ordenes, t) {
 // Se calcula una vez por evento (queda en e._seguimiento). Solo lee la matriz; si falla, devuelve vacio.
 function seguimientoPaciente(e) {
   if (e && e._seguimiento) return e._seguimiento;
-  var res = { previas: 0, lineas: [], historia: [], porAm: {} };
+  var res = { previas: 0, lineas: [], historia: [], porAm: {}, delDia: [] };
   if (e) e._seguimiento = res;
   if (!CONFIG.SEGUIMIENTO_ACTIVO || !e) return res;
   try {
@@ -1418,12 +1462,12 @@ function seguimientoPaciente(e) {
       var fecha = fechaDe(fila[0]);
       if (!fecha) return;
       var dato = function(nombre) { var c = col(nombre); return c < 0 ? '' : String(fila[c] === null || fila[c] === undefined ? '' : fila[c]).trim(); };
-      var items = [];
+      var items = [], cambio = esSolicitudCambio(dato(CAMPOS.INDICACION));
       SLOTS.forEach(function(slot) {
         var nombre = nombreLimpio(dato(slot.nombre));
         if (!nombre || nombre === '-') return;
-        var p = { fecha: fecha, nombre: nombre, dias: numeroONulo(dato(slot.dias)), dosis: dato(slot.dosis), frecuencia: dato(slot.frecuencia),
-          dx: dato(CAMPOS.DIAGNOSTICO) };
+        var p = { fecha: fecha, nombre: nombre, dias: numeroONulo(dato(slot.dias)), diasTexto: dato(slot.dias), dosis: dato(slot.dosis),
+          via: dato(slot.via), frecuencia: dato(slot.frecuencia), dx: dato(CAMPOS.DIAGNOSTICO), cambio: cambio };
         previas.push(p);
         items.push(nombre + ' ' + (p.dosis || '-') + ' mg cada ' + (p.frecuencia || '-') + ' h por ' + (p.dias !== null ? formatoNumero(p.dias, 0) + ' d' : '-'));
       });
@@ -1447,6 +1491,26 @@ function seguimientoPaciente(e) {
     var E = function(cp) { return String.fromCodePoint(cp); };
     var actuales = leerSlots(e);
     var detalle = [], continuos = [], enEpisodio = {};
+    // Una entrada por formulario (marca temporal), con sus antimicrobianos, en orden.
+    var porFormulario = function(lista) {
+      var formularios = [];
+      lista.slice().sort(function(a, b) { return a.fecha.getTime() - b.fecha.getTime(); }).forEach(function(p) {
+        var t = p.fecha.getTime(), f = formularios[formularios.length - 1];
+        if (f && f.t === t) { if (!f.items.some(function(x) { return x.nombre === p.nombre; })) f.items.push(p); return; }
+        formularios.push({ t: t, dia: diaCal(t), items: [p], dx: p.dx, cambio: p.cambio });
+      });
+      return formularios;
+    };
+    // Otras solicitudes de hoy del paciente: lo que sigue vigente al combinarlas con esta (combinarMismoDia) acompana a
+    // esta orden en el caso PROA (v1.36.12).
+    var hoyCal = diaCal(ahora.getTime()), vigentesHoy = [];
+    porFormulario(previas.filter(function(p) { return diaCal(p.fecha.getTime()) === hoyCal; })).forEach(function(f) {
+      vigentesHoy = combinarMismoDia(vigentesHoy, f.items, f.cambio);
+    });
+    res.delDia = combinarMismoDia(vigentesHoy, actuales, esSolicitudCambio(campoDelEvento(valores, CAMPOS.INDICACION)))
+      .filter(function(p) { return p.fecha; })   // los de esta solicitud no tienen fecha
+      .map(function(p) { return { nombre: p.nombre, dosis: p.dosis || '-', via: p.via || '-', frecuencia: p.frecuencia || '-',
+        dias: p.diasTexto || '-', fecha: p.fecha, delDia: true }; });
     [false, true].forEach(function(antifungico) {
       var delTipo = actuales.filter(function(am) { return esAntifungico(am.nombre) === antifungico; });
       if (delTipo.length === 0) return;
@@ -1454,22 +1518,17 @@ function seguimientoPaciente(e) {
       var inicioEpisodio = inicioContinuo(previasTipo);
       var transcurridosEpisodio = diasDesde(inicioEpisodio);
       var maxDias = 0;
-      // Solicitudes del tratamiento continuo, una por dia calendario (dos ordenes el mismo dia cuentan como
-      // una; una orden previa del mismo dia que esta es esta misma solicitud, repetida o corregida).
+      // Solicitudes del tratamiento continuo, una por dia calendario. Las del mismo dia se combinan (combinarMismoDia, v1.36.12:
+      // antes la posterior reemplazaba a la anterior y se perdia, p. ej., la vancomicina registrada aparte del meropenem);
+      // una orden previa del mismo dia que esta va con esta solicitud.
       var solicitudesEp = [], mismoDia = false;
       if (transcurridosEpisodio >= 1) {
-        previasTipo.filter(function(p) { return p.fecha.getTime() >= inicioEpisodio; })
-          .sort(function(a, b) { return a.fecha.getTime() - b.fecha.getTime(); })
-          .forEach(function(p) {
-            var d = diaCal(p.fecha.getTime()), t = p.fecha.getTime(), ult = solicitudesEp[solicitudesEp.length - 1];
-            if (ult && ult.dia === d) {
-              // misma solicitud con varios antimicrobianos: se suman; una orden posterior del mismo dia la reemplaza
-              if (ult.t === t) { if (ult.nombres.indexOf(p.nombre) === -1) ult.nombres.push(p.nombre); }
-              else { ult.t = t; ult.nombres = [p.nombre]; if (p.dx) ult.dx = p.dx; }
-              return;
-            }
-            solicitudesEp.push({ dia: d, t: t, inicio: t, nombres: [p.nombre], dx: p.dx });
-          });
+        porFormulario(previasTipo.filter(function(p) { return p.fecha.getTime() >= inicioEpisodio; })).forEach(function(f) {
+          var ult = solicitudesEp[solicitudesEp.length - 1];
+          if (ult && ult.dia === f.dia) { ult.items = combinarMismoDia(ult.items, f.items, f.cambio); if (f.dx) ult.dx = f.dx; return; }
+          solicitudesEp.push({ dia: f.dia, inicio: f.t, items: f.items.slice(), dx: f.dx });
+        });
+        solicitudesEp.forEach(function(x) { x.nombres = x.items.map(function(p) { return p.nombre; }); });
         var mismoDia = solicitudesEp.some(function(x) { return x.dia === diaCal(ahora.getTime()); });
         solicitudesEp = solicitudesEp.filter(function(x) { return x.dia !== diaCal(ahora.getTime()); });
         solicitudesEp.forEach(function(x, i) {
@@ -1520,10 +1579,11 @@ function seguimientoPaciente(e) {
     });
     // Otros antimicrobianos del paciente que no estan en esta orden ni en su tratamiento continuo: los que siguen
     // vigentes van "en curso" (p. ej. un antifungico a la par del antibiotico); los demas, "ya terminados".
+    // Las de otras solicitudes de hoy no: van con esta orden (res.delDia) o esta las reemplazo.
     var nombresActuales = actuales.map(function(am) { return am.nombre; });
     var enCursoAf = [], enCursoAb = [], terminados = [], vistos = {};
     previas.forEach(function(p) {   // de la mas reciente a la mas antigua
-      if (nombresActuales.indexOf(p.nombre) > -1 || vistos[p.nombre] || enEpisodio[p.nombre]) return;
+      if (nombresActuales.indexOf(p.nombre) > -1 || vistos[p.nombre] || enEpisodio[p.nombre] || diaCal(p.fecha.getTime()) === hoyCal) return;
       vistos[p.nombre] = true;
       var vigente = p.dias && p.fecha.getTime() + p.dias * dia > ahora.getTime();
       var texto = p.nombre + ' desde ' + fechaCorta(p.fecha) + (p.dias ? ' (' + formatoNumero(p.dias, 0) + ' d)' : '');
@@ -1696,7 +1756,7 @@ function registrarRevision(e, coincidencias, datos) {
     hoja.appendRow([new Date(), c('Marca temporal'), c(CAMPOS.HC), c(CAMPOS.SERVICIO), c(CAMPOS.ESPECIALIDAD),
       diagnosticoCorto(c(CAMPOS.DIAGNOSTICO)), c(CAMPOS.MICROORGANISMO), tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION)),
       coincidencias.map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
-      acompanantesNoRestringidos(e).map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
+      acompanantesDe(e).map(function(am) { return am.nombre + ' ' + am.dias + ' d' + (am.delDia ? ' (otra solicitud de hoy)' : ''); }).join('; '),
       tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], datos.fuente || 'TABLAS',
       // el bloque de la revision por tratamiento prolongado es el mensaje completo: no se recorta
       String(datos.detalle || tablas.lineas.join(' | ')).replace(/[*_]/g, '').slice(0, datos.fuente === FUENTE_PROLONGADO ? 8000 : 1500), seg.previas,
@@ -1733,7 +1793,7 @@ function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var valores = (e && e.namedValues) ? e.namedValues : {};
   var coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
   var micro = campoDelEvento(valores, CAMPOS.MICROORGANISMO);
-  var esquemas = coincidencias.concat(acompanantesNoRestringidos(e));
+  var esquemas = coincidencias.concat(acompanantesDe(e));
   asignarCursos(esquemas, seguimientoPaciente(e));
   return analisisPertinencia(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), tipoIndicacionTexto(campoDelEvento(valores, CAMPOS.TIPO_INDICACION)),
     micro === '-' ? '' : micro, esquemas, { cultivos: campoDelEvento(valores, CAMPOS.CULTIVOS) });
@@ -1813,7 +1873,7 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
     return v ? v : '-';
   }
   var coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
-  var acompanantes = acompanantesNoRestringidos(e);
+  var acompanantes = acompanantesDe(e);
   var reglas = obtenerRangosDosis();
   var pesoKg = pesoKgDesde(campo('PESO_KG'), campo('PESO_G'));
   var esquemas = coincidencias.concat(acompanantes);
@@ -1863,7 +1923,8 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
     if (avisoFrecuencia(am)) lineas.push('   ' + adv + ' ' + avisoFrecuencia(am));
   });
   acompanantes.forEach(function(am) {
-    lineas.push(E(0x2795) + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias, fechaSolicitud).replace(/^(\d+ d)\b/, '*$1*'));
+    lineas.push(E(0x2795) + ' ' + am.nombre + ' ' + esquemaCorto(am) + ' · ' + diasCorto(am.dias, am.fecha || fechaSolicitud).replace(/^(\d+ d)\b/, '*$1*') +
+      (am.delDia ? ' · otra solicitud de hoy' : ''));
     if (avisoFrecuencia(am)) lineas.push('   ' + adv + ' ' + avisoFrecuencia(am));
   });
   seguimientoPaciente(e).lineas.forEach(function(l) { lineas.push(l); });
@@ -2172,11 +2233,6 @@ function testConstruccionMensaje() {
   Logger.log('--- Caso vancomicina sola (no dispara alerta propia) ---');
   var cv = filtrarAntimicrobianosRestringidos(eventoPruebaVancomicinaSola());
   Logger.log('Coincidencias: ' + JSON.stringify(cv) + ' -> debeAlertar: ' + debeAlertar(cv) + ' (debe ser false)');
-}
-
-// SI envia un mensaje real al grupo configurado. Confirmar antes GREENAPI_GROUP_CHATID (PRUEBA BOT).
-function enviarEjemploAlGrupo() {
-  notificarNuevaRespuesta(eventoPruebaDaptomicina());
 }
 
 // Envia SOLO a PRUEBA BOT (chatId fijo; no usa GREENAPI_GROUP_CHATID) el mensaje base del caso de

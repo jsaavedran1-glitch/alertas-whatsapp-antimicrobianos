@@ -532,6 +532,64 @@ prueba('seguimiento: dias calendario que cuadran con las fechas y sin tramos de 
   incluye(m, '💊 ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · *7 d* hasta 22/11\n');   // fin contado desde la solicitud
 });
 
+prueba('mismo dia: combinaciones en formularios separados se suman; cambio, misma familia o mismo antimicrobiano reemplazan', function () {
+  // la regla
+  [['CEFEPIME', 'MEROPENEM', true], ['PIPERACILINA / TAZOBACTAM', 'CEFEPIME', true], ['VANCOMICINA', 'LINEZOLID', true],
+   ['CIPROFLOXACINO TABLETA', 'CIPROFLOXACINO AMPOLLA 100, 200', true], ['ANFOTERICINA B', 'ANFOTERICINA B LIPOSOMAL', true],
+   ['CEFEPIME', 'VANCOMICINA', false], ['MEROPENEM', 'LINEZOLID', false], ['MEROPENEM', 'CASPOFUNGINA 50, 70', false],
+   ['CEFTAZIDIMA / AVIBACTAM', 'AZTREONAM', false], ['AZTREONAM', 'CEFTAZIDIMA / AVIBACTAM', false], ['AMPICILINA', 'CEFOTAXIMA', false]
+  ].forEach(function (c) { assert.strictEqual(reemplazaMismoDia(c[0], c[1]), c[2], c[0] + ' -> ' + c[1]); });
+  var nombres = function (l) { return l.map(function (x) { return x.nombre; }); };
+  assert.deepStrictEqual(nombres(combinarMismoDia([{ nombre: 'CEFEPIME' }], [{ nombre: 'VANCOMICINA' }], false)), ['CEFEPIME', 'VANCOMICINA']);
+  assert.deepStrictEqual(nombres(combinarMismoDia([{ nombre: 'CEFEPIME' }, { nombre: 'VANCOMICINA' }], [{ nombre: 'MEROPENEM' }], false)), ['VANCOMICINA', 'MEROPENEM']);
+  // CAMBIO reemplaza lo anterior de su tipo; el antifungico sigue
+  assert.deepStrictEqual(nombres(combinarMismoDia([{ nombre: 'MEROPENEM' }, { nombre: 'CASPOFUNGINA' }], [{ nombre: 'LINEZOLID' }], true)), ['CASPOFUNGINA', 'LINEZOLID']);
+
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  var cambio = function (f) { f[ENCABEZADOS_REALES.indexOf('Indicación')] = 'CAMBIO'; return f; };
+  // Cadena del tratamiento continuo: cefepime y vancomicina el 23/10 en dos formularios son una combinacion
+  filas.push(filaMatriz('16/10/2026 08:00:00', '889001', [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]));
+  filas.push(filaMatriz('23/10/2026 08:00:00', '889001', [['CEFEPIME', '2000', '8', '7']]));
+  filas.push(filaMatriz('23/10/2026 14:00:00', '889001', [['VANCOMICINA', '1000', '12', '7']]));
+  var r1 = revisionProlongado(eventoSeguimiento('01/11/2026 10:00:00', '889001', 'J189', [['MEROPENEM', '1000', '8', '7']]), []);
+  incluye(r1.bloque.join('\n'), '1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · 7 d\n2. CEFEPIME + VANCOMICINA 23/10/2026-01/11/2026 · 9 d\n3. MEROPENEM');
+  // ... pero si la segunda vino marcada como CAMBIO, la reemplaza
+  filas.push(filaMatriz('16/10/2026 08:00:00', '889002', [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]));
+  filas.push(filaMatriz('23/10/2026 08:00:00', '889002', [['MEROPENEM', '1000', '8', '7']]));
+  filas.push(cambio(filaMatriz('23/10/2026 14:00:00', '889002', [['LINEZOLID', '600', '12', '7']])));
+  var r2 = revisionProlongado(eventoSeguimiento('01/11/2026 10:00:00', '889002', 'J189', [['CEFEPIME', '2000', '8', '7']]), []);
+  incluye(r2.bloque.join('\n'), '2. LINEZOLID 23/10/2026-01/11/2026 · 9 d'); noIncluye(r2.mensaje, 'MEROPENEM');
+  // ceftazidima/avibactam + aztreonam en dos formularios: combinacion buscada
+  filas.push(filaMatriz('16/10/2026 08:00:00', '889006', [['MEROPENEM', '1000', '8', '7']]));
+  filas.push(filaMatriz('23/10/2026 08:00:00', '889006', [['CEFTAZIDIMA / AVIBACTAM', '2500', '8', '14']]));
+  filas.push(filaMatriz('23/10/2026 09:00:00', '889006', [['AZTREONAM', '2000', '8', '14']]));
+  var r6 = revisionProlongado(eventoSeguimiento('01/11/2026 10:00:00', '889006', 'A419', [['CEFEPIME', '2000', '8', '7']]), []);
+  incluye(r6.bloque.join('\n'), '2. CEFTAZIDIMA / AVIBACTAM + AZTREONAM 23/10/2026-01/11/2026 · 9 d');
+
+  // Caso PROA: el cefepime de otro formulario de hoy acompana a la vancomicina (antes: "vancomicina sola" frente a E. coli)
+  filas.push(filaMatriz('05/11/2026 08:00:00', '889003', [['CEFEPIME', '2000', '8', '7']]));
+  var e3 = eventoSeguimiento('05/11/2026 14:00:00', '889003', 'N390', [['VANCOMICINA', '1000', '12', '7']]);
+  e3.namedValues[CAMPOS.MICROORGANISMO] = ['E. coli'];
+  assert.deepStrictEqual(seguimientoPaciente(e3).delDia.map(function (am) { return am.nombre; }), ['CEFEPIME']);
+  noIncluye(analisisPertinenciaDesdeEvento(e3).lineas.join('\n'), 'no tiene actividad frente a gramnegativos');
+  var m3 = construirMensajeDesdeEvento(e3, filtrarAntimicrobianosRestringidos(e3));
+  incluye(m3, '➕ CEFEPIME 2000 mg (28,6 mg/kg)'); incluye(m3, '· *7 d* hasta 12/11 · otra solicitud de hoy');
+  incluye(m3, 'terapia empírica combinada (VANCOMICINA + CEFEPIME)'); noIncluye(m3, 'Antibiótico en curso');
+  // sin el otro formulario, la vancomicina si queda sola
+  var e3b = eventoSeguimiento('05/11/2026 14:00:00', '889099', 'N390', [['VANCOMICINA', '1000', '12', '7']]);
+  e3b.namedValues[CAMPOS.MICROORGANISMO] = ['E. coli'];
+  incluye(analisisPertinenciaDesdeEvento(e3b).lineas.join('\n'), 'VANCOMICINA no tiene actividad frente a gramnegativos');
+  // hoy piperacilina/tazobactam y ahora meropenem: es un cambio; no acompana ni queda "en curso"
+  filas.push(filaMatriz('05/11/2026 08:00:00', '889004', [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]));
+  var e4 = eventoSeguimiento('05/11/2026 14:00:00', '889004', 'J189', [['MEROPENEM', '1000', '8', '7'], ['VANCOMICINA', '1000', '12', '7']]);
+  assert.strictEqual(seguimientoPaciente(e4).delDia.length, 0); noIncluye(construirMensajeDesdeEvento(e4), 'PIPERACILINA');
+  // marcada como CAMBIO: tampoco
+  filas.push(filaMatriz('05/11/2026 08:00:00', '889005', [['MEROPENEM', '1000', '8', '7']]));
+  var e5 = eventoSeguimiento('05/11/2026 14:00:00', '889005', 'J189', [['LINEZOLID', '600', '12', '7']]);
+  e5.namedValues[CAMPOS.INDICACION] = ['CAMBIO'];
+  assert.strictEqual(seguimientoPaciente(e5).delDia.length, 0);
+});
+
 prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, al momento, sin verdes ni repetidos', function () {
   var filas = HOJAS['Respuestas de formulario 1']._filas;
   var conDx = function (fecha, hc, ams, dx) { var f = filaMatriz(fecha, hc, ams); f[ENCABEZADOS_REALES.indexOf(CAMPOS.DIAGNOSTICO)] = dx; return f; };
