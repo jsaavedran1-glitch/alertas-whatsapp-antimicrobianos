@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.13] - 2026-11-23 (solo Codigo.gs)
+
+### Cambiado (decisión del referente)
+- Solicitudes del mismo día marcadas como **CAMBIO**: ya no reemplazan todo lo anterior; siguen la misma regla que las demás (se reemplaza solo el mismo antimicrobiano o uno de la misma familia). En los datos de 90 días, unas 10 solicitudes marcadas CAMBIO agregaban un antimicrobiano en vez de reemplazarlo (meropenem en la mañana y linezolid marcado CAMBIO en la tarde). Las que sí son un cambio dentro de la familia (cefepime → meropenem) se siguen reemplazando.
+
 ## [1.36.12] - 2026-11-23 (solo Codigo.gs)
 
 ### Corregido (auditoría, decisión del referente)

@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.12';
+var VERSION_BOT = '1.36.13';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -76,9 +76,10 @@ var CONFIG = {
   SEGUIMIENTO_TOLERANCIA_DIAS: 3,
   // Solicitudes del mismo dia (v1.36.12, decision del referente): una posterior se suma a las anteriores, porque hay
   // combinaciones registradas en formularios separados (cefepime en uno y vancomicina en otro: 78 casos en 90 dias). La
-  // reemplaza si esta marcada como CAMBIO, si es el mismo antimicrobiano (otra presentacion o una correccion) o si es de
-  // la misma familia (cefepime -> meropenem, vancomicina -> linezolid). Familias: expresiones sobre la primera palabra
-  // del nombre. Combinaciones: pares de la misma familia que se dan a proposito y se suman.
+  // reemplaza si es el mismo antimicrobiano (otra presentacion o una correccion) o de la misma familia (cefepime ->
+  // meropenem, vancomicina -> linezolid). Marcada como CAMBIO sigue la misma regla (v1.36.13: varios medicos marcan
+  // CAMBIO al agregar un antimicrobiano). Familias: expresiones sobre la primera palabra del nombre. Combinaciones:
+  // pares de la misma familia que se dan a proposito y se suman.
   MISMO_DIA_FAMILIAS: [
     '^(CEF|PENICILIN|BENCILPENICILIN|AMOXICILIN|AMPICILIN|SULTAMICILIN|OXACILIN|DICLOXACILIN|NAFCILIN|PIPERACILIN)|PENEM$|^AZTREONAM$',
     '^(VANCOMICINA|LINEZOLID|DAPTOMICINA|TEICOPLANINA)$'
@@ -1390,14 +1391,9 @@ function diasTratamientoPrevio(ordenes, t) {
 }
 
 // Solicitudes del mismo dia (CONFIG.MISMO_DIA_FAMILIAS): lo que sigue vigente de las anteriores (previos) al llegar
-// otra (nuevos), la posterior al final. Items con .nombre. esCambio: la nueva vino marcada como CAMBIO y reemplaza todo lo
-// anterior de su tipo (antibacteriano o antifungico).
-function combinarMismoDia(previos, nuevos, esCambio) {
-  var quedan = previos.filter(function(p) {
-    return !nuevos.some(function(n) {
-      return reemplazaMismoDia(p.nombre, n.nombre) || (esCambio && esAntifungico(n.nombre) === esAntifungico(p.nombre));
-    });
-  });
+// otra (nuevos), la posterior al final. Items con .nombre. Este marcada o no como CAMBIO (v1.36.13).
+function combinarMismoDia(previos, nuevos) {
+  var quedan = previos.filter(function(p) { return !nuevos.some(function(n) { return reemplazaMismoDia(p.nombre, n.nombre); }); });
   return quedan.concat(nuevos);
 }
 
@@ -1413,8 +1409,6 @@ function reemplazaMismoDia(anterior, nuevo) {
   });
   return !combinacion && (CONFIG.MISMO_DIA_FAMILIAS || []).some(function(f) { var r = new RegExp(f); return r.test(ma) && r.test(mn); });
 }
-
-function esSolicitudCambio(indicacion) { return normalizarTexto(indicacion) === 'CAMBIO'; }
 
 // Solicitudes previas de la misma historia clinica en los ultimos CONFIG.SEGUIMIENTO_DIAS dias.
 // Devuelve { previas, lineas (para el mensaje), historia (texto de cada solicitud previa, en orden),
@@ -1462,12 +1456,12 @@ function seguimientoPaciente(e) {
       var fecha = fechaDe(fila[0]);
       if (!fecha) return;
       var dato = function(nombre) { var c = col(nombre); return c < 0 ? '' : String(fila[c] === null || fila[c] === undefined ? '' : fila[c]).trim(); };
-      var items = [], cambio = esSolicitudCambio(dato(CAMPOS.INDICACION));
+      var items = [];
       SLOTS.forEach(function(slot) {
         var nombre = nombreLimpio(dato(slot.nombre));
         if (!nombre || nombre === '-') return;
         var p = { fecha: fecha, nombre: nombre, dias: numeroONulo(dato(slot.dias)), diasTexto: dato(slot.dias), dosis: dato(slot.dosis),
-          via: dato(slot.via), frecuencia: dato(slot.frecuencia), dx: dato(CAMPOS.DIAGNOSTICO), cambio: cambio };
+          via: dato(slot.via), frecuencia: dato(slot.frecuencia), dx: dato(CAMPOS.DIAGNOSTICO) };
         previas.push(p);
         items.push(nombre + ' ' + (p.dosis || '-') + ' mg cada ' + (p.frecuencia || '-') + ' h por ' + (p.dias !== null ? formatoNumero(p.dias, 0) + ' d' : '-'));
       });
@@ -1497,7 +1491,7 @@ function seguimientoPaciente(e) {
       lista.slice().sort(function(a, b) { return a.fecha.getTime() - b.fecha.getTime(); }).forEach(function(p) {
         var t = p.fecha.getTime(), f = formularios[formularios.length - 1];
         if (f && f.t === t) { if (!f.items.some(function(x) { return x.nombre === p.nombre; })) f.items.push(p); return; }
-        formularios.push({ t: t, dia: diaCal(t), items: [p], dx: p.dx, cambio: p.cambio });
+        formularios.push({ t: t, dia: diaCal(t), items: [p], dx: p.dx });
       });
       return formularios;
     };
@@ -1505,9 +1499,9 @@ function seguimientoPaciente(e) {
     // esta orden en el caso PROA (v1.36.12).
     var hoyCal = diaCal(ahora.getTime()), vigentesHoy = [];
     porFormulario(previas.filter(function(p) { return diaCal(p.fecha.getTime()) === hoyCal; })).forEach(function(f) {
-      vigentesHoy = combinarMismoDia(vigentesHoy, f.items, f.cambio);
+      vigentesHoy = combinarMismoDia(vigentesHoy, f.items);
     });
-    res.delDia = combinarMismoDia(vigentesHoy, actuales, esSolicitudCambio(campoDelEvento(valores, CAMPOS.INDICACION)))
+    res.delDia = combinarMismoDia(vigentesHoy, actuales)
       .filter(function(p) { return p.fecha; })   // los de esta solicitud no tienen fecha
       .map(function(p) { return { nombre: p.nombre, dosis: p.dosis || '-', via: p.via || '-', frecuencia: p.frecuencia || '-',
         dias: p.diasTexto || '-', fecha: p.fecha, delDia: true }; });
@@ -1525,7 +1519,7 @@ function seguimientoPaciente(e) {
       if (transcurridosEpisodio >= 1) {
         porFormulario(previasTipo.filter(function(p) { return p.fecha.getTime() >= inicioEpisodio; })).forEach(function(f) {
           var ult = solicitudesEp[solicitudesEp.length - 1];
-          if (ult && ult.dia === f.dia) { ult.items = combinarMismoDia(ult.items, f.items, f.cambio); if (f.dx) ult.dx = f.dx; return; }
+          if (ult && ult.dia === f.dia) { ult.items = combinarMismoDia(ult.items, f.items); if (f.dx) ult.dx = f.dx; return; }
           solicitudesEp.push({ dia: f.dia, inicio: f.t, items: f.items.slice(), dx: f.dx });
         });
         solicitudesEp.forEach(function(x) { x.nombres = x.items.map(function(p) { return p.nombre; }); });
