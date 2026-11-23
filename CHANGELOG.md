@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.10] - 2026-11-23 (solo IA_PROA.gs)
+
+### Cambiado (pedido del referente)
+- Indicador mensual: la línea 🤝 muestra solo el mes informado ("Solicitudes por intervención PROA: *21* de 773 (2,7%)"), sin la comparación con el mes anterior. Los meses anteriores siguen en la línea de tendencia (📅).
+
 ## [1.36.9] - 2026-11-23 (solo IA_PROA.gs)
 
 ### Agregado (decisión del referente)

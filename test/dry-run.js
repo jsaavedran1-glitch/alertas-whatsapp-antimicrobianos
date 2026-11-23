@@ -1248,7 +1248,7 @@ prueba('crearTriggerInformeProa deja un activador semanal (lunes 7:00) y uno men
 });
 
 // ---- Indicador mensual: solicitudes con razon del cambio "POR INTERVENCION PROA" ----------------------------
-prueba('indicador mensual: solicitudes "POR INTERVENCION PROA" del mes cerrado, el anterior y la tendencia de 6 meses', function () {
+prueba('indicador mensual: solicitudes "POR INTERVENCION PROA" solo del mes cerrado, con la tendencia de 6 meses', function () {
   var matrizReal = HOJAS['Respuestas de formulario 1'], informesReal = HOJAS['INFORMES_PROA'], propsReal = global.PropertiesService;
   var R = 'Si fue cambiado, cual fue la razón?', CF = [['CEFEPIME', '2000', '8', '7']];
   var fila = function (fecha, razon, ams) { var o = {}; o[R] = razon; return filaInforme(fecha, '3001', o, ams || CF); };
@@ -1267,14 +1267,15 @@ prueba('indicador mensual: solicitudes "POR INTERVENCION PROA" del mes cerrado, 
   ]);
   delete HOJAS['INFORMES_PROA'];
   var esperado = '*📈 INDICADOR MENSUAL PROA · noviembre 2026*\n' +
-    '🤝 Solicitudes por intervención PROA: *4* de 5 (80%) · octubre 1 de 3 (33,3%)\n' +
+    '🤝 Solicitudes por intervención PROA: *4* de 5 (80%)\n' +
     '📅 Últimos 6 meses: jun 1 · jul 0 · ago 0 · sep 1 · oct 1 · nov 4\n' +
     '_Razón del cambio «Por intervención PROA» que marca el médico en el formulario; las suspensiones no pasan por el formulario._';
   propsInforme({ ANTHROPIC_API_KEY: '' });
   try {
     var ind = construirIndicadorMensual_(new Date(2026, 11, 1, 7, 0, 0));
     assert.strictEqual(ind.mensaje, esperado);
-    assert.strictEqual(ind.periodo, 'noviembre 2026');
+    assert.strictEqual(ind.periodo, 'noviembre 2026'); noIncluye(ind.mensaje, 'octubre');
+    assert.deepStrictEqual([ind.meses[4].proa, ind.meses[4].solicitudes], [1, 3]);   // octubre: 1 de 3, solo en la tendencia
     assert.deepStrictEqual([ind.enCurso.nombre, ind.enCurso.proa, ind.enCurso.solicitudes], ['diciembre', 1, 1]);
     // cambio de año: el 1 de enero informa diciembre y la tendencia va de julio a diciembre
     var enero = construirIndicadorMensual_(new Date(2027, 0, 1, 7, 0, 0));

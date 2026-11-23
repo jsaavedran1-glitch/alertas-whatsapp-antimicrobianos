@@ -11,8 +11,8 @@
 // ANTHROPIC_API_KEY, o si la API falla, el informe sale igual, solo con las cifras.
 //
 // Indicador mensual (v1.36.9, decision del referente): el dia 1 de cada mes, a la misma hora y al mismo destino, las
-// solicitudes del mes que termino con razon del cambio "POR INTERVENCION PROA", con el mes anterior y la tendencia de
-// INDICADOR_MESES meses. Lo calcula el codigo, sin IA.
+// solicitudes del mes que termino con razon del cambio "POR INTERVENCION PROA" (v1.36.10: solo ese mes en la cifra) y la
+// tendencia de INDICADOR_MESES meses. Lo calcula el codigo, sin IA.
 //
 // Propiedades del script:
 //   ANTHROPIC_API_KEY        opcional: la lectura de la IA. Sin ella, informe solo con cifras.
@@ -29,7 +29,7 @@
 // ultimo numero y basta con pegar este. Si mayor.menor no coincide, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
 
-var VERSION_INFORME = "1.36.9";
+var VERSION_INFORME = "1.36.10";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
@@ -196,8 +196,8 @@ function construirIndicadorMensual_(hoy) {
   solicitudesConRazon_(meses[0].desde).forEach(function(s) {
     meses.forEach(function(m) { if (s.fecha >= m.desde && s.fecha < m.hasta) { m.solicitudes++; if (s.proa) m.proa++; } });
   });
-  var enCurso = meses.pop(), mes = meses[meses.length - 1], anterior = meses[meses.length - 2];
-  return { mensaje: mensajeIndicadorMensual_(mes, anterior, meses), periodo: mes.nombre + " " + mes.anio, meses: meses, enCurso: enCurso };
+  var enCurso = meses.pop(), mes = meses[meses.length - 1];
+  return { mensaje: mensajeIndicadorMensual_(mes, meses), periodo: mes.nombre + " " + mes.anio, meses: meses, enCurso: enCurso };
 }
 
 // " de 773 (2,7%)"
@@ -205,12 +205,12 @@ function fraccionIndicador_(m) {
   return " de " + m.solicitudes + " (" + formatoNumero(m.solicitudes ? 100 * m.proa / m.solicitudes : 0, 1) + "%)";
 }
 
-function mensajeIndicadorMensual_(mes, anterior, meses) {
+// La cifra es solo del mes informado (v1.36.10, pedido del referente); los anteriores van en la tendencia.
+function mensajeIndicadorMensual_(mes, meses) {
   var E = function(cp) { return String.fromCodePoint(cp); };
   return [
     "*" + E(0x1F4C8) + " INDICADOR MENSUAL PROA · " + mes.nombre + " " + mes.anio + "*",
-    E(0x1F91D) + " Solicitudes por intervención PROA: *" + mes.proa + "*" + fraccionIndicador_(mes) + " · " + anterior.nombre + " " +
-      anterior.proa + fraccionIndicador_(anterior),
+    E(0x1F91D) + " Solicitudes por intervención PROA: *" + mes.proa + "*" + fraccionIndicador_(mes),
     E(0x1F4C5) + " Últimos " + meses.length + " meses: " + meses.map(function(m) { return m.nombre.slice(0, 3) + " " + m.proa; }).join(" · "),
     "_Razón del cambio «Por intervención PROA» que marca el médico en el formulario; las suspensiones no pasan por el formulario._"
   ].join("\n");

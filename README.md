@@ -161,7 +161,7 @@ Para activarlo: crear el archivo `IA_PROA` en el proyecto, pegar `IA_PROA.gs`, a
 
 ### Indicador mensual
 
-El día 1 de cada mes a las 7:00, al mismo destino del informe semanal, el bot envía las solicitudes del mes que terminó cuya razón del cambio es **"POR INTERVENCIÓN PROA"** (la marca el médico en "Si fue cambiado, ¿cuál fue la razón?"): número, total de solicitudes y porcentaje, el mes anterior y la tendencia de 6 meses. Lo calcula el código, sin IA. Es una cifra que se queda corta: la pregunta es obligatoria, la mayoría responde "Condición propia del paciente" y una suspensión no genera formulario. Prueba sin enviar nada: `probarIndicadorMensual()`.
+El día 1 de cada mes a las 7:00, al mismo destino del informe semanal, el bot envía las solicitudes del mes que terminó cuya razón del cambio es **"POR INTERVENCIÓN PROA"** (la marca el médico en "Si fue cambiado, ¿cuál fue la razón?"): número, total de solicitudes y porcentaje de ese mes, y la tendencia de 6 meses. Lo calcula el código, sin IA. Es una cifra que se queda corta: la pregunta es obligatoria, la mayoría responde "Condición propia del paciente" y una suspensión no genera formulario. Prueba sin enviar nada: `probarIndicadorMensual()`.
 
 ### Cruce del diagnóstico con la pestaña CIE10 (v1.35.0)
 
