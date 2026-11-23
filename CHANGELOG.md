@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.5] - 2026-11-23 (solo Codigo.gs; la pestaña ya cambió)
+
+### Cambiado (decisión del referente)
+- **Duración de referencia de sepsis solo para el choque séptico:** en la fila de bacteriemia/sepsis, el prefijo `R57` (todos los choques) pasa a `R572` (choque séptico). El choque hipovolémico (R571), el cardiogénico (R570) y el no especificado (R579) ya no toman 7-14 d de sepsis; si el texto dice "choque séptico" o "sepsis", la palabra clave sigue encontrando la referencia. Se cambió en la pestaña `PERTINENCIA_DURACION` (rige desde la siguiente solicitud), en el respaldo del código y en `docs/pertinencia.md`.
+
 ## [1.36.4] - 2026-11-23 (solo Codigo.gs)
 
 ### Cambiado (auditoría, punto 5)

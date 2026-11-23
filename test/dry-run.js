@@ -346,6 +346,9 @@ prueba('pertinencia: sindrome por CIE10 y por texto libre', function () {
   assert.strictEqual(clave('Infección vías urinarias complicada'), 'ITU');
   assert.strictEqual(clave('INFECCIÓN CEREBRAL POR CRYPTOCOCCUS NEOFORMANS'), 'CRIPTOCOCOSIS');
   assert.strictEqual(clave('RABDOMIOSARCOMA-NEUTROPENIA FEBRIL'), 'NEUTROPENIA');
+  // choque: solo el septico (R572) toma la referencia de sepsis; el hipovolemico o no especificado, no (2026-11-23)
+  assert.strictEqual(clave('R572'), 'BACTERIEMIA'); assert.strictEqual(clave('R571'), null); assert.strictEqual(clave('R579'), null);
+  assert.strictEqual(clave('CHOQUE SEPTICO'), 'BACTERIEMIA');
   assert.strictEqual(clave('C169'), null);
   assert.strictEqual(clave('INSTITUTO'), null);                        // "ITU" solo como palabra completa
   assert.strictEqual(clave(''), null);
