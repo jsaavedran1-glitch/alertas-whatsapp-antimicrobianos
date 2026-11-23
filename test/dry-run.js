@@ -26,7 +26,13 @@ var CIE10 = { B377: 'CANDIDIASIS, NO ESPECIFICADA', A419: 'SEPSIS, NO ESPECIFICA
   P615: 'NEUTROPENIA NEONATAL TRANSITORIA', T814: 'INFECCION CONSECUTIVA A PROCEDIMIENTO, NO CLASIFICADA EN OTRA PARTE',
   K659: 'PERITONITIS, NO ESPECIFICADA', N110: 'PIELONEFRITIS CRONICA NO OBSTRUCTIVA ASOCIADA CON REFLUJO',
   I64X: 'ACCIDENTE VASCULAR ENCEFALICO AGUDO, NO ESPECIFICADO COMO HEMORRAGICO O ISQUEMICO', K359: 'APENDICITIS AGUDA, NO ESPECIFICADA',
-  K350: 'APENDICITIS AGUDA CON PERITONITIS GENERALIZADA', K830: 'COLANGITIS', K819: 'COLECISTITIS, NO ESPECIFICADA' };
+  K350: 'APENDICITIS AGUDA CON PERITONITIS GENERALIZADA', K830: 'COLANGITIS', K819: 'COLECISTITIS, NO ESPECIFICADA',
+  // las que salieron mal en la primera prueba con la matriz real (2026-11-22)
+  G009: 'MENINGITIS BACTERIANA, NO ESPECIFICADA', G008: 'OTRAS MENINGITIS BACTERIANAS', K658: 'OTRAS PERITONITIS', K818: 'OTRAS COLECISTITIS',
+  M868: 'OTRAS OSTEOMIELITIS', M869: 'OSTEOMIELITIS, NO ESPECIFICADA', L982: 'DERMATOSIS NEUTROFILA FEBRIL [SWEET]', C300: 'TUMOR MALIGNO DE LA FOSA NASAL',
+  C261: 'TUMOR MALIGNO DEL BAZO', D24X: 'TUMOR BENIGNO DE LA MAMA', C509: 'TUMOR MALIGNO DE LA MAMA, PARTE NO ESPECIFICADA',
+  C919: 'LEUCEMIA LINFOIDE, SIN OTRA ESPECIFICACION', C917: 'OTRAS LEUCEMIAS LINFOIDES', R509: 'FIEBRE, NO ESPECIFICADA',
+  J691: 'NEUMONITIS DEBIDA A ASPIRACION DE ACEITES Y ESENCIAS', L089: 'INFECCION LOCAL DE LA PIEL Y DEL TEJIDO SUBCUTANEO, NO ESPECIFICADA' };
 var codigosCie = Object.keys(CIE10);
 
 var ENCABEZADOS_REALES = ['Marca temporal', 'Dirección de correo electrónico', 'Nombre del médico que prescribe', 'Registro médico',
@@ -175,7 +181,7 @@ prueba('CIE10: punto, 3 caracteres (+X), minusculas, sin codigo y cache', functi
   assert.strictEqual(formatearDiagnosticoCIE10('M46.3:'), 'M46.3:'); // no esta en el catalogo simulado
   assert.strictEqual(formatearDiagnosticoCIE10('J40'), 'J40X - ' + CIE10.J40X);
   assert.strictEqual(formatearDiagnosticoCIE10('a419 sepsis'), 'A419 - ' + CIE10.A419);
-  assert.strictEqual(formatearDiagnosticoCIE10('SX FEBRIL EN ESTUDIO'), 'SX FEBRIL EN ESTUDIO');
+  assert.strictEqual(formatearDiagnosticoCIE10('SX FEBRIL EN ESTUDIO'), 'R509 - ' + CIE10.R509 + ' (escrito: SX FEBRIL EN ESTUDIO)');   // equivalencia fija
   assert.strictEqual(formatearDiagnosticoCIE10('419'), '419');
   var antes = lecturasCie;
   formatearDiagnosticoCIE10('G06.0'); formatearDiagnosticoCIE10('G060');
@@ -846,11 +852,14 @@ prueba('cruce del diagnostico escrito con la pestana CIE10 (textos reales de la 
   assert.strictEqual(cod('ITU'), 'N390'); assert.strictEqual(cod('IVU COMPLICADA'), 'N390');
   assert.strictEqual(cod('INFECCION DE VIAS URINARIAS COMPLICADA'), 'N390');
   assert.strictEqual(cod('SHOCK SEPTICO'), 'R572'); assert.strictEqual(cod('Shock hipovolémico '), 'R571');
-  assert.strictEqual(cod('MENIGITIS '), 'G039'); assert.strictEqual(cod('meningitis bacteriana'), 'G039');
+  assert.strictEqual(cod('MENIGITIS '), 'G039'); assert.strictEqual(cod('meningitis bacteriana'), 'G009');   // no G008 "OTRAS ..." 
   assert.strictEqual(cod('ENFEREMDAD RENAL CRONICA NO ESPECIFICADA\n \n'), 'N189');
   assert.strictEqual(cod('PERITONISTIS ASOCIADO AL CATETER '), 'K659');
   assert.strictEqual(cod('NEUMONIA ADQUIRIDA EN LA COMUNIDAD'), 'J189'); assert.strictEqual(cod('NEUMONÍA POSTERO BASAL IZQUIERDA EN TRATAMIENTO'), 'J189');
-  assert.strictEqual(cod('NEUMONIA ASPIRATIVA'), 'J690'); assert.strictEqual(cod('NEUMONIA BRONCOASPIRATIVA'), 'J189');
+  assert.strictEqual(cod('NEUMONIA ASPIRATIVA'), 'J690'); assert.strictEqual(cod('NEUMONIA BRONCOASPIRATIVA'), 'J690');   // equivalencias
+  assert.strictEqual(cod('NEUMONIA POR BRONCOASPIRACION'), 'J690'); assert.strictEqual(cod('SINDROME FBRIL '), 'R509');
+  assert.strictEqual(cod('OSTEOMIELITIS MIEMBRO INFERIOR '), 'M869'); assert.strictEqual(cod('LEUCEMIA LINFOIDE'), 'C919');   // no "OTRAS ..."
+  assert.strictEqual(cod('INFECCION DE PIEL Y TEJIDOS BLANDOS'), 'L089');
   assert.strictEqual(cod('CELULITIS DE PIERNA DERECHA '), 'L039'); assert.strictEqual(cod('ISO'), 'T814');
   assert.strictEqual(cod('COLECISTITIS MAS COLELITIASIS'), 'K819'); assert.strictEqual(cod('COLANGITIS'), 'K830');
   // una sola palabra: solo la descripcion generica; nada de diagnosticos parecidos
@@ -859,13 +868,18 @@ prueba('cruce del diagnostico escrito con la pestana CIE10 (textos reales de la 
   assert.strictEqual(cod('ACCIDENTE OFIDICO'), '');               // no es el accidente cerebrovascular
   assert.strictEqual(cod('INFECCION DE SITIO OPERATORIO '), '');  // no es la infeccion urinaria "sitio no especificado"
   assert.strictEqual(cod('CÓDIGO BLANCO  MAYOR  72   HORAS'), '');
+  // lo que salio mal con la matriz real: prefijo comun (NEUTRO-), quitar varias palabras y empates
+  assert.strictEqual(cod('TUMOR FOSA POSTERIOR - NEUROINFECCION'), '');   // no la fosa nasal
+  assert.strictEqual(cod('CA PAPILAR DE OVARIO + FISTULA'), '');           // no el bazo
+  assert.strictEqual(cod('Tumor de Mama '), '');                            // benigno o maligno: empate
   // codigos escritos y descripciones exactas no cambian
   assert.strictEqual(resolverCIE10('A-419').via, 'escrito'); assert.strictEqual(resolverCIE10(': L031').codigo, 'L031');
   assert.strictEqual(resolverCIE10('INFECCION DE VIAS URINARIAS, SITIO NO ESPECIFICADO').via, 'descripcion');
   // en el mensaje sale lo escrito junto al codigo cruzado; categoria sin subcodigo con la descripcion de la no especificada
   assert.strictEqual(diagnosticoCorto('MENIGITIS '), 'G039 · Meningitis, no especificada (escrito: menigitis)');
   assert.strictEqual(diagnosticoCorto('K35'), 'K35 · Apendicitis aguda, no especificada');
-  assert.strictEqual(diagnosticoCorto('SINDROME FEBRIL'), 'SINDROME FEBRIL');
+  assert.strictEqual(diagnosticoCorto('SINDROME FEBRIL'), 'R509 · Fiebre, no especificada (escrito: sindrome febril)');
+  assert.strictEqual(diagnosticoCorto('SINDROME MENINGEO EN ESTUDIO'), 'SINDROME MENINGEO EN ESTUDIO');
   // duracion: el cruce y las palabras corregidas encuentran el sindrome; una palabra clave le gana al codigo cruzado
   var tabla = obtenerPertinencia(), sin = function (dx) { var x = sindromePara(dx, tabla); return x ? x.clave : null; };
   assert.strictEqual(sin('MENIGITIS '), 'MENINGITIS'); assert.strictEqual(sin('PERITONISTIS ASOCIADO AL CATETER'), 'INTRAABDOMINAL');

@@ -166,11 +166,14 @@ Cuando el médico escribe el diagnóstico sin código (en la matriz, uno de cada
 - **Abreviaturas** (`CONFIG.CIE10_SINONIMOS`): ITU/IVU, SHOCK, SX, ISO, NAC, CA, TBC, ERC/IRC, EPOC.
 - **Errores de digitación:** una letra de diferencia, dos en palabras largas, contra el vocabulario de la pestaña. MENIGITIS → MENINGITIS, PERITONISTIS → PERITONITIS, ENFEREMDAD → ENFERMEDAD.
 - **Palabras que no cambian el diagnóstico** (`CONFIG.CIE10_PALABRAS_IGNORADAS`): en estudio, probable, derecha, adquirida en la comunidad, asociada a los cuidados de la salud…
+- **Equivalencias fijas** (`CONFIG.CIE10_EQUIVALENCIAS`), que van primero: neumonía aspirativa o por broncoaspiración → J690, síndrome febril → R509, pielonefritis → N10X. El código debe existir en la pestaña.
 - **Para no inventar un diagnóstico:**
-  - con dos o más palabras, la descripción debe contenerlas todas; si ninguna las tiene, se quitan complementos del final ("INFECCION DE VIAS URINARIAS COMPLICADA" → N390);
-  - con una sola palabra, solo vale la descripción genérica ("NEUMONIA" → J189; "CELULITIS DE PIERNA DERECHA" → L039).
+  - con dos o más palabras, la descripción debe contenerlas todas; si ninguna las tiene, se quita **una** del final ("INFECCION DE VIAS URINARIAS COMPLICADA" → N390);
+  - al final, solo la primera palabra y solo con su descripción genérica ("NEUMONIA" → J189; "CELULITIS DE PIERNA DERECHA" → L039);
+  - entre varias, la "no especificada" antes que "otras" (G009, no G008 "Otras meningitis bacterianas");
+  - **si dos descripciones empatan, queda sin código** ("Tumor de mama": benigno o maligno).
 
-  Así "ACCIDENTE OFIDICO" no termina en un accidente cerebrovascular, ni "NEUTROPRENIA FEBRIL" en la neutropenia neonatal.
+  Así "ACCIDENTE OFIDICO" no termina en un accidente cerebrovascular, ni "NEUTROPRENIA FEBRIL" en la dermatosis neutrófila febril, ni "TUMOR FOSA POSTERIOR" en la fosa nasal (casos reales de la primera prueba).
 - **En el mensaje se ve lo que escribió el médico:** `📋 G039 · Meningitis, no especificada (escrito: menigitis)`.
 - **Duración de referencia:** con código cruzado mandan primero las palabras clave de la tabla de duración ("SEPSIS URINARIA" sigue siendo infección urinaria) y, si ninguna coincide, el código cruzado. Con código escrito por el médico no cambia nada.
 - Un código de 3 caracteres sin subcódigo (`K35`, `K65`) sale con la descripción de su "no especificada".

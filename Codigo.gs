@@ -22,6 +22,10 @@ var CONFIG = {
     'DERECHO', 'IZQUIERDA', 'IZQUIERDO', 'BILATERAL', 'ADQUIRIDA', 'ADQUIRIDO', 'COMUNIDAD', 'ASOCIADA', 'ASOCIADO', 'CUIDADO',
     'CUIDADOS', 'SALUD', 'TRATAMIENTO', 'MANEJO', 'REGION', 'SEVERA', 'SEVERO', 'GRAVE', 'LEVE', 'MODERADA', 'MODERADO',
     'PACIENTE', 'DX', 'DIAGNOSTICO'],
+  // Textos frecuentes con su codigo fijo (se comparan sin las palabras ignoradas, con las abreviaturas y la ortografia
+  // corregida; el codigo debe existir en la pestana). Van antes del cruce por palabras.
+  CIE10_EQUIVALENCIAS: { 'NEUMONIA ASPIRATIVA': 'J690', 'NEUMONIA BRONCOASPIRATIVA': 'J690', 'NEUMONIA POR BRONCOASPIRACION': 'J690',
+    'NEUMONIA POR ASPIRACION': 'J690', 'SINDROME FEBRIL': 'R509', 'PIELONEFRITIS': 'N10X', 'PIELONEFRITIS AGUDA': 'N10X' },
   CACHE_CIE10_SEG: 21600,
   HOJA_RANGOS_DOSIS: 'RANGOS_DOSIS',
   // Rangos de referencia POR DOSIS para marcar "revisar dosis". Una dosis se acepta si cumple
@@ -552,15 +556,20 @@ function buscarEnColumnaA(hoja, codigo) {
 // abreviaturas de CONFIG.CIE10_SINONIMOS, sin las palabras de CONFIG.CIE10_PALABRAS_IGNORADAS y corrigiendo errores de
 // digitacion (una letra de diferencia; dos en palabras de 9 o mas) contra el vocabulario de la pestana. Para no
 // inventar un diagnostico:
-//  - con dos o mas palabras, la descripcion debe contenerlas todas; si ninguna las tiene, se quitan palabras del final
-//    (los complementos: "INFECCION DE VIAS URINARIAS COMPLICADA" -> N390) mientras queden dos;
-//  - con una sola palabra, solo vale la descripcion generica de esa palabra ("NEUMONIA" -> J189 "NEUMONIA, NO
+//  - antes, CONFIG.CIE10_EQUIVALENCIAS (textos frecuentes con codigo fijo);
+//  - con dos o mas palabras, la descripcion debe contenerlas todas; si ninguna las tiene, se quita UNA del final
+//    (el complemento: "INFECCION DE VIAS URINARIAS COMPLICADA" -> N390; quitar mas cambiaba el sentido: "TUMOR FOSA
+//    POSTERIOR" terminaba en la fosa nasal);
+//  - al final, solo la primera palabra y solo con su descripcion generica ("NEUMONIA" -> J189 "NEUMONIA, NO
 //    ESPECIFICADA"; "ACCIDENTE OFIDICO" no termina en un accidente cerebrovascular).
-// Entre varias, gana la de mas palabras identicas, menos palabras de sobra y mas corta. En el mensaje sale lo escrito
-// junto al codigo cruzado (formatearDiagnosticoCIE10). probarCruceCIE10() muestra el resultado sobre la matriz real.
+// Entre varias, gana la de mas palabras identicas y menos palabras de sobra, y la "no especificada" antes que "otras"
+// (G009 y no G008 "OTRAS MENINGITIS BACTERIANAS"). Si aun asi empatan dos ("TUMOR DE MAMA": benigno o maligno), queda
+// sin codigo. En el mensaje sale lo escrito junto al codigo cruzado (formatearDiagnosticoCIE10). probarCruceCIE10()
+// muestra el resultado sobre la matriz real (2026-11-22: 419 de 500 con codigo escrito; los errores que mostro el cruce
+// llevaron a las reglas de empate, prefijo y una sola palabra quitada).
 var CIE10_VACIAS = ['DE', 'DEL', 'LA', 'LAS', 'EL', 'LOS', 'Y', 'E', 'EN', 'POR', 'CON', 'SIN', 'A', 'AL', 'O', 'U', 'NO', 'PARA', 'SU', 'SE',
   'QUE', 'VS', 'MAS', 'OTRA', 'OTRAS', 'OTRO', 'OTROS', 'ESPECIFICADO', 'ESPECIFICADA', 'ESPECIFICADOS', 'ESPECIFICADAS', 'ESPECIFICACION',
-  'CLASIFICADO', 'CLASIFICADA', 'CLASIFICADOS', 'CLASIFICADAS', 'PARTE', 'SITIO', 'TIPO'];
+  'CLASIFICADO', 'CLASIFICADA', 'CLASIFICADOS', 'CLASIFICADAS', 'PARTE', 'SITIO', 'TIPO', 'DEBIDO', 'DEBIDA', 'DEBIDOS', 'DEBIDAS'];
 
 function palabrasCIE10_(texto) {
   return normalizarTexto(texto).replace(/[^A-Z0-9]+/g, ' ').trim().split(' ').filter(function(w) {
@@ -571,13 +580,13 @@ function palabrasCIE10_(texto) {
 // Raiz para comparar singular/plural y masculino/femenino: URINARIAS y URINARIO -> URINARI.
 function raizCIE10_(w) { return w.length >= 5 ? w.replace(/S$/, '').replace(/[AO]$/, '') : w; }
 
-// Dos raices equivalen si son iguales o comparten un prefijo de 6 letras o mas que cubre el 60% de la mas corta
-// (NEUMONIA ~ NEUMONITIS, ASPIRATIVA ~ ASPIRACION).
+// Dos raices equivalen si son iguales o comparten un prefijo de 7 letras o mas que cubre el 75% de la mas corta
+// (NEUMONIA ~ NEUMONITIS, INFECCION ~ INFECCIOSA; no NEUTROPENIA ~ NEUTROFILA ni PERITONITIS ~ PERITONEAL).
 function raicesEquivalen_(a, b) {
   if (a === b) return true;
   var n = 0, max = Math.min(a.length, b.length);
   while (n < max && a.charAt(n) === b.charAt(n)) n++;
-  return n >= 6 && n >= 0.6 * max;
+  return n >= 7 && n >= 0.75 * max;
 }
 
 // Distancia de edicion con transposiciones (ENFEREMDAD -> ENFERMEDAD es 1); corta en cuanto supera tope.
@@ -621,7 +630,8 @@ function indiceCIE10_() {
         raices.forEach(function(r) { (idx.porRaiz[r] = idx.porRaiz[r] || []).push(i); });
       });
       Object.keys(idx.vocab).forEach(function(w) { (idx.porLetra[w.charAt(0)] = idx.porLetra[w.charAt(0)] || []).push(w); });
-      idx.raices = Object.keys(idx.porRaiz);
+      idx.porPrefijo = {};
+      Object.keys(idx.porRaiz).forEach(function(r) { if (r.length >= 7) (idx.porPrefijo[r.slice(0, 7)] = idx.porPrefijo[r.slice(0, 7)] || []).push(r); });
       return idx;
     } catch (err) {
       Logger.log('No se pudo leer la pestana CIE10 para el cruce: ' + err);
@@ -654,14 +664,16 @@ function palabrasDiagnosticoCIE10_(texto, idx) {
     .filter(function(w, i, a) { return ignoradas.indexOf(w) === -1 && a.indexOf(w) === i; });
 }
 
-// La mejor descripcion que contiene todas las raices (soloGenerica: la que no tiene otra palabra que esa).
+// La mejor descripcion que contiene todas las raices (soloGenerica: la que no tiene otra palabra que esa), o null si
+// no hay ninguna o si empatan dos.
 function mejorDescripcionCIE10_(raices, idx, soloGenerica) {
   // filas con una raiz equivalente; se memoriza por ejecucion (se copia: la interseccion borra claves)
   var filasDe = function(r) {
     idx.memo = idx.memo || {};
     if (!idx.memo[r]) {
       var set = {};
-      idx.raices.forEach(function(x) { if (raicesEquivalen_(r, x)) idx.porRaiz[x].forEach(function(i) { set[i] = true; }); });
+      (idx.porRaiz[r] || []).forEach(function(i) { set[i] = true; });
+      (idx.porPrefijo[r.slice(0, 7)] || []).forEach(function(x) { if (x !== r && raicesEquivalen_(r, x)) idx.porRaiz[x].forEach(function(i) { set[i] = true; }); });
       idx.memo[r] = set;
     }
     var copia = {};
@@ -673,20 +685,21 @@ function mejorDescripcionCIE10_(raices, idx, soloGenerica) {
     var otras = filasDe(raices[k]);
     Object.keys(candidatas).forEach(function(i) { if (!otras[i]) delete candidatas[i]; });
   }
-  var mejor = null, mejorClave = null;
+  // clave: [mas palabras identicas, menos de sobra, sin "OTRAS ..."]; si las dos mejores empatan, es ambiguo
+  var puntuadas = [];
   Object.keys(candidatas).forEach(function(i) {
     var f = idx.filas[i];
     if (soloGenerica && f.raices.length !== 1) return;
     var exactas = raices.filter(function(r) { return f.raices.indexOf(r) > -1; }).length;
     var usadas = f.raices.filter(function(x) { return raices.some(function(r) { return raicesEquivalen_(r, x); }); }).length;
-    var clave = [-exactas, f.raices.length - usadas, f.desc.length, f.codigo];
-    for (var c = 0; c < clave.length; c++) {
-      if (mejorClave && clave[c] === mejorClave[c]) continue;
-      if (!mejorClave || clave[c] < mejorClave[c]) { mejor = f; mejorClave = clave; }
-      break;
-    }
+    var otrasDesc = /\bOTR[AO]S?\b/.test(normalizarTexto(f.desc).replace(/SIN OTRA ESPECIFICACION/g, '')) ? 1 : 0;
+    puntuadas.push({ f: f, clave: [-exactas, f.raices.length - usadas, otrasDesc] });
   });
-  return mejor;
+  if (!puntuadas.length) return null;
+  var cmp = function(a, b) { for (var c = 0; c < 3; c++) if (a.clave[c] !== b.clave[c]) return a.clave[c] - b.clave[c]; return 0; };
+  puntuadas.sort(cmp);
+  if (puntuadas.length > 1 && cmp(puntuadas[0], puntuadas[1]) === 0) return null;
+  return puntuadas[0].f;
 }
 
 // { codigo, texto } del cruce de un diagnostico sin codigo (texto: sus palabras corregidas). Cache de 6 h por texto.
@@ -698,11 +711,21 @@ function cruceCIE10PorTexto(texto) {
   if (!idx) return res;
   var palabras = palabrasDiagnosticoCIE10_(texto, idx);
   res.texto = palabras.join(' ');
+  // equivalencias fijas (comparadas con el mismo tratamiento de palabras)
+  var equivalencias = CONFIG.CIE10_EQUIVALENCIAS || {};
+  Object.keys(equivalencias).forEach(function(k) {
+    if (!res.codigo && palabrasDiagnosticoCIE10_(k, idx).join(' ') === res.texto && buscarDescripcionCIE10(equivalencias[k])) res.codigo = equivalencias[k];
+  });
   var raices = palabras.map(raizCIE10_).filter(function(r, i, a) { return a.indexOf(r) === i; });
-  for (var n = raices.length; n >= 1 && !res.codigo; n--) {
+  // todas las palabras; si no, sin la ultima (si quedan dos o mas); si no, la primera con su descripcion generica
+  var intentos = [raices.length];
+  if (raices.length - 1 >= 2) intentos.push(raices.length - 1);
+  if (raices.length > 1) intentos.push(1);
+  intentos.forEach(function(n) {
+    if (res.codigo || !n) return;
     var f = mejorDescripcionCIE10_(raices.slice(0, n), idx, n === 1);
     if (f) res.codigo = f.codigo;
-  }
+  });
   if (cache) { try { cache.put(clave, JSON.stringify(res), CONFIG.CACHE_CIE10_SEG); } catch (err2) {} }
   return res;
 }

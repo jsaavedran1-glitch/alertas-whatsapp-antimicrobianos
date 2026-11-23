@@ -2,6 +2,18 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.35.1] - 2026-11-22
+
+### Corregido (primera prueba del cruce con la matriz real: 419 de 500 con código escrito, 43 cruzadas, 20 sin código)
+- **"Otras …" ya no le gana a "no especificada"**: meningitis bacteriana → G009 (no G008), osteomielitis → M869, peritonitis → K659, colecistitis → K819, leucemia linfoide → C919.
+- **Prefijo común más estricto** (7 letras y 75% de la palabra): "NEUTROPRENIA FEBRIL" ya no termina en la dermatosis neutrófila febril.
+- **Se quita como máximo una palabra del final**: "TUMOR FOSA POSTERIOR" ya no termina en la fosa nasal.
+- **Empate = sin código**: "CA PAPILAR DE OVARIO" ya no termina en el bazo, ni "Tumor de mama" en benigno.
+
+### Agregado
+- `CONFIG.CIE10_EQUIVALENCIAS`: textos frecuentes con código fijo (neumonía aspirativa o por broncoaspiración → J690, síndrome febril → R509, pielonefritis → N10X si existe en la pestaña).
+- El cruce busca las palabras parecidas solo entre las que comparten las 7 primeras letras: `probarCruceCIE10()` tardaba 39 s con 500 solicitudes.
+
 ## [1.35.0] - 2026-11-22
 
 ### Agregado (pedido del referente: cruzar el diagnóstico con la pestaña CIE10)
