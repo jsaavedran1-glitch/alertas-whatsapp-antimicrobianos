@@ -52,6 +52,7 @@ var ENCABEZADOS_REALES = ['Marca temporal', 'Dirección de correo electrónico',
   // preguntas agregadas el 2026-11-23: Google las inserto antes de las columnas manuales Estado y Observacion
   'Creatinina sérica (mg/dL)', '¿Terapia de reemplazo renal?', '¿Tolera la vía oral o por sonda?', 'Fenotipo de resistencia del aislamiento',
   'Foco infeccioso principal', '¿Sepsis o choque séptico?',   // segunda edicion del 2026-11-23
+  'Otro microorganismo (si eligió Otro)',   // tercera edicion (lista de microorganismos)
   'Estado', 'Observacion a la solicitud'];
 
 var RESTRINGIDOS = ['CEFTAZIDIMA / AVIBACTAM', 'ANFOTERICINA', 'AZTREONAM', 'ERTAPENEM', 'CASPOFUNGINA',
@@ -675,6 +676,21 @@ prueba('foco infeccioso del formulario: define la duracion de referencia por enc
   var m = construirMensajeDesdeEvento(ev('889048', 'J189', 'Neumonía nosocomial o asociada a ventilador', [['MEROPENEM', '1000', '8', '7'], ['ERTAPENEM', '1000', '24', '7']], 'Choque séptico'));
   incluye(m, '📋 J189 · Neumonia, no especificada\n🎯 Foco: Neumonía nosocomial o asociada a ventilador · Choque séptico'); noIncluye(m, '§');
   assert.strictEqual(lineaFoco(ev('889049', 'J189', '', null, 'No')), '');
+});
+
+prueba('microorganismo en lista: "Otro" se lee de su pregunta; "Pendiente" no es aislamiento', function () {
+  var e = eventoSeguimiento('20/11/2026 10:00:00', '889060', 'A419', [['MEROPENEM', '1000', '8', '7'], ['VANCOMICINA', '1000', '12', '7']]);
+  e.namedValues[CAMPOS.MICROORGANISMO] = ['Otro']; e.namedValues[CAMPOS.OTRO_MICRO] = ['Burkholderia cepacia'];
+  incluye(construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e)), '🦠 Burkholderia cepacia');
+  assert.strictEqual(microorganismoDe(lectorDeValores(e.namedValues)), 'Burkholderia cepacia');
+  e.namedValues[CAMPOS.OTRO_MICRO] = ['']; assert.strictEqual(microorganismoDe(lectorDeValores(e.namedValues)), 'Otro');
+  // la lista trae los nombres completos: las reglas de espectro los reconocen igual que el texto libre
+  e.namedValues[CAMPOS.MICROORGANISMO] = ['Escherichia coli'];
+  var v = eventoSeguimiento('20/11/2026 10:00:00', '889061', 'N390', [['VANCOMICINA', '1000', '12', '7']]);
+  v.namedValues[CAMPOS.MICROORGANISMO] = ['Escherichia coli'];
+  incluye(analisisPertinenciaDesdeEvento(v).lineas.join('\n'), 'VANCOMICINA no tiene actividad frente a gramnegativos');
+  ['Pendiente', 'NINGUNO', '000', 'Negativo'].forEach(function (x) { assert.strictEqual(sinAislamiento(x), true, x); });
+  assert.strictEqual(sinAislamiento('Polimicrobiano'), false);
 });
 
 prueba('ajuste renal en modo prueba: Cockcroft-Gault, tabla por tramos y solo una fila en el registro', function () {

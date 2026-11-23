@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.17] - 2026-11-23 (solo Codigo.gs)
+
+### Agregado (tercera edición del formulario)
+- "Microorganismo aislado" pasa a lista desplegable. Si eligen "Otro", el bot lee `Otro microorganismo (si eligió Otro)` (`microorganismoDe()`), en el caso PROA, el análisis de pertinencia, el registro y la historia del paciente. Los nombres de la lista (Escherichia coli, Klebsiella pneumoniae, Pseudomonas aeruginosa…) los reconocen las mismas reglas de espectro que el texto libre.
+- La opción "Pendiente" cuenta como sin aislamiento (`sinAislamiento()`), igual que "00" y "000", que aparecían en el texto libre como "ninguno".
+
 ## [1.36.16] - 2026-11-23 (solo Codigo.gs)
 
 ### Agregado (segunda edición del formulario, 2026-11-23)

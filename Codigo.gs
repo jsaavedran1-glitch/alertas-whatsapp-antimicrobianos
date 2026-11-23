@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.16';
+var VERSION_BOT = '1.36.17';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -272,7 +272,9 @@ var CAMPOS = {
   FENOTIPO: 'Fenotipo de resistencia del aislamiento',
   // agregadas el 2026-11-23 en una segunda edicion (v1.36.16)
   FOCO: 'Foco infeccioso principal',
-  SEPSIS: '¿Sepsis o choque séptico?'
+  SEPSIS: '¿Sepsis o choque séptico?',
+  // "Microorganismo aislado" paso a lista; si eligen "Otro", lo escriben aqui (v1.36.17)
+  OTRO_MICRO: 'Otro microorganismo (si eligió Otro)'
 };
 
 // Foco infeccioso del formulario -> fila (clave) de PERTINENCIA_DURACION (v1.36.16). Con varias claves, el diagnostico
@@ -1173,8 +1175,19 @@ function normalizarAislamiento(microorganismo) {
 
 function sinAislamiento(microorganismo) {
   var m = normalizarTexto(microorganismo).replace(/[^A-Z0-9 ]/g, '').trim();
-  return m === '' || m === '0' || m === 'NO' || m === 'NA' || m === 'N A' || /^NIN/.test(m) || /^NEGATIV/.test(m) || /^SIN /.test(m);
+  return m === '' || /^0+$/.test(m) || m === 'NO' || m === 'NA' || m === 'N A' || /^NIN/.test(m) || /^NEGATIV/.test(m) || /^SIN /.test(m) ||
+    /^PENDIENTE/.test(m);   // opcion "Pendiente" de la lista (v1.36.17): aun no hay germen
 }
+
+// Microorganismo de la solicitud: el de la lista o, si eligieron "Otro", lo escrito en CAMPOS.OTRO_MICRO (v1.36.17).
+// leer(clave de CAMPOS) devuelve el valor ('' o '-' si falta).
+function microorganismoDe(leer) {
+  var m = String(leer('MICROORGANISMO') || '').trim();
+  if (normalizarTexto(m) !== 'OTRO') return m;
+  var otro = String(leer('OTRO_MICRO') || '').trim();
+  return (otro && otro !== '-') ? otro : m;
+}
+function lectorDeValores(valores) { return function(clave) { return campoDelEvento(valores || {}, CAMPOS[clave]) || ''; }; }
 
 // Redaccion de apoyo (sugerencia, no veredicto): decision del referente PROA, 2026-11-14.
 // Dias de un antimicrobiano cuyo tratamiento esta en rojo: no se valoran (linea neutra, sin semaforo).
@@ -1561,7 +1574,7 @@ function seguimientoPaciente(e) {
       if (items.length === 0) return;
       var razon = dato(CAMPOS.RAZON_CAMBIO);
       solicitudes.push({ fecha: fecha, texto: fechaCorta(fecha) + ': ' + items.join(' + ') + ' · diagnóstico ' + (dato(CAMPOS.DIAGNOSTICO) || '-') +
-        ' · aislamiento ' + (dato(CAMPOS.MICROORGANISMO) || '-') + ' · ' + tipoIndicacionTexto(dato(CAMPOS.TIPO_INDICACION)) +
+        ' · aislamiento ' + (microorganismoDe(function(k) { return dato(CAMPOS[k]); }) || '-') + ' · ' + tipoIndicacionTexto(dato(CAMPOS.TIPO_INDICACION)) +
         ' · ' + (dato(CAMPOS.INDICACION) || '-') + (razon ? ' (razón registrada: ' + razon + ')' : '') + ' · ' + (dato(CAMPOS.SERVICIO) || '-') });
     });
     if (previas.length === 0) return res;
@@ -1996,7 +2009,7 @@ function registrarRevision(e, coincidencias, datos) {
     var tablas = datos.tablas || analisisPertinenciaDesdeEvento(e, coincidencias);
     var nivelFinal = datos.nivelFinal !== undefined ? datos.nivelFinal : tablas.nivel;
     hoja.appendRow([new Date(), c('Marca temporal'), c(CAMPOS.HC), c(CAMPOS.SERVICIO), c(CAMPOS.ESPECIALIDAD),
-      diagnosticoCorto(c(CAMPOS.DIAGNOSTICO)), c(CAMPOS.MICROORGANISMO), tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION)),
+      diagnosticoCorto(c(CAMPOS.DIAGNOSTICO)), microorganismoDe(lectorDeValores(valores)), tipoIndicacionTexto(c(CAMPOS.TIPO_INDICACION)),
       coincidencias.map(function(am) { return am.nombre + ' ' + am.dias + ' d'; }).join('; '),
       acompanantesDe(e).map(function(am) { return am.nombre + ' ' + am.dias + ' d' + (am.delDia ? ' (otra solicitud de hoy)' : ''); }).join('; '),
       tablas.nivel < 0 ? 'SIN CRITERIO' : semaforo[tablas.nivel], nivelFinal < 0 ? 'SIN CRITERIO' : semaforo[nivelFinal], datos.fuente || 'TABLAS',
@@ -2034,7 +2047,7 @@ function avisoDosisEspecifico(am, pesoKg, esquemas) {
 function analisisPertinenciaDesdeEvento(e, coincidenciasOpt) {
   var valores = (e && e.namedValues) ? e.namedValues : {};
   var coincidencias = coincidenciasOpt || filtrarAntimicrobianosRestringidos(e);
-  var micro = campoDelEvento(valores, CAMPOS.MICROORGANISMO);
+  var micro = microorganismoDe(lectorDeValores(valores));
   var esquemas = coincidencias.concat(acompanantesDe(e));
   asignarCursos(esquemas, seguimientoPaciente(e));
   return analisisPertinencia(dxParaSindrome(campoDelEvento(valores, CAMPOS.DIAGNOSTICO), campoDelEvento(valores, CAMPOS.FOCO)),
@@ -2105,7 +2118,7 @@ function lineasPaciente(campo, pesoKg) {
   lineas.push(E(0x1F4C4) + ' HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
     ' · ' + ((pesoKg !== null) ? formatoNumero(pesoKg, 2) + ' kg' : '-') + (especialidad !== '-' ? ' · ' + especialidad : ''));
   // "BETALACTAMASA DE AMPLIO ESPECTRO" -> "BLEE" (solo en el mensaje)
-  var micro = String(campo('MICROORGANISMO')).replace(/beta ?-?lactamasas? de (amplio espectro|espectro extendido|espectro ampliado|espectro amplio)/gi, 'BLEE');
+  var micro = String(microorganismoDe(campo)).replace(/beta ?-?lactamasas? de (amplio espectro|espectro extendido|espectro ampliado|espectro amplio)/gi, 'BLEE');
   var fenotipo = fenotipoCorto(campo('FENOTIPO'));
   if (fenotipo) micro = (micro && micro !== '-' && !/^NINGUN/i.test(micro) ? micro + ' ' : '') + '(' + fenotipo + ')';
   lineas.push(E(0x1F9A0) + ' ' + [micro, campo('CULTIVOS'), tipoIndicacionTexto(campo('TIPO_INDICACION')), campo('ORIGEN')]
