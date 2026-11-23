@@ -1180,6 +1180,15 @@ prueba('una sola medida de dias por antimicrobiano: mediana (o promedio con INFO
   } finally { global.PropertiesService = propsReal; }
 });
 
+prueba('lectura de la IA: intervalos en horas se aceptan; dias o porcentajes que no estan en los datos, no', function () {
+  var l = filtrarLecturaIa_({ hallazgos: [{ texto: 'Vancomicina tuvo una mediana de 25 días' }, { texto: 'Vancomicina tuvo una mediana de 10 días en 43 pacientes' }],
+    sugerencias: [{ texto: 'Auditar vancomicina con revaloración a las 48-72 horas' }, { texto: 'Revaluar a las 72 h y suspender a los 25 días' }] },
+    JSON.stringify({ antimicrobianos: [{ nombre: 'VANCOMICINA', pacientes: 43, mediana_dias: 10 }] }));
+  assert.deepStrictEqual(l.hallazgos, ['Vancomicina tuvo una mediana de 10 días en 43 pacientes']);
+  assert.deepStrictEqual(l.sugerencias, ['Auditar vancomicina con revaloración a las 48-72 horas']);
+  incluye(l.descartados.join(' | '), 'cifra que no está en los datos: 25');
+});
+
 prueba('crearTriggerInformeProa deja un solo activador semanal (lunes 7:00, hora de Colombia)', function () {
   var activadores = [{ f: 'enviarInformeSemanalProa' }, { f: 'notificarNuevaRespuesta' }].map(function (x) { return { getHandlerFunction: function () { return x.f; } }; });
   var creado = null, real = global.ScriptApp;

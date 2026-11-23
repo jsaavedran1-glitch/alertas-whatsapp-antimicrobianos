@@ -24,7 +24,7 @@
 // ultimo numero y basta con pegar este. Si mayor.menor no coincide, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
 
-var VERSION_INFORME = "1.36.2";
+var VERSION_INFORME = "1.36.3";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
@@ -61,7 +61,7 @@ var INFORME_REGLAS = [
   "",
   "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento por antimicrobiano, la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
   "",
-  "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los días de cada antimicrobiano (la medida que indica dias_por_antimicrobiano en los datos) cuentan, por paciente, sus prescripciones seguidas de ese antimicrobiano hasta el fin de su última orden del periodo; nómbrala tal cual (mediana o promedio); los tratamientos más largos suman el tratamiento continuo del paciente aunque cambie de antimicrobiano. Son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
+  "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%); en las sugerencias puedes nombrar intervalos clínicos en horas (revaloración a las 48-72 h). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los días de cada antimicrobiano (la medida que indica dias_por_antimicrobiano en los datos) cuentan, por paciente, sus prescripciones seguidas de ese antimicrobiano hasta el fin de su última orden del periodo; nómbrala tal cual (mediana o promedio); los tratamientos más largos suman el tratamiento continuo del paciente aunque cambie de antimicrobiano. Son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
   "",
   "Tono: neutro e institucional, en español corriente con tildes, sin markdown. Cada frase de máximo 150 caracteres. Sin culpar a servicios, especialidades ni personas; sin juicios sobre casos clínicos; sin palabras como \"inadecuado\", \"incorrecto\", \"injustificado\", \"no pertinente\", \"abuso\" o \"mal uso\". Si no hay nada notable, dilo en un hallazgo corto y no rellenes.",
   "",
@@ -419,8 +419,10 @@ function lecturaIa_(actual, anterior, cfg) {
   }
 }
 
-// Frases validas: cada cifra debe estar en los datos que se enviaron (se aceptan del 0 al 10 como conteo) y sin
-// lenguaje de juicio; como maximo INFORME_MAX_HALLAZGOS hallazgos e INFORME_MAX_SUGERENCIAS sugerencias.
+// Frases validas: cada cifra debe estar en los datos que se enviaron (se aceptan del 0 al 10 como conteo, y los
+// intervalos en horas como "revaloracion a las 48-72 h", que no son datos del informe: v1.36.3, la primera prueba
+// descarto asi una buena sugerencia) y sin lenguaje de juicio; como maximo INFORME_MAX_HALLAZGOS hallazgos e
+// INFORME_MAX_SUGERENCIAS sugerencias.
 function filtrarLecturaIa_(salida, textoDatos) {
   var cifras = {};
   (textoDatos.match(/\d+(?:[.,]\d+)?/g) || []).forEach(function(x) { cifras[x.replace(",", ".")] = true; });
@@ -428,7 +430,8 @@ function filtrarLecturaIa_(salida, textoDatos) {
   var valida = function(frase) {
     var t = fraseIa_(frase);
     if (!t) return "";
-    var inventadas = (t.match(/\d+(?:[.,]\d+)?/g) || []).filter(function(x) {
+    var sinHoras = t.replace(/\d+(?:[.,]\d+)?(?:\s*(?:-|–|a|y)\s*\d+(?:[.,]\d+)?)?\s*(?:h|horas?)\b/gi, " ");
+    var inventadas = (sinHoras.match(/\d+(?:[.,]\d+)?/g) || []).filter(function(x) {
       var v = x.replace(",", ".");
       return !cifras[v] && !(Number(v) <= 10 && /^\d+$/.test(v));
     });

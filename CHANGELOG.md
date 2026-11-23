@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.3] - 2026-11-23 (solo IA_PROA.gs)
+
+### Corregido
+- El filtro de cifras descartaba sugerencias con intervalos clínicos en horas ("auditoría de vancomicina… revaloración a las 48-72 horas", primera prueba con la mediana). Los intervalos en horas se aceptan porque no son datos del informe. Días, pacientes y porcentajes siguen debiendo estar en los datos.
+
 ## [1.36.2] - 2026-11-23 (solo IA_PROA.gs)
 
 ### Cambiado (decisión del referente: una sola medida)
