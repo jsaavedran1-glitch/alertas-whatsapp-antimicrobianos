@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.5';
+var VERSION_BOT = '1.36.6';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -111,8 +111,9 @@ var CONFIG = {
   // Columnas: clave, prefijos CIE10, palabras clave, sindrome, dias min, dias max, nota, fuente.
   PERTINENCIA_RESPALDO: [
     ['ITU', 'N39,N10,N12,N30', 'INFECCION URINARIA,VIAS URINARIAS,SEPSIS URINARIA,UROSEPSIS,PIELONEFRITIS,IVU,ITU', 'Infección urinaria complicada / pielonefritis', 5, 7, '7 d si no es fluoroquinolona y también con bacteriemia de foco urinario; 10-14 d si se sospecha prostatitis; individualizar con absceso, obstrucción o sonda', 'IDSA 2025 ITU complicada; ACIN Infectio 2023'],
-    // R572 y no R57 (decision del referente, 2026-11-23): solo el choque septico, no el hipovolemico, cardiogenico ni no especificado
-    ['BACTERIEMIA', 'A40,A41,A49,R572,R65', 'BACTEREMIA,BACTERIEMIA,SEPSIS,SEPTICEMIA,CHOQUE SEPTICO', 'Bacteriemia / sepsis', 7, 14, '7 d si hay control del foco y no es S. aureus ni Candida; S. aureus: mínimo 14 d desde el hemocultivo negativo (4-6 sem si es complicada)', 'BALANCE, NEJM 2025; Surviving Sepsis 2021 (cursos cortos)'],
+    // R572 y no R57, R650/R651 y no R65 (decision del referente, 2026-11-23): solo el choque septico y la respuesta
+    // inflamatoria sistemica de origen infeccioso; no el choque hipovolemico, cardiogenico o no especificado ni el SIRS no infeccioso
+    ['BACTERIEMIA', 'A40,A41,A49,R572,R650,R651', 'BACTEREMIA,BACTERIEMIA,SEPSIS,SEPTICEMIA,CHOQUE SEPTICO', 'Bacteriemia / sepsis', 7, 14, '7 d si hay control del foco y no es S. aureus ni Candida; S. aureus: mínimo 14 d desde el hemocultivo negativo (4-6 sem si es complicada)', 'BALANCE, NEJM 2025; Surviving Sepsis 2021 (cursos cortos)'],
     ['NEUMONIA', 'J12,J13,J14,J15,J16,J17,J18,J22', 'NEUMONIA,BRONCONEUMONIA,NAC', 'Neumonía', 5, 7, 'comunitaria: mínimo 5 d y hasta la estabilidad clínica; 7 d si es por SARM o Pseudomonas; nosocomial o asociada a ventilador: 7 d', 'ATS/IDSA 2019; IDSA/ATS 2016; ACIN NAC 2022'],
     ['EMPIEMA', 'J85,J86', 'EMPIEMA,ABSCESO PULMONAR', 'Empiema / absceso pulmonar', 14, 42, '2-3 semanas pueden bastar con drenaje y buena evolución (ensayo SLIM); más si la evolución es lenta', 'SLIM, ERJ Open Res 2023; BTS 2023'],
     ['INTRAABDOMINAL', 'K35,K36,K37,K57,K63,K65,K80,K81,K83', 'PERITONITIS,APENDICITIS,COLANGITIS,COLECISTITIS,INTRAABDOMINAL,DIVERTICULITIS', 'Infección intraabdominal', 4, 7, '4 d completos después del control del foco dieron el mismo resultado que 8 d', 'STOP-IT, NEJM 2015; SIS 2017'],

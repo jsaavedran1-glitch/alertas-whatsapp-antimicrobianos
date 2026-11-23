@@ -349,6 +349,9 @@ prueba('pertinencia: sindrome por CIE10 y por texto libre', function () {
   // choque: solo el septico (R572) toma la referencia de sepsis; el hipovolemico o no especificado, no (2026-11-23)
   assert.strictEqual(clave('R572'), 'BACTERIEMIA'); assert.strictEqual(clave('R571'), null); assert.strictEqual(clave('R579'), null);
   assert.strictEqual(clave('CHOQUE SEPTICO'), 'BACTERIEMIA');
+  // respuesta inflamatoria sistemica: solo la de origen infeccioso (R650, R651)
+  assert.strictEqual(clave('R650'), 'BACTERIEMIA'); assert.strictEqual(clave('R651'), 'BACTERIEMIA');
+  assert.strictEqual(clave('R652'), null); assert.strictEqual(clave('R653'), null); assert.strictEqual(clave('R659'), null);
   assert.strictEqual(clave('C169'), null);
   assert.strictEqual(clave('INSTITUTO'), null);                        // "ITU" solo como palabra completa
   assert.strictEqual(clave(''), null);

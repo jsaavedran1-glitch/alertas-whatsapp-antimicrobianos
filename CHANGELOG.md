@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.6] - 2026-11-23 (solo Codigo.gs; la pestaña ya cambió)
+
+### Cambiado (decisión del referente)
+- En la fila de bacteriemia/sepsis, `R65` pasa a `R650,R651`: solo el síndrome de respuesta inflamatoria sistémica de origen infeccioso toma la duración de sepsis; el no infeccioso (R652, R653) y el no especificado (R659), no. Mismo criterio que el cambio de `R57` a `R572`. En la pestaña `PERTINENCIA_DURACION` (rige desde la siguiente solicitud), el respaldo del código y `docs/pertinencia.md`.
+
 ## [1.36.5] - 2026-11-23 (solo Codigo.gs; la pestaña ya cambió)
 
 ### Cambiado (decisión del referente)
