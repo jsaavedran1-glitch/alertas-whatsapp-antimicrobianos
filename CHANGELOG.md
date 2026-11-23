@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.35.2] - 2026-11-23
+
+### Corregido
+- La caché de 6 h del cruce por palabras devolvía los cruces calculados con las reglas anteriores: la segunda prueba con la matriz real salió idéntica a la primera. La llave de la caché lleva ahora una firma de la versión y de `CIE10_SINONIMOS`, `CIE10_PALABRAS_IGNORADAS` y `CIE10_EQUIVALENCIAS`. Editar esas listas también recalcula los cruces.
+- `VERSION_BOT` al inicio de `Codigo.gs`; `probarCruceCIE10()` la escribe en el registro de ejecución para saber qué versión está pegada.
+
 ## [1.35.1] - 2026-11-22
 
 ### Corregido (primera prueba del cruce con la matriz real: 419 de 500 con código escrito, 43 cruzadas, 20 sin código)

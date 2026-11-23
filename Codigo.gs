@@ -1,3 +1,6 @@
+// Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
+var VERSION_BOT = '1.35.2';
+
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
   HOJA_RESPUESTAS: 'Respuestas de formulario 1',
@@ -702,9 +705,20 @@ function mejorDescripcionCIE10_(raices, idx, soloGenerica) {
   return puntuadas[0].f;
 }
 
-// { codigo, texto } del cruce de un diagnostico sin codigo (texto: sus palabras corregidas). Cache de 6 h por texto.
+// Firma de las reglas del cruce: cambia con la version del codigo o al editar sinonimos, palabras ignoradas o
+// equivalencias en CONFIG, para que la cache no devuelva cruces calculados con reglas viejas (paso el 2026-11-22).
+function firmaCIE10_() {
+  return enCacheEjecucion('firmaCIE10', function() {
+    var t = JSON.stringify([VERSION_BOT, CONFIG.CIE10_SINONIMOS, CONFIG.CIE10_PALABRAS_IGNORADAS, CONFIG.CIE10_EQUIVALENCIAS]), h = 5381;
+    for (var i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  });
+}
+
+// { codigo, texto } del cruce de un diagnostico sin codigo (texto: sus palabras corregidas). Cache de 6 h por texto y
+// por firma de las reglas.
 function cruceCIE10PorTexto(texto) {
-  var cache = null, clave = 'CIE10T:' + texto.slice(0, 200);
+  var cache = null, clave = 'CIE10T' + firmaCIE10_() + ':' + texto.slice(0, 200);
   try { cache = CacheService.getScriptCache(); var enCache = cache.get(clave); if (enCache !== null) return JSON.parse(enCache); } catch (err) { cache = null; }
   var res = { codigo: '', texto: '' };
   var idx = indiceCIE10_();
@@ -2211,7 +2225,7 @@ function probarCruceCIE10(filas) {
     return Object.keys(o).map(function(k) { return o[k]; }).sort(function(a, b) { return b.n - a.n; })
       .map(function(x) { return '- ' + (x.n > 1 ? x.n + ' × ' : '') + x.linea; }).join('\n') || '- ninguno';
   };
-  Logger.log('Últimas %s solicitudes: %s con código escrito, %s con la descripción exacta de la pestaña, %s cruzadas por palabras, %s sin código.' +
+  Logger.log('v' + VERSION_BOT + ' · Últimas %s solicitudes: %s con código escrito, %s con la descripción exacta de la pestaña, %s cruzadas por palabras, %s sin código.' +
     '\n\nCruzadas por palabras (revisar):\n%s\n\nSin código:\n%s', String(ultima - desde + 1), String(cuenta.escrito), String(cuenta.descripcion),
     String(cuenta.texto), String(cuenta['']), lista(cruzados), lista(sinCodigo));
 }

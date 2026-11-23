@@ -885,6 +885,13 @@ prueba('cruce del diagnostico escrito con la pestana CIE10 (textos reales de la 
   assert.strictEqual(sin('MENIGITIS '), 'MENINGITIS'); assert.strictEqual(sin('PERITONISTIS ASOCIADO AL CATETER'), 'INTRAABDOMINAL');
   assert.strictEqual(sin('SHOCK SEPTICO'), 'BACTERIEMIA'); assert.strictEqual(sin('NEUTROPRENIA FEBRIL'), 'NEUTROPENIA');
   assert.strictEqual(sin('SEPSIS URINARIA'), 'ITU'); assert.strictEqual(sin('COLECISTITIS MAS COLELITIASIS'), 'INTRAABDOMINAL');
+  // la cache no devuelve cruces de reglas viejas: al agregar una equivalencia, el mismo texto se vuelve a calcular
+  assert.strictEqual(cod('SINDROME MENINGEO EN ESTUDIO'), '');
+  var equivalencias = CONFIG.CIE10_EQUIVALENCIAS;
+  CONFIG.CIE10_EQUIVALENCIAS = Object.assign({}, equivalencias, { 'SINDROME MENINGEO': 'G039' });
+  try { limpiarCacheEjecucion(); assert.strictEqual(cod('SINDROME MENINGEO EN ESTUDIO'), 'G039'); }
+  finally { CONFIG.CIE10_EQUIVALENCIAS = equivalencias; limpiarCacheEjecucion(); }
+  assert.strictEqual(cod('SINDROME MENINGEO EN ESTUDIO'), '');
   // la pestana se lee una vez por ejecucion
   var lecturas = 0, real = HOJAS['CIE10'], getRange = real.getRange;
   real.getRange = function (f, c, nf, nc) { if (nc === 2) lecturas++; return getRange.apply(real, arguments); };
