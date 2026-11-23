@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.8] - 2026-11-23 (solo Codigo.gs; la pestaña ya cambió)
+
+### Agregado (decisión del referente)
+- Prefijo `R788` en la fila de bacteriemia/sepsis: algunos médicos escriben R78.81 (bacteriemia en la CIE-10 de EE. UU.), que el bot lee como R788, y sin el prefijo no tenía duración de referencia. En la pestaña `PERTINENCIA_DURACION` (rige desde la siguiente solicitud), el respaldo del código y `docs/pertinencia.md`.
+
 ## [1.36.7] - 2026-11-23 (solo Codigo.gs)
 
 ### Agregado (decisión del referente)

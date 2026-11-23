@@ -353,6 +353,8 @@ prueba('pertinencia: sindrome por CIE10 y por texto libre', function () {
   // respuesta inflamatoria sistemica: solo la de origen infeccioso (R650, R651)
   assert.strictEqual(clave('R650'), 'BACTERIEMIA'); assert.strictEqual(clave('R651'), 'BACTERIEMIA');
   assert.strictEqual(clave('R652'), null); assert.strictEqual(clave('R653'), null); assert.strictEqual(clave('R659'), null);
+  // R78.81 (bacteriemia en la CIE-10 de EE. UU.) se lee como R788
+  assert.strictEqual(clave('R78.81'), 'BACTERIEMIA'); assert.strictEqual(clave('R788'), 'BACTERIEMIA'); assert.strictEqual(clave('R780'), null);
   assert.strictEqual(clave('C169'), null);
   assert.strictEqual(clave('INSTITUTO'), null);                        // "ITU" solo como palabra completa
   assert.strictEqual(clave(''), null);
