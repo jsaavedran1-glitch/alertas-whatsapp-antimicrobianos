@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.11] - 2026-11-23 (solo IA_PROA.gs)
+
+### Cambiado (pedido del referente)
+- Indicador mensual sin la nota al pie ("Razón del cambio «Por intervención PROA» que marca el médico…"). El mensaje queda en tres líneas: título, cifra del mes y tendencia. La advertencia de que la cifra se queda corta sigue en el código, el README y el CHANGELOG.
+
 ## [1.36.10] - 2026-11-23 (solo IA_PROA.gs)
 
 ### Cambiado (pedido del referente)

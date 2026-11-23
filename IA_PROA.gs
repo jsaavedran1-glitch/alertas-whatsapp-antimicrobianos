@@ -29,7 +29,7 @@
 // ultimo numero y basta con pegar este. Si mayor.menor no coincide, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
 
-var VERSION_INFORME = "1.36.10";
+var VERSION_INFORME = "1.36.11";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
@@ -205,14 +205,13 @@ function fraccionIndicador_(m) {
   return " de " + m.solicitudes + " (" + formatoNumero(m.solicitudes ? 100 * m.proa / m.solicitudes : 0, 1) + "%)";
 }
 
-// La cifra es solo del mes informado (v1.36.10, pedido del referente); los anteriores van en la tendencia.
+// La cifra es solo del mes informado (v1.36.10, pedido del referente); los anteriores van en la tendencia. Sin nota al pie (v1.36.11).
 function mensajeIndicadorMensual_(mes, meses) {
   var E = function(cp) { return String.fromCodePoint(cp); };
   return [
     "*" + E(0x1F4C8) + " INDICADOR MENSUAL PROA · " + mes.nombre + " " + mes.anio + "*",
     E(0x1F91D) + " Solicitudes por intervención PROA: *" + mes.proa + "*" + fraccionIndicador_(mes),
-    E(0x1F4C5) + " Últimos " + meses.length + " meses: " + meses.map(function(m) { return m.nombre.slice(0, 3) + " " + m.proa; }).join(" · "),
-    "_Razón del cambio «Por intervención PROA» que marca el médico en el formulario; las suspensiones no pasan por el formulario._"
+    E(0x1F4C5) + " Últimos " + meses.length + " meses: " + meses.map(function(m) { return m.nombre.slice(0, 3) + " " + m.proa; }).join(" · ")
   ].join("\n");
 }
 

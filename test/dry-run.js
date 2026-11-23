@@ -1268,8 +1268,7 @@ prueba('indicador mensual: solicitudes "POR INTERVENCION PROA" solo del mes cerr
   delete HOJAS['INFORMES_PROA'];
   var esperado = '*📈 INDICADOR MENSUAL PROA · noviembre 2026*\n' +
     '🤝 Solicitudes por intervención PROA: *4* de 5 (80%)\n' +
-    '📅 Últimos 6 meses: jun 1 · jul 0 · ago 0 · sep 1 · oct 1 · nov 4\n' +
-    '_Razón del cambio «Por intervención PROA» que marca el médico en el formulario; las suspensiones no pasan por el formulario._';
+    '📅 Últimos 6 meses: jun 1 · jul 0 · ago 0 · sep 1 · oct 1 · nov 4';
   propsInforme({ ANTHROPIC_API_KEY: '' });
   try {
     var ind = construirIndicadorMensual_(new Date(2026, 11, 1, 7, 0, 0));
