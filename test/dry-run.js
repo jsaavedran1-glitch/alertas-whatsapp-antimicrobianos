@@ -1353,7 +1353,9 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
         enviarInforme_(LUNES_23_11);
         assert.strictEqual(envios.length, 1); assert.strictEqual(envios[0].chatId, CHAT_PRUEBA_BOT);
         assert.strictEqual(envios[0].message.indexOf(CIFRAS_SEMANA), 0);
-        incluye(envios[0].message, CIFRAS_SEMANA + '\n\n*🤖 Lectura de la semana (IA)*\n• UCI A concentró el 71% de las solicitudes de la semana\n' +
+        // el primer punto lo escribe el bot (v1.36.19), luego los hallazgos validos de la IA
+        incluye(envios[0].message, CIFRAS_SEMANA + '\n\n*🤖 Lectura de la semana (IA)*\n• Las solicitudes pasaron de 3 a 7 y los pacientes de 3 a 6\n' +
+          '• UCI A concentró el 71% de las solicitudes de la semana\n' +
           '• Ertapenem tuvo una mediana de 7 días en 3 pacientes\n*Para el comité*\n' +
           '• Revisar con UCI A la toma de cultivos antes del tratamiento empírico\n_Cifras del formulario; lectura automática para el comité PROA_');
         noIncluye(envios[0].message, '66%'); noIncluye(envios[0].message, 'abuso');
@@ -1370,7 +1372,12 @@ prueba('informe semanal con IA: lectura con cifras de los datos; se descartan ci
         incluye(c.messages[0].content, '"dias_por_antimicrobiano": "mediana por paciente"'); noIncluye(c.messages[0].content, 'promedio_dias');
         noIncluye(c.messages[0].content, 'tratamiento_continuo'); incluye(c.messages[0].content, '"periodo": "09/11–15/11"');
         // la IA no recibe el numero de solicitudes con restringido (el informe no lo muestra); si el porcentaje de interconsulta
-        noIncluye(c.messages[0].content, 'solicitudes_con_restringido'); incluye(c.messages[0].content, '"restringidos_con_interconsulta_pct": 60');
+        noIncluye(c.messages[0].content, 'solicitudes_con_restringido'); incluye(c.system, 'no la repitas');
+        assert.ok(c.output_config.format.schema.properties.hallazgos.items.properties.indicador.enum.indexOf('solicitudes') < 0);
+        // la frase de volumen cuando algo no cambia
+        assert.strictEqual(fraseVolumen_({ solicitudes: 9, pacientes: 8 }, { solicitudes: 9, pacientes: 8 }), 'Las solicitudes se mantuvieron en 9 y los pacientes en 8');
+        assert.strictEqual(fraseVolumen_({ solicitudes: 9, pacientes: 8 }, { solicitudes: 9, pacientes: 6 }), 'Las solicitudes se mantuvieron en 9 y los pacientes pasaron de 6 a 8');
+        assert.strictEqual(fraseVolumen_({ solicitudes: 160, pacientes: 144 }, { solicitudes: 186, pacientes: 144 }), 'Las solicitudes pasaron de 186 a 160 y los pacientes se mantuvieron en 144'); incluye(c.messages[0].content, '"restringidos_con_interconsulta_pct": 60');
         ['1001', '1002', '1004', '1006', '2002', '"hc"'].forEach(function (x) { noIncluye(peticiones[0].payload, x); });
       });
       var fila = HOJAS['INFORMES_PROA']._filas[1];

@@ -29,7 +29,7 @@
 // ultimo numero y basta con pegar este. Si mayor.menor no coincide, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
 
-var VERSION_INFORME = "1.36.18";
+var VERSION_INFORME = "1.36.19";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
@@ -39,7 +39,7 @@ var INFORME_TOP = 5;
 // Medida de los dias por antimicrobiano (v1.36.2, decision del referente: una sola): "mediana" (por defecto; con pocos
 // pacientes un tratamiento muy largo no la mueve) o "promedio".
 var INFORME_MEDIDA = "mediana";
-var INFORME_MAX_HALLAZGOS = 4;
+var INFORME_MAX_HALLAZGOS = 3;                 // de la IA; el bot agrega antes la de solicitudes y pacientes
 var INFORME_MAX_SUGERENCIAS = 2;
 var INFORME_MAX_CARACTERES = 170;                 // por frase de la IA
 
@@ -58,13 +58,13 @@ var IA_JUICIO = /\bno pertinente|\binadecuad|\bincorrect|\binjustificad|\bmal (i
 var IA_PRECIOS_MTOK = { "claude-opus-5-5": [4, 20], "claude-opus-5": [5, 25], "claude-opus-4-8": [5, 25],
   "claude-sonnet-5-5": [2, 10], "claude-sonnet-5": [2, 10], "claude-haiku-5-5": [0.10, 0.50] };
 
-var INFORME_INDICADORES = ["solicitudes", "duracion", "antimicrobianos", "restringidos", "servicios", "indicacion", "interconsulta",
+var INFORME_INDICADORES = ["duracion", "antimicrobianos", "restringidos", "servicios", "indicacion", "interconsulta",
   "profilaxis", "tratamientos_largos", "comparacion"];
 
 var INFORME_REGLAS = [
   "Apoyas al comité del Programa de Optimización de Antimicrobianos (PROA) del Hospital Departamental de Villavicencio, Colombia. Recibes los indicadores de un periodo, calculados por el bot a partir del formulario de solicitud de antimicrobianos (todas las solicitudes, no solo restringidos), junto con los del periodo anterior. Escribes la lectura que acompaña al informe en el grupo de WhatsApp del PROA, donde están la infectóloga, el químico farmacéutico y el equipo del programa.",
   "",
-  "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento por antimicrobiano, la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
+  "Escribe entre 2 y " + INFORME_MAX_HALLAZGOS + " hallazgos y hasta " + INFORME_MAX_SUGERENCIAS + " sugerencias. El bot abre la lectura con la comparación de solicitudes y pacientes frente al periodo anterior: no la repitas. Un hallazgo dice qué muestran las cifras: un cambio frente al periodo anterior, el promedio de días de tratamiento por antimicrobiano, la concentración en un servicio o una molécula, la proporción de tratamientos empíricos sin cultivos, las interconsultas a Infectología en restringidos, la profilaxis de más de un día o los tratamientos más largos. Una sugerencia es una acción de programa para el comité (educación a un servicio, auditoría de una molécula, revisar un protocolo, mejorar una pregunta del formulario), nunca una conducta sobre un paciente.",
   "",
   "Cifras: usa solo las que vienen en los datos y escríbelas igual, con coma decimal (12,5) y el signo % pegado (45%); en las sugerencias puedes nombrar intervalos clínicos en horas (revaloración a las 48-72 h). No calcules diferencias, sumas, promedios ni porcentajes nuevos: el bot descarta cualquier frase con una cifra que no esté en los datos. Los días de cada antimicrobiano (la medida que indica dias_por_antimicrobiano en los datos) cuentan, por paciente, sus prescripciones seguidas de ese antimicrobiano hasta el fin de su última orden del periodo; nómbrala tal cual (mediana o promedio); los tratamientos más largos suman el tratamiento continuo del paciente aunque cambie de antimicrobiano. Son días ordenados, no administrados. Con números pequeños (menos de 10) un cambio entre dos periodos puede ser azar: no lo llames tendencia.",
   "",
@@ -427,7 +427,7 @@ function mensajeInforme_(a, ant, ia) {
   }
 
   if (ia && ia.lectura && (ia.lectura.hallazgos.length || ia.lectura.sugerencias.length)) {
-    lineas.push("", "*" + E(0x1F916) + " Lectura de la semana (IA)*");
+    lineas.push("", "*" + E(0x1F916) + " Lectura de la semana (IA)*", "• " + fraseVolumen_(a, ant));
     ia.lectura.hallazgos.forEach(function(h) { lineas.push("• " + h); });
     if (ia.lectura.sugerencias.length) {
       lineas.push("*Para el comité*");
@@ -436,6 +436,19 @@ function mensajeInforme_(a, ant, ia) {
     lineas.push("_Cifras del formulario; lectura automática para el comité PROA_");
   }
   return lineas.join("\n");
+}
+
+// "Las solicitudes pasaron de 167 a 186 y los pacientes de 123 a 144": primer punto de la lectura, lo escribe el bot
+// (decision del referente, 2026-11-23) para que salga todas las semanas; la IA elegia a veces otros hallazgos.
+function fraseVolumen_(a, ant) {
+  var cambio = function(x, y) { return x === y ? "se mantuvieron en " + y : "pasaron de " + x + " a " + y; };
+  if (a.solicitudes === ant.solicitudes && a.pacientes === ant.pacientes) {
+    return "Las solicitudes se mantuvieron en " + a.solicitudes + " y los pacientes en " + a.pacientes;
+  }
+  if (a.solicitudes !== ant.solicitudes && a.pacientes !== ant.pacientes) {
+    return "Las solicitudes pasaron de " + ant.solicitudes + " a " + a.solicitudes + " y los pacientes de " + ant.pacientes + " a " + a.pacientes;
+  }
+  return "Las solicitudes " + cambio(ant.solicitudes, a.solicitudes) + " y los pacientes " + cambio(ant.pacientes, a.pacientes);
 }
 
 // Lo que va a la API: los indicadores sin historia clinica (los tratamientos largos sin HC) y sin el numero de

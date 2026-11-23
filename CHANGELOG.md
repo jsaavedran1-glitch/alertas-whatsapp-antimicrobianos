@@ -2,6 +2,13 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.19] - 2026-11-23 (solo IA_PROA.gs)
+
+### Cambiado (decisión del referente)
+- La lectura del informe semanal abre siempre con `• Las solicitudes pasaron de 167 a 186 y los pacientes de 123 a 144` (`fraseVolumen_()`; "se mantuvieron en N" si no cambia). La escribe el bot, no la IA: en la prueba del mismo día la IA eligió otros cuatro hallazgos y esa frase no salió.
+- La IA escribe ahora 2 o 3 hallazgos (`INFORME_MAX_HALLAZGOS = 3`), para que la lectura siga con un máximo de 4 puntos, y se le indica no repetir esa comparación ("solicitudes" sale de los indicadores que puede usar).
+- `INFORMES_PROA` queda oculta en la hoja, como las demás pestañas del bot (el registro se escribe igual).
+
 ## [1.36.18] - 2026-11-23 (solo IA_PROA.gs)
 
 ### Cambiado (decisión del referente, tras el primer informe en producción)
