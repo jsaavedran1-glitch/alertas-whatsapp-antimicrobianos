@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.35.3] - 2026-11-23
+
+### Corregido (tercera prueba con la matriz real: 39 cruzadas, 24 sin código; los cruces equivocados ya no aparecen)
+- "SX FEBRIL EN ESTUDIO" no cruzaba: ESTUDIO no está en la pestaña y el corrector lo cambiaba a ESTUDIOS, que ya no se ignoraba. Las palabras ignoradas se quitan antes y después de corregir, también en plural.
+
 ## [1.35.2] - 2026-11-23
 
 ### Corregido

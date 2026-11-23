@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.35.2';
+var VERSION_BOT = '1.35.3';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -655,16 +655,19 @@ function corregirPalabraCIE10_(w, idx) {
   return mejorD <= tope ? mejor : w;
 }
 
-// Palabras del diagnostico listas para buscar: abreviaturas expandidas, sin las ignoradas y corregidas.
+// Palabras del diagnostico listas para buscar: abreviaturas expandidas, sin las ignoradas y corregidas. Las ignoradas
+// se quitan antes y despues de corregir, tambien en plural: ESTUDIO no esta en la pestana y se corregia a ESTUDIOS, que
+// ya no se ignoraba ("SX FEBRIL EN ESTUDIO" no cruzaba, 2026-11-23).
 function palabrasDiagnosticoCIE10_(texto, idx) {
-  var sinonimos = CONFIG.CIE10_SINONIMOS || {}, ignoradas = CONFIG.CIE10_PALABRAS_IGNORADAS || [];
+  var sinonimos = CONFIG.CIE10_SINONIMOS || {}, ignoradas = (CONFIG.CIE10_PALABRAS_IGNORADAS || []).map(raizCIE10_);
+  var ignorada = function(w) { return ignoradas.indexOf(raizCIE10_(w)) > -1; };
   var palabras = [];
   normalizarTexto(texto).replace(/[^A-Z0-9]+/g, ' ').trim().split(' ').forEach(function(w) {
     (sinonimos[w] || w).split(' ').forEach(function(x) { palabras.push(x); });
   });
-  return palabras.filter(function(w) { return w.length >= 3 && !/\d/.test(w) && CIE10_VACIAS.indexOf(w) === -1; })
+  return palabras.filter(function(w) { return w.length >= 3 && !/\d/.test(w) && CIE10_VACIAS.indexOf(w) === -1 && !ignorada(w); })
     .map(function(w) { return corregirPalabraCIE10_(w, idx); })
-    .filter(function(w, i, a) { return ignoradas.indexOf(w) === -1 && a.indexOf(w) === i; });
+    .filter(function(w, i, a) { return !ignorada(w) && a.indexOf(w) === i; });
 }
 
 // La mejor descripcion que contiene todas las raices (soloGenerica: la que no tiene otra palabra que esa), o null si

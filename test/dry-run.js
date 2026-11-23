@@ -32,7 +32,9 @@ var CIE10 = { B377: 'CANDIDIASIS, NO ESPECIFICADA', A419: 'SEPSIS, NO ESPECIFICA
   M868: 'OTRAS OSTEOMIELITIS', M869: 'OSTEOMIELITIS, NO ESPECIFICADA', L982: 'DERMATOSIS NEUTROFILA FEBRIL [SWEET]', C300: 'TUMOR MALIGNO DE LA FOSA NASAL',
   C261: 'TUMOR MALIGNO DEL BAZO', D24X: 'TUMOR BENIGNO DE LA MAMA', C509: 'TUMOR MALIGNO DE LA MAMA, PARTE NO ESPECIFICADA',
   C919: 'LEUCEMIA LINFOIDE, SIN OTRA ESPECIFICACION', C917: 'OTRAS LEUCEMIAS LINFOIDES', R509: 'FIEBRE, NO ESPECIFICADA',
-  J691: 'NEUMONITIS DEBIDA A ASPIRACION DE ACEITES Y ESENCIAS', L089: 'INFECCION LOCAL DE LA PIEL Y DEL TEJIDO SUBCUTANEO, NO ESPECIFICADA' };
+  J691: 'NEUMONITIS DEBIDA A ASPIRACION DE ACEITES Y ESENCIAS', L089: 'INFECCION LOCAL DE LA PIEL Y DEL TEJIDO SUBCUTANEO, NO ESPECIFICADA',
+  // ESTUDIOS en la pestana y ESTUDIO no: el corrector convertia "EN ESTUDIO" en ESTUDIOS (2026-11-23)
+  R948: 'RESULTADOS ANORMALES DE ESTUDIOS FUNCIONALES DE OTROS ORGANOS Y SISTEMAS', N10X: 'NEFRITIS TUBULOINTERSTICIAL AGUDA' };
 var codigosCie = Object.keys(CIE10);
 
 var ENCABEZADOS_REALES = ['Marca temporal', 'Dirección de correo electrónico', 'Nombre del médico que prescribe', 'Registro médico',
@@ -858,13 +860,13 @@ prueba('cruce del diagnostico escrito con la pestana CIE10 (textos reales de la 
   assert.strictEqual(cod('NEUMONIA ADQUIRIDA EN LA COMUNIDAD'), 'J189'); assert.strictEqual(cod('NEUMONÍA POSTERO BASAL IZQUIERDA EN TRATAMIENTO'), 'J189');
   assert.strictEqual(cod('NEUMONIA ASPIRATIVA'), 'J690'); assert.strictEqual(cod('NEUMONIA BRONCOASPIRATIVA'), 'J690');   // equivalencias
   assert.strictEqual(cod('NEUMONIA POR BRONCOASPIRACION'), 'J690'); assert.strictEqual(cod('SINDROME FBRIL '), 'R509');
+  assert.strictEqual(cod('SX FEBRIL EN ESTUDIO'), 'R509'); assert.strictEqual(cod('PIELONEFRITIS '), 'N10X');   // N10X existe en la pestana
   assert.strictEqual(cod('OSTEOMIELITIS MIEMBRO INFERIOR '), 'M869'); assert.strictEqual(cod('LEUCEMIA LINFOIDE'), 'C919');   // no "OTRAS ..."
   assert.strictEqual(cod('INFECCION DE PIEL Y TEJIDOS BLANDOS'), 'L089');
   assert.strictEqual(cod('CELULITIS DE PIERNA DERECHA '), 'L039'); assert.strictEqual(cod('ISO'), 'T814');
   assert.strictEqual(cod('COLECISTITIS MAS COLELITIASIS'), 'K819'); assert.strictEqual(cod('COLANGITIS'), 'K830');
   // una sola palabra: solo la descripcion generica; nada de diagnosticos parecidos
   assert.strictEqual(cod('NEUTROPRENIA FEBRIL '), '');           // no es la neutropenia neonatal
-  assert.strictEqual(cod('PIELONEFRITIS '), '');                  // no es la pielonefritis cronica con reflujo
   assert.strictEqual(cod('ACCIDENTE OFIDICO'), '');               // no es el accidente cerebrovascular
   assert.strictEqual(cod('INFECCION DE SITIO OPERATORIO '), '');  // no es la infeccion urinaria "sitio no especificado"
   assert.strictEqual(cod('CÓDIGO BLANCO  MAYOR  72   HORAS'), '');
