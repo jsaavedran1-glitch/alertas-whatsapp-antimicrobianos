@@ -2,6 +2,14 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.14] - 2026-11-23 (solo Codigo.gs)
+
+### Agregado (decisión del referente)
+- **Formularios separados entre días distintos:** el caso PROA y la revisión por tratamiento prolongado muestran `💉 Formulado antes y aún dentro de sus días: CEFEPIME desde 20/10 (14 d)` con los antimicrobianos del tratamiento continuo que no están en esta orden, que ninguna orden posterior reemplazó (mismo antimicrobiano o misma familia) y que aún están dentro de sus días ordenados. Solo informa: los días de tratamiento no cambian, porque una suspensión no genera formulario y el antimicrobiano pudo suspenderse. En 90 días, de 951 solicitudes en días distintos, en 217 la anterior seguía dentro de sus días y quedaba por fuera (vancomicina → meropenem 29, cefepime → vancomicina 29, meropenem → vancomicina 24); en 87 la nueva llegó antes de 48 h.
+
+### Cambiado (decisión del referente)
+- **Regla de 7 días de la revisión por tratamiento prolongado:** cuenta cualquier mensaje enviado al grupo (caso PROA o revisión), no solo las revisiones. Antes, un paciente podía recibir el caso PROA y al día siguiente la revisión (pasó 1 vez en la semana del 16 al 22/11: tigeciclina el 17/11 y meropenem el 18/11). En el registro: "no se envía: el paciente ya tuvo revisión o caso PROA en los últimos días". El caso PROA no cambia: un restringido nuevo sigue generando su mensaje.
+
 ## [1.36.13] - 2026-11-23 (solo Codigo.gs)
 
 ### Cambiado (decisión del referente)

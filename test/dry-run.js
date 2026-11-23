@@ -593,6 +593,29 @@ prueba('mismo dia: combinaciones en formularios separados se suman (tambien marc
   assert.deepStrictEqual(seguimientoPaciente(e5).delDia.map(function (am) { return am.nombre; }), ['MEROPENEM']);
 });
 
+prueba('formularios separados entre dias: lo que sigue dentro de sus dias se informa, sin cambiar los dias', function () {
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  filas.push(filaMatriz('14/10/2026 08:00:00', '889010', [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]));   // termino el 21/10
+  filas.push(filaMatriz('20/10/2026 08:00:00', '889010', [['CEFEPIME', '2000', '8', '14']]));                    // hasta el 03/11
+  filas.push(filaMatriz('24/10/2026 08:00:00', '889010', [['VANCOMICINA', '1000', '12', '14']]));                // hasta el 07/11
+  var e = eventoSeguimiento('01/11/2026 10:00:00', '889010', 'J189', [['AMIKACINA', '1000', '24', '7']]);
+  var linea = '💉 Formulado antes y aún dentro de sus días: VANCOMICINA desde 24/10/2026 (14 d); CEFEPIME desde 20/10/2026 (14 d)';
+  var seg = seguimientoPaciente(e);
+  assert.deepStrictEqual(seg.dentroDeDias.map(function (x) { return x.nombre; }), ['VANCOMICINA', 'CEFEPIME']);
+  incluye(seg.lineas.join('\n'), linea); noIncluye(seg.lineas.join('\n'), 'PIPERACILINA / TAZOBACTAM desde');
+  incluye(construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e)), linea);
+  // en la revision va despues de la lista; los dias no cambian (cada orden hasta la siguiente)
+  var r = revisionProlongado(e, []);
+  incluye(r.bloque.join('\n'), '3. VANCOMICINA 24/10/2026-01/11/2026 · 8 d\n4. AMIKACINA 1000 mg IV c/24 h 01/11/2026-08/11/2026 · 7 d (esta orden)\n' + linea);
+  incluye(r.mensaje, linea); incluye(r.bloque[2], 'Lleva 18 d de antibiótico');
+  // lo que una orden posterior reemplazo (misma familia) no se informa: el cefepime, con el meropenem del 28/10
+  filas.push(filaMatriz('14/10/2026 08:00:00', '889011', [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]));
+  filas.push(filaMatriz('20/10/2026 08:00:00', '889011', [['CEFEPIME', '2000', '8', '14']]));
+  filas.push(filaMatriz('28/10/2026 08:00:00', '889011', [['MEROPENEM', '1000', '8', '7']]));
+  var e2 = eventoSeguimiento('01/11/2026 10:00:00', '889011', 'J189', [['VANCOMICINA', '1000', '12', '7']]);
+  assert.deepStrictEqual(seguimientoPaciente(e2).dentroDeDias.map(function (x) { return x.nombre; }), ['MEROPENEM']);
+});
+
 prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, al momento, sin verdes ni repetidos', function () {
   var filas = HOJAS['Respuestas de formulario 1']._filas;
   var conDx = function (fecha, hc, ams, dx) { var f = filaMatriz(fecha, hc, ams); f[ENCABEZADOS_REALES.indexOf(CAMPOS.DIAGNOSTICO)] = dx; return f; };
@@ -817,8 +840,13 @@ prueba('restringido: caso PROA solo si supera 14 d con esta orden; sin listado: 
       notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 10:00:00', '888010', 'L031', [['ERTAPENEM', '1000', '24', '7']]));
       assert.strictEqual(envios.length, 1); incluye(envios[0].message, '⏱️ Con esta orden: *66 d* de antibiótico continuo');
       incluye(ultima()[col('Destino')], 'tiene restringido');
-      // fuera del listado (meropenem) con 3 o mas prescripciones y mas de 10 d: solo la revision, al momento
+      // fuera del listado (meropenem): el caso PROA de hace una hora cuenta para la regla de 7 dias (v1.36.14) y la revision no sale
       envios.length = 0;
+      notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 11:00:00', '888010', 'L031', [['MEROPENEM', '1000', '8', '7']]));
+      assert.strictEqual(envios.length, 0); assert.strictEqual(ultima()[col('Enviado al grupo')], 'NO');
+      assert.strictEqual(ultima()[col('Destino')], 'no se envía: el paciente ya tuvo revisión o caso PROA en los últimos días');
+      // sin ese caso PROA en el registro: 3 o mas prescripciones y mas de 10 d, solo la revision, al momento
+      reg.splice(1);
       notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 11:00:00', '888010', 'L031', [['MEROPENEM', '1000', '8', '7']]));
       assert.strictEqual(envios.length, 1); assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI');
       assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION'); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*'); incluye(envios[0].message, 'con esta orden llegaría a *66 d*');

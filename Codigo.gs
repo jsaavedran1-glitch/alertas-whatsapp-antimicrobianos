@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.13';
+var VERSION_BOT = '1.36.14';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -107,6 +107,8 @@ var CONFIG = {
   // Si la solicitud tiene un restringido que dispara alerta, la revision no se envia: va por el caso PROA, que
   // trae la misma lista de prescripciones (decision del referente, 2026-11-16). true la envia tambien.
   PROLONGADO_CON_CASO: false,
+  // Un paciente con cualquier mensaje al grupo (caso PROA o revision) en los ultimos N dias no recibe revision
+  // (v1.36.14, decision del referente: antes solo contaban las revisiones y salia una el dia despues del caso PROA).
   PROLONGADO_REPETIR_DIAS: 7,
   // Registro de cada revision (indicadores PROA y auditoria del analisis).
   REGISTRO_ACTIVO: true,
@@ -1417,7 +1419,7 @@ function reemplazaMismoDia(anterior, nuevo) {
 // Se calcula una vez por evento (queda en e._seguimiento). Solo lee la matriz; si falla, devuelve vacio.
 function seguimientoPaciente(e) {
   if (e && e._seguimiento) return e._seguimiento;
-  var res = { previas: 0, lineas: [], historia: [], porAm: {}, delDia: [] };
+  var res = { previas: 0, lineas: [], historia: [], porAm: {}, delDia: [], dentroDeDias: [] };
   if (e) e._seguimiento = res;
   if (!CONFIG.SEGUIMIENTO_ACTIVO || !e) return res;
   try {
@@ -1575,6 +1577,22 @@ function seguimientoPaciente(e) {
     // vigentes van "en curso" (p. ej. un antifungico a la par del antibiotico); los demas, "ya terminados".
     // Las de otras solicitudes de hoy no: van con esta orden (res.delDia) o esta las reemplazo.
     var nombresActuales = actuales.map(function(am) { return am.nombre; });
+    // Formularios separados entre dias (v1.36.14): antimicrobianos del tratamiento continuo que no estan en esta orden,
+    // que ninguna orden posterior reemplazo (mismo antimicrobiano o familia, reemplazaMismoDia) y que aun estan dentro de
+    // sus dias ordenados. Solo se informan: los dias no cambian, porque una suspension no genera formulario.
+    var dentroVistos = {};
+    previas.forEach(function(p) {   // de la mas reciente a la mas antigua
+      if (!enEpisodio[p.nombre] || dentroVistos[p.nombre]) return;
+      dentroVistos[p.nombre] = true;
+      var d0 = diaCal(p.fecha.getTime());
+      if (nombresActuales.indexOf(p.nombre) > -1 || d0 === hoyCal || !p.dias || d0 + p.dias <= hoyCal) return;
+      var posteriores = previas.filter(function(q) { return q.fecha.getTime() > p.fecha.getTime(); }).map(function(q) { return q.nombre; })
+        .concat(nombresActuales);
+      if (posteriores.some(function(n) { return n !== p.nombre && reemplazaMismoDia(p.nombre, n); })) return;
+      res.dentroDeDias.push({ nombre: p.nombre, antifungico: esAntifungico(p.nombre),
+        texto: p.nombre + ' desde ' + fechaCorta(p.fecha) + ' (' + formatoNumero(p.dias, 0) + ' d)' });
+    });
+    if (res.dentroDeDias.length) detalle.push(lineaDentroDeDias(res.dentroDeDias));
     var enCursoAf = [], enCursoAb = [], terminados = [], vistos = {};
     previas.forEach(function(p) {   // de la mas reciente a la mas antigua
       if (nombresActuales.indexOf(p.nombre) > -1 || vistos[p.nombre] || enEpisodio[p.nombre] || diaCal(p.fecha.getTime()) === hoyCal) return;
@@ -1593,6 +1611,11 @@ function seguimientoPaciente(e) {
     Logger.log('Seguimiento por paciente no disponible: ' + err);
   }
   return res;
+}
+
+// "💉 Formulado antes y aún dentro de sus días: CEFEPIME desde 01/11 (7 d)" (v1.36.14). lista: res.dentroDeDias.
+function lineaDentroDeDias(lista) {
+  return String.fromCodePoint(0x1F489) + ' Formulado antes y aún dentro de sus días: ' + lista.map(function(x) { return x.texto; }).join('; ');
 }
 
 // Tratamiento continuo del paciente al momento de esta solicitud, si esta es al menos la
@@ -1661,6 +1684,8 @@ function revisionProlongado(e, coincidenciasOpt) {
     return am.nombre + ' ' + (d !== null ? formatoNumero(d, 2) + ' mg' : am.dosis) + ' ' + viaCorta(am.via) + ' ' + frecuenciaCorta(am.frecuencia);
   }).join(' + '), inicio: fechaSolicitud.getTime(), dias: diasOrden }, false).forEach(function(l) { bloque.push(l); });
   actuales.forEach(function(am) { if (avisoFrecuencia(am)) bloque.push(E(0x26A0) + E(0xFE0F) + ' ' + avisoFrecuencia(am)); });
+  var dentro = seguimientoPaciente(e).dentroDeDias.filter(function(x) { return x.antifungico === p.antifungico; });
+  if (dentro.length) bloque.push(lineaDentroDeDias(dentro));
   var porAm = lineaPorAntimicrobiano(p.episodio, actuales, false);
   if (porAm) bloque.push(porAm);
   bloque.push(E(0x1F4CF) + ' ' + (dur.encabezado
@@ -1689,8 +1714,8 @@ function mensajeProlongado(item) {
 
 // Que se hace con la revision: 'CASO' (la solicitud tiene un restringido: va por el caso PROA, que trae la misma lista
 // de prescripciones; decision del referente: la revision es para los que no estan en el listado), 'ENVIAR', 'VERDE'
-// (dentro de la referencia: no se envia) o 'REPETIDO' (el paciente ya tuvo revision en los ultimos
-// CONFIG.PROLONGADO_REPETIR_DIAS dias).
+// (dentro de la referencia: no se envia) o 'REPETIDO' (el paciente ya tuvo un mensaje al grupo, caso PROA o revision, en
+// los ultimos CONFIG.PROLONGADO_REPETIR_DIAS dias).
 function accionProlongado(revision, e, coincidencias) {
   if (!CONFIG.PROLONGADO_CON_CASO && debeAlertar(coincidencias || filtrarAntimicrobianosRestringidos(e))) return 'CASO';
   if (revision.nivel === 0 && !CONFIG.PROLONGADO_ENVIAR_VERDES) return 'VERDE';
@@ -1702,11 +1727,12 @@ var TEXTO_ACCION_PROLONGADO = {
   CASO: 'no se envía: tiene restringido (va por el caso PROA si supera ' + CONFIG.CASO_DIAS_MINIMOS + ' d)',
   ENVIAR: 'se envía al grupo',
   VERDE: 'no se envía: dentro de la referencia de sus patologías',
-  REPETIDO: 'no se envía: el paciente ya tuvo revisión en los últimos días'
+  REPETIDO: 'no se envía: el paciente ya tuvo revisión o caso PROA en los últimos días'
 };
 
-// true si la historia clinica ya tuvo una revision por tratamiento prolongado enviada en los ultimos
-// CONFIG.PROLONGADO_REPETIR_DIAS dias (segun la marca temporal de la solicitud, en REGISTRO_REVISIONES).
+// true si la historia clinica ya tuvo un mensaje enviado al grupo, caso PROA o revision por tratamiento prolongado, en los
+// ultimos CONFIG.PROLONGADO_REPETIR_DIAS dias (segun la marca temporal de la solicitud, en REGISTRO_REVISIONES). v1.36.14:
+// antes solo contaban las revisiones.
 function prolongadoRevisadoReciente(hc, fecha) {
   var dias = CONFIG.PROLONGADO_REPETIR_DIAS;
   if (!dias || !hc) return false;
@@ -1718,8 +1744,7 @@ function prolongadoRevisadoReciente(hc, fecha) {
     var fila = hoja.getRange(celda.getRow(), 1, 1, ENCABEZADOS_REGISTRO.length).getValues()[0];
     var f = fechaDe(fila[col('Marca temporal de la solicitud')]);
     var estado = String(fila[col('Enviado al grupo')]);
-    return fila[col('Fuente del análisis')] === FUENTE_PROLONGADO && estado === 'SI' &&
-      f && Math.abs(fecha.getTime() - f.getTime()) < dias * 24 * 3600 * 1000;
+    return estado === 'SI' && f && Math.abs(fecha.getTime() - f.getTime()) < dias * 24 * 3600 * 1000;
   });
 }
 
