@@ -2,6 +2,11 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.7] - 2026-11-23 (solo Codigo.gs)
+
+### Agregado (decisión del referente)
+- Equivalencia **BACTEREMIA / BACTERIEMIA → A499** ("Infección bacteriana, no especificada") en `CIE10_EQUIVALENCIAS`: la CIE-10 de la OMS no tiene código de bacteriemia. Cubre también "BACTERIEMIA EN ESTUDIO". En el mensaje sale `A499 · Infeccion bacteriana, no especificada (escrito: bacteremia)`. La duración de referencia no cambia (prefijo A49 de bacteriemia/sepsis). "BACTEREMIA POR E. COLI" sigue sin código, porque nombra el microorganismo, y conserva su duración por palabra clave.
+
 ## [1.36.6] - 2026-11-23 (solo Codigo.gs; la pestaña ya cambió)
 
 ### Cambiado (decisión del referente)

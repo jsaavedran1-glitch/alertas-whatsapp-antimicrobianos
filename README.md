@@ -166,7 +166,7 @@ Cuando el médico escribe el diagnóstico sin código (en la matriz, uno de cada
 - **Abreviaturas** (`CONFIG.CIE10_SINONIMOS`): ITU/IVU, SHOCK, SX, ISO, NAC, CA, TBC, ERC/IRC, EPOC.
 - **Errores de digitación:** una letra de diferencia, dos en palabras largas, contra el vocabulario de la pestaña. MENIGITIS → MENINGITIS, PERITONISTIS → PERITONITIS, ENFEREMDAD → ENFERMEDAD.
 - **Palabras que no cambian el diagnóstico** (`CONFIG.CIE10_PALABRAS_IGNORADAS`): en estudio, probable, derecha, adquirida en la comunidad, asociada a los cuidados de la salud…
-- **Equivalencias fijas** (`CONFIG.CIE10_EQUIVALENCIAS`), que van primero: neumonía aspirativa o por broncoaspiración → J690, síndrome febril → R509, pielonefritis → N10X. El código debe existir en la pestaña.
+- **Equivalencias fijas** (`CONFIG.CIE10_EQUIVALENCIAS`), que van primero: neumonía aspirativa o por broncoaspiración → J690, síndrome febril → R509, pielonefritis → N10X, bacteremia/bacteriemia → A499 (la CIE-10 de la OMS no tiene código de bacteriemia). El código debe existir en la pestaña.
 - **Para no inventar un diagnóstico:**
   - con dos o más palabras, la descripción debe contenerlas todas; si ninguna las tiene, se quita **una** del final ("INFECCION DE VIAS URINARIAS COMPLICADA" → N390);
   - al final, solo la primera palabra y solo con su descripción genérica ("NEUMONIA" → J189; "CELULITIS DE PIERNA DERECHA" → L039);

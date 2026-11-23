@@ -34,7 +34,8 @@ var CIE10 = { B377: 'CANDIDIASIS, NO ESPECIFICADA', A419: 'SEPSIS, NO ESPECIFICA
   C919: 'LEUCEMIA LINFOIDE, SIN OTRA ESPECIFICACION', C917: 'OTRAS LEUCEMIAS LINFOIDES', R509: 'FIEBRE, NO ESPECIFICADA',
   J691: 'NEUMONITIS DEBIDA A ASPIRACION DE ACEITES Y ESENCIAS', L089: 'INFECCION LOCAL DE LA PIEL Y DEL TEJIDO SUBCUTANEO, NO ESPECIFICADA',
   // ESTUDIOS en la pestana y ESTUDIO no: el corrector convertia "EN ESTUDIO" en ESTUDIOS (2026-11-23)
-  R948: 'RESULTADOS ANORMALES DE ESTUDIOS FUNCIONALES DE OTROS ORGANOS Y SISTEMAS', N10X: 'NEFRITIS TUBULOINTERSTICIAL AGUDA' };
+  R948: 'RESULTADOS ANORMALES DE ESTUDIOS FUNCIONALES DE OTROS ORGANOS Y SISTEMAS', N10X: 'NEFRITIS TUBULOINTERSTICIAL AGUDA',
+  A499: 'INFECCION BACTERIANA, NO ESPECIFICADA' };
 var codigosCie = Object.keys(CIE10);
 
 var ENCABEZADOS_REALES = ['Marca temporal', 'Dirección de correo electrónico', 'Nombre del médico que prescribe', 'Registro médico',
@@ -898,6 +899,10 @@ prueba('cruce del diagnostico escrito con la pestana CIE10 (textos reales de la 
   assert.strictEqual(cod('NEUMONIA ASPIRATIVA'), 'J690'); assert.strictEqual(cod('NEUMONIA BRONCOASPIRATIVA'), 'J690');   // equivalencias
   assert.strictEqual(cod('NEUMONIA POR BRONCOASPIRACION'), 'J690'); assert.strictEqual(cod('SINDROME FBRIL '), 'R509');
   assert.strictEqual(cod('SX FEBRIL EN ESTUDIO'), 'R509'); assert.strictEqual(cod('PIELONEFRITIS '), 'N10X');   // N10X existe en la pestana
+  // bacteriemia: A499 por equivalencia (decision del referente); con microorganismo no se cruza
+  assert.strictEqual(cod('BACTEREMIA '), 'A499'); assert.strictEqual(cod('BACTERIEMIA EN ESTUDIO '), 'A499');
+  assert.strictEqual(cod('BACTEREMIA POR E. COLI '), '');
+  assert.strictEqual(diagnosticoCorto('BACTEREMIA '), 'A499 · Infeccion bacteriana, no especificada (escrito: bacteremia)');
   assert.strictEqual(cod('OSTEOMIELITIS MIEMBRO INFERIOR '), 'M869'); assert.strictEqual(cod('LEUCEMIA LINFOIDE'), 'C919');   // no "OTRAS ..."
   assert.strictEqual(cod('INFECCION DE PIEL Y TEJIDOS BLANDOS'), 'L089');
   assert.strictEqual(cod('CELULITIS DE PIERNA DERECHA '), 'L039'); assert.strictEqual(cod('ISO'), 'T814');
@@ -924,6 +929,7 @@ prueba('cruce del diagnostico escrito con la pestana CIE10 (textos reales de la 
   assert.strictEqual(sin('MENIGITIS '), 'MENINGITIS'); assert.strictEqual(sin('PERITONISTIS ASOCIADO AL CATETER'), 'INTRAABDOMINAL');
   assert.strictEqual(sin('SHOCK SEPTICO'), 'BACTERIEMIA'); assert.strictEqual(sin('NEUTROPRENIA FEBRIL'), 'NEUTROPENIA');
   assert.strictEqual(sin('SEPSIS URINARIA'), 'ITU'); assert.strictEqual(sin('COLECISTITIS MAS COLELITIASIS'), 'INTRAABDOMINAL');
+  assert.strictEqual(sin('BACTEREMIA'), 'BACTERIEMIA'); assert.strictEqual(sin('BACTEREMIA POR E. COLI'), 'BACTERIEMIA');
   // la cache no devuelve cruces de reglas viejas: al agregar una equivalencia, el mismo texto se vuelve a calcular
   assert.strictEqual(cod('SINDROME MENINGEO EN ESTUDIO'), '');
   var equivalencias = CONFIG.CIE10_EQUIVALENCIAS;

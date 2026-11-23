@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.6';
+var VERSION_BOT = '1.36.7';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -28,7 +28,9 @@ var CONFIG = {
   // Textos frecuentes con su codigo fijo (se comparan sin las palabras ignoradas, con las abreviaturas y la ortografia
   // corregida; el codigo debe existir en la pestana). Van antes del cruce por palabras.
   CIE10_EQUIVALENCIAS: { 'NEUMONIA ASPIRATIVA': 'J690', 'NEUMONIA BRONCOASPIRATIVA': 'J690', 'NEUMONIA POR BRONCOASPIRACION': 'J690',
-    'NEUMONIA POR ASPIRACION': 'J690', 'SINDROME FEBRIL': 'R509', 'PIELONEFRITIS': 'N10X', 'PIELONEFRITIS AGUDA': 'N10X' },
+    'NEUMONIA POR ASPIRACION': 'J690', 'SINDROME FEBRIL': 'R509', 'PIELONEFRITIS': 'N10X', 'PIELONEFRITIS AGUDA': 'N10X',
+    // la CIE-10 de la OMS no tiene codigo de bacteriemia (R78.81 es de la version de EE. UU.); decision del referente, 2026-11-23
+    'BACTEREMIA': 'A499', 'BACTERIEMIA': 'A499' },
   CACHE_CIE10_SEG: 21600,
   HOJA_RANGOS_DOSIS: 'RANGOS_DOSIS',
   // Rangos de referencia POR DOSIS para marcar "revisar dosis". Una dosis se acepta si cumple
