@@ -199,15 +199,10 @@ prueba('edad, peso, frecuencia y dias', function () {
   assert.strictEqual(pesoKgDesde('0', '4500'), 4.5);
   assert.strictEqual(pesoKgDesde('70', ''), 70);
   assert.strictEqual(pesoKgDesde('', ''), null);
-  assert.strictEqual(frecuenciaTexto('12'), 'cada 12 horas');
-  assert.strictEqual(frecuenciaTexto('48HORAS'), 'cada 48 horas');
-  assert.strictEqual(frecuenciaTexto('72 HORAS'), 'cada 72 horas');
-  assert.strictEqual(frecuenciaTexto('Cada 72 h'), 'cada 72 horas');
-  assert.strictEqual(frecuenciaTexto('Dosis única'), 'Dosis única');
-  assert.strictEqual(frecuenciaTexto(''), '-');
-  assert.ok(/^14 días · hasta \d\d\/\d\d\/\d{4}$/.test(diasTexto('14')), diasTexto('14'));
-  assert.strictEqual(diasTexto('Dosis Unica'), 'Dosis Unica');
-  assert.strictEqual(diasTexto(''), '-');
+  // frecuencia como sale en los mensajes
+  assert.strictEqual(frecuenciaCorta('12'), 'c/12 h'); assert.strictEqual(frecuenciaCorta('48HORAS'), 'c/48 h');
+  assert.strictEqual(frecuenciaCorta('Cada 72 h'), 'c/72 h'); assert.strictEqual(frecuenciaCorta('Dosis única'), 'Dosis única');
+  assert.strictEqual(frecuenciaCorta(''), '-');
 });
 
 prueba('rangos de dosis: acepta si cumple alguna regla, marca si falla en todas', function () {
@@ -528,9 +523,7 @@ prueba('seguimiento: dias calendario que cuadran con las fechas y sin tramos de 
   incluye(m, '💊 ERTAPENEM 1000 mg (14,3 mg/kg) IV c/24 h · *7 d* hasta 22/11\n');   // fin contado desde la solicitud
 });
 
-prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resumen diario sin verdes ni repetidos', function () {
-  CONFIG.PROLONGADO_RESUMEN_DIARIO = true;   // esta prueba revisa el envio diario (en produccion sale al momento)
-  try {
+prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, al momento, sin verdes ni repetidos', function () {
   var filas = HOJAS['Respuestas de formulario 1']._filas;
   var conDx = function (fecha, hc, ams, dx) { var f = filaMatriz(fecha, hc, ams); f[ENCABEZADOS_REALES.indexOf(CAMPOS.DIAGNOSTICO)] = dx; return f; };
   // A: piperacilina/tazobactam 7 d -> meropenem 9 d -> se formula cefepime: 3 solicitudes, 16 d ya recibidos
@@ -615,7 +608,7 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   try { assert.strictEqual(tratamientoProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']])), null); }
   finally { CONFIG.PROLONGADO_SOLO_CAMBIO = false; }
 
-  // Flujo: queda pendiente; las verdes y las repetidas (7 d) no se envian; el resumen diario sale en un mensaje
+  // Flujo: sale al llegar la solicitud; las verdes y las repetidas (7 d) no se envian
   var propsReal = global.PropertiesService;
   var P = { GREENAPI_ID_INSTANCE: '1', GREENAPI_API_TOKEN: 't', GREENAPI_GROUP_CHATID: '111@g.us', GREENAPI_API_URL: 'https://greenapi.test' };
   global.PropertiesService = { getScriptProperties: function () { return { getProperty: function (k) { return P[k] || null; } }; } };
@@ -625,60 +618,76 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, resu
   try {
     conApiSimulada(function (llamadas) {
       notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['CEFEPIME', '2000', '8', '7']]));
-      assert.strictEqual(envios.length, 0); assert.strictEqual(llamadas.length, 0);
+      assert.strictEqual(envios.length, 1); assert.strictEqual(llamadas.length, 0);
+      incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888001');
       assert.deepStrictEqual(reg[0], ENCABEZADOS_REGISTRO);
-      assert.strictEqual(ultima()[col('Fuente del análisis')], 'TRATAMIENTO PROLONGADO'); assert.strictEqual(ultima()[col('Enviado al grupo')], 'PENDIENTE');
+      assert.strictEqual(ultima()[col('Fuente del análisis')], 'TRATAMIENTO PROLONGADO'); assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI');
+      assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION');
       assert.strictEqual(ultima()[col('Semáforo final')], 'ROJO'); assert.strictEqual(ultima()[col('Días de tratamiento continuo')], 16);
       incluye(ultima()[col('Detalle')], '2. MEROPENEM 23/10/2026-01/11/2026 · 9 d\n3. CEFEPIME');
       // con restringido: el caso PROA sale de inmediato con la lista de prescripciones; la revision no se repite
       notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888001', 'J189', [['ERTAPENEM', '1000', '24', '7']]));
-      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*🚨 CASO PROA · Ertapenem*'); noIncluye(envios[0].message, '📆');
-      incluye(envios[0].message, '⏱️ Con esta orden: *23 d* de antibiótico continuo');
+      assert.strictEqual(envios.length, 2); incluye(envios[1].message, '*🚨 CASO PROA · Ertapenem*'); noIncluye(envios[1].message, '📆');
+      incluye(envios[1].message, '⏱️ Con esta orden: *23 d* de antibiótico continuo');
       assert.strictEqual(ultima()[col('Enviado al grupo')], 'NO'); incluye(ultima()[col('Destino')], 'tiene restringido');
       notificarNuevaRespuesta(e6);
-      assert.strictEqual(ultima()[col('Enviado al grupo')], 'PENDIENTE'); assert.strictEqual(ultima()[col('Semáforo final')], 'AMARILLO');
+      assert.strictEqual(envios.length, 3); incluye(envios[2].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🟡 *HC 888006');
+      assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Semáforo final')], 'AMARILLO');
+      // la verde no sale
       notificarNuevaRespuesta(e7);
+      assert.strictEqual(envios.length, 3);
       assert.strictEqual(ultima()[col('Enviado al grupo')], 'NO'); incluye(ultima()[col('Destino')], 'dentro de la referencia');
+      envios.forEach(function (x) { noIncluye(x.message, '888007'); if (x.message.indexOf('📆') > -1) { noIncluye(x.message, '💡'); noIncluye(x.message, '📏'); } });
       // sin criterio no se registra revision
       var n = reg.length;
       notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888004', 'J189', [['MEROPENEM', '1000', '8', '7']]));
       assert.strictEqual(reg.length, n);
-
-      envios.length = 0;
-      probarResumenProlongados();
-      assert.strictEqual(envios.length, 0);
-      enviarResumenProlongados();
-      // un mensaje por paciente, los rojos primero; la verde no sale
-      assert.strictEqual(envios.length, 2);
-      incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888001');
-      incluye(envios[1].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🟡 *HC 888006');
-      envios.forEach(function (x) { noIncluye(x.message, '888007'); noIncluye(x.message, '💡'); noIncluye(x.message, '📏'); });
-      var pend = reg.filter(function (f) { return f[col('Fuente del análisis')] === 'TRATAMIENTO PROLONGADO' && f[col('Enviado al grupo')] === 'SI'; });
-      assert.strictEqual(pend.length, 2); incluye(pend[0][col('Destino')], 'RESUMEN DIARIO ');
-      envios.length = 0;
-      enviarResumenProlongados();
-      assert.strictEqual(envios.length, 0, 'nada pendiente');
 
       // 7 dias: el mismo paciente 3 dias despues no se repite; 8 dias despues, si
       filas.push(filaMatriz('01/11/2026 10:00:00', '888001', [['CEFEPIME', '2000', '8', '7']]));
       notificarNuevaRespuesta(eventoSeguimiento('04/11/2026 10:00:00', '888001', 'J189', [['MEROPENEM', '1000', '8', '7']]));
       incluye(ultima()[col('Destino')], 'ya tuvo revisión');
       notificarNuevaRespuesta(eventoSeguimiento('09/11/2026 10:00:00', '888001', 'J189', [['MEROPENEM', '1000', '8', '7']]));
-      assert.strictEqual(ultima()[col('Enviado al grupo')], 'PENDIENTE');
+      assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI');
 
-      // sin resumen diario, la revision sale de inmediato con el mismo formato
-      CONFIG.PROLONGADO_RESUMEN_DIARIO = false;
-      try {   // modo inmediato
-        envios.length = 0;
-        notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]));
-        assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888003 · 60 años*\n📋 J189 · Neumonia, no especificada\n⏱️ Lleva *22 d* de antibiótico; con esta orden llegaría a *36 d*');
-        // renovaciones seguidas del mismo antimicrobiano en una linea
-        incluye(envios[0].message, '\n1-3. MEROPENEM 10/10/2026-01/11/2026 · *22 d*\n4. MEROPENEM 1000 mg IV c/8 h 01/11/2026-15/11/2026 · *14 d* (esta orden)\nPor antimicrobiano: MEROPENEM *36 d*');
-        assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION');
-      } finally { CONFIG.PROLONGADO_RESUMEN_DIARIO = true; }
+      // renovaciones seguidas del mismo antimicrobiano en una linea
+      envios.length = 0;
+      notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]));
+      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888003 · 60 años*\n📋 J189 · Neumonia, no especificada\n⏱️ Lleva *22 d* de antibiótico; con esta orden llegaría a *36 d*');
+      incluye(envios[0].message, '\n1-3. MEROPENEM 10/10/2026-01/11/2026 · *22 d*\n4. MEROPENEM 1000 mg IV c/8 h 01/11/2026-15/11/2026 · *14 d* (esta orden)\nPor antimicrobiano: MEROPENEM *36 d*');
+      assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION');
     });
   } finally { global.PropertiesService = propsReal; }
-  } finally { CONFIG.PROLONGADO_RESUMEN_DIARIO = false; }
+});
+
+prueba('una sola regla de continuidad (mensajes e informe) y codigo retirado en la v1.36.0', function () {
+  // la del caso real de 66 d: 21 + 14 + 24 d antes de la orden del 15/11
+  var ordenes = [{ fecha: fechaDe('17/09/2026 16:00:00'), dias: 21 }, { fecha: fechaDe('08/10/2026 03:00:00'), dias: 14 },
+    { fecha: fechaDe('22/10/2026 19:47:19'), dias: 21 }];
+  var t = fechaDe('15/11/2026 17:10:18').getTime();
+  assert.strictEqual(diasTratamientoPrevio(ordenes, t), 59);
+  assert.strictEqual(diasTratamientoPrevio(ordenes.map(function (o) { return { t: o.fecha.getTime(), dias: o.dias }; }), t), 59);
+  // sin la orden del medio se corta la continuidad (21 d terminan el 08/10; con 3 de tolerancia, antes del 22/10)
+  assert.strictEqual(diasTratamientoPrevio([ordenes[0], ordenes[2]], t), 24);
+  // ordenes de la misma hora o posteriores no cuentan
+  assert.strictEqual(diasTratamientoPrevio([{ t: t, dias: 7 }, { t: t + 864e5, dias: 7 }], t), 0);
+  assert.strictEqual(diaCalendario(fechaDe('22/10/2026 23:59:00').getTime()) - diaCalendario(fechaDe('08/10/2026 00:01:00').getTime()), 14);
+  // el informe semanal ya no tiene su propia copia de la regla
+  assert.ok(srcIa.indexOf('diasTratamientoPrevio(') > -1 && srcIa.indexOf('SEGUIMIENTO_TOLERANCIA_DIAS') === -1);
+  ['enviarResumenProlongados', 'probarResumenProlongados', 'crearTriggerResumenProlongados', 'encabezadosDestacados', 'lineaEsquema',
+   'pertinenciaDesdeEvento', 'diasTexto', 'frecuenciaTexto'].forEach(function (f) { assert.ok(src.indexOf('function ' + f + '(') === -1, f); });
+  assert.ok(!('PROLONGADO_RESUMEN_DIARIO' in CONFIG) && !('ENCABEZADOS_DESTACADOS' in CONFIG));
+});
+
+prueba('version: Codigo.gs e IA_PROA.gs de la misma version, y aviso si no coinciden', function () {
+  assert.ok(/^\d+\.\d+\.\d+$/.test(VERSION_BOT)); assert.strictEqual(VERSION_INFORME, VERSION_BOT);
+  assert.strictEqual(avisoVersiones_(), ''); assert.strictEqual(textoVersiones_(), 'Código v' + VERSION_BOT + ' · IA_PROA v' + VERSION_BOT);
+  var antes = VERSION_INFORME;
+  VERSION_INFORME = '0.0.1';
+  try { incluye(avisoVersiones_(), 'no coinciden: pegue los dos archivos de la misma versión'); } finally { VERSION_INFORME = antes; }
+  // el CHANGELOG empieza por la version del codigo
+  var changelog = fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8');
+  incluye(changelog.split('\n## [')[1], VERSION_BOT + ']');
 });
 
 prueba('probarUltimoProlongado: muestra la ultima revision por tratamiento prolongado sin enviar nada', function () {
@@ -1068,6 +1077,7 @@ prueba('informe semanal: cifras de la semana calculadas por el codigo, sin IA si
         assert.deepStrictEqual(HOJAS['INFORMES_PROA']._filas[0], ENCABEZADOS_INFORMES);
         assert.strictEqual(fila[1], '16/11–22/11'); assert.strictEqual(fila[2], 'PRUEBA BOT'); assert.strictEqual(fila[3], 'SI');
         assert.strictEqual(fila[4], CIFRAS_SEMANA); incluye(fila[5], 'sin IA'); assert.strictEqual(fila[6], '');
+        assert.strictEqual(fila[10], 'Código v' + VERSION_BOT + ' · IA_PROA v' + VERSION_INFORME);
       });
     });
     // nombres de servicio y cultivos tal como vienen en la matriz real

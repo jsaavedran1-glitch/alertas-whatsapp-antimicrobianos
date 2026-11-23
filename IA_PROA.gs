@@ -19,7 +19,11 @@
 //
 // A la API solo salen cifras agregadas: sin historia clinica, nombres, camas ni medicos.
 // Activador: crearTriggerInformeProa() (una vez). Prueba sin enviar nada: probarInformeProa(dias).
+// Usa funciones de Codigo.gs (la regla del tratamiento continuo, entre otras): los dos archivos se pegan juntos y de la
+// misma version (VERSION_INFORME = VERSION_BOT); si no coinciden, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
+
+var VERSION_INFORME = "1.36.0";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
@@ -84,6 +88,7 @@ var INFORME_ESQUEMA = {
 function enviarInformeSemanalProa() { enviarInforme_(new Date()); }
 
 function enviarInforme_(hoy) {
+  if (avisoVersiones_()) Logger.log(avisoVersiones_());
   var inf = construirInformeProa_(hoy, INFORME_DIAS);
   var destino = destinoInforme_();
   var envio = enviarAlertaWhatsApp(inf.mensaje, { chatId: destino.chatId, sinFirma: true });
@@ -94,7 +99,17 @@ function enviarInforme_(hoy) {
 // escribe en la matriz; con ANTHROPIC_API_KEY llama a la API (unos USD 0,05-0,15).
 function probarInformeProa(dias) {
   var inf = construirInformeProa_(new Date(), Number(dias) || INFORME_DIAS);
-  Logger.log("PRUEBA (no se envió nada) · destino configurado: %s\n\n%s\n\n▶ Registro: %s", destinoInforme_().nombre, inf.mensaje, textoRegistroIa_(inf.ia));
+  Logger.log("PRUEBA (no se envió nada) · " + textoVersiones_() + " · destino configurado: %s%s\n\n%s\n\n▶ Registro: %s", destinoInforme_().nombre,
+    avisoVersiones_() ? "\n" + avisoVersiones_() : "", inf.mensaje, textoRegistroIa_(inf.ia));
+}
+
+// "Código v1.36.0 · IA_PROA v1.36.0" y, si no coinciden, el aviso para pegar los dos archivos de la misma version.
+function textoVersiones_() {
+  return "Código v" + (typeof VERSION_BOT !== "undefined" ? VERSION_BOT : "?") + " · IA_PROA v" + VERSION_INFORME;
+}
+function avisoVersiones_() {
+  var bot = typeof VERSION_BOT !== "undefined" ? VERSION_BOT : "?";
+  return bot === VERSION_INFORME ? "" : "⚠️ Las versiones de Código (" + bot + ") e IA_PROA (" + VERSION_INFORME + ") no coinciden: pegue los dos archivos de la misma versión.";
 }
 
 // Envia SOLO a PRUEBA BOT (IA_CHAT_PRUEBA fijo) el informe de los ultimos `dias` dias, para verlo en WhatsApp.
@@ -172,26 +187,11 @@ function sinCultivos(valor) {
 
 function fechaDiaMes_(d) { return ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2); }
 
-// Tratamiento continuo hasta una orden, con las reglas de seguimientoPaciente() (Codigo.gs): se retrocede mientras
-// una orden anterior del paciente (de la lista) termine, con CONFIG.SEGUIMIENTO_TOLERANCIA_DIAS de tolerancia, despues
-// del inicio conocido, dentro de CONFIG.SEGUIMIENTO_DIAS; dias calendario. Devuelve los dias desde el inicio hasta la
-// orden, sin contar los de la orden.
-function diasPrevios_(ordenes, t) {
-  var dia = 864e5, tolerancia = CONFIG.SEGUIMIENTO_TOLERANCIA_DIAS * dia, ventana = t - CONFIG.SEGUIMIENTO_DIAS * dia;
-  var lista = ordenes.filter(function(o) { return o.t < t - 1000 && o.t >= ventana; });
-  var inicio = t, cambio = true;
-  while (cambio) {
-    cambio = false;
-    lista.forEach(function(o) { if (o.t < inicio && o.t + (o.dias || 1) * dia + tolerancia >= inicio) { inicio = o.t; cambio = true; } });
-  }
-  var diaCal = function(x) { var d = new Date(x); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / dia); };
-  return diaCal(t) - diaCal(inicio);
-}
-
 function diasOrden_(v) { var d = numeroONulo(v); return (d !== null && d > 0 && d < 365) ? d : 0; }
 function promedio_(lista) { return lista.length ? Math.round(10 * lista.reduce(function(a, b) { return a + b; }, 0) / lista.length) / 10 : 0; }
 
-// Dias de tratamiento de los pacientes con alguna orden en [desde, hasta), con su ultima orden del periodo:
+// Dias de tratamiento de los pacientes con alguna orden en [desde, hasta), con su ultima orden del periodo, con la regla
+// del tratamiento continuo de Codigo.gs (diasTratamientoPrevio, la misma de los mensajes):
 // { porAm: { nombre: [dias por paciente, solo de ese antimicrobiano] }, largos: [{ hc, servicio, dias }] }. largos: el
 // tratamiento continuo del paciente (antibacteriano o antifungico, el mayor), sumando cambios de antimicrobiano, como
 // el "Con esta orden: N d" del caso PROA.
@@ -214,7 +214,7 @@ function tratamientosDelPeriodo_(eventos, desde, hasta) {
       if (!ultima) return;
       var previas = [];
       ordenes.forEach(function(o) { delTipo(o).forEach(function(am) { previas.push({ t: o.t, dias: diasOrden_(am.dias) }); }); });
-      var dias = diasPrevios_(previas, ultima.t) + Math.max.apply(null, delTipo(ultima).map(function(am) { return diasOrden_(am.dias); }));
+      var dias = diasTratamientoPrevio(previas, ultima.t) + Math.max.apply(null, delTipo(ultima).map(function(am) { return diasOrden_(am.dias); }));
       if (!mayor || dias > mayor.dias) mayor = { hc: hc, servicio: servicioCorto(ultima.servicio), dias: dias };
     });
     var nombres = {};
@@ -223,7 +223,7 @@ function tratamientosDelPeriodo_(eventos, desde, hasta) {
       var ultima = delPeriodo.filter(function(o) { return o.ams.some(function(am) { return am.nombre === nombre; }); }).pop();
       var previas = [];
       ordenes.forEach(function(o) { o.ams.forEach(function(am) { if (am.nombre === nombre) previas.push({ t: o.t, dias: diasOrden_(am.dias) }); }); });
-      var dias = diasPrevios_(previas, ultima.t) + Math.max.apply(null, ultima.ams.filter(function(am) { return am.nombre === nombre; }).map(function(am) { return diasOrden_(am.dias); }));
+      var dias = diasTratamientoPrevio(previas, ultima.t) + Math.max.apply(null, ultima.ams.filter(function(am) { return am.nombre === nombre; }).map(function(am) { return diasOrden_(am.dias); }));
       (res.porAm[nombre] = res.porAm[nombre] || []).push(dias);
     });
     if (mayor) res.largos.push(mayor);
@@ -460,16 +460,17 @@ function textoRegistroIa_(ia) {
 
 // Una fila por informe en la pestana INFORMES_PROA (la crea si no existe). Nunca interrumpe el envio.
 var ENCABEZADOS_INFORMES = ["Fecha", "Periodo", "Destino", "Enviado", "Mensaje", "IA: descartados y repaso", "Modelo", "Tokens de entrada",
-  "Tokens de salida", "Costo aproximado USD"];
+  "Tokens de salida", "Costo aproximado USD", "Versión"];
 
 function registrarInforme_(inf, destino, enviado) {
   try {
     var libro = libroProa();
     var hoja = libro.getSheetByName(INFORME_HOJA);
     if (!hoja) { hoja = libro.insertSheet(INFORME_HOJA); hoja.appendRow(ENCABEZADOS_INFORMES); }
+    else if (hoja.getLastColumn() < ENCABEZADOS_INFORMES.length) hoja.getRange(1, 1, 1, ENCABEZADOS_INFORMES.length).setValues([ENCABEZADOS_INFORMES]);
     var ia = inf.ia && inf.ia.lectura ? inf.ia : null;
     hoja.appendRow([new Date(), inf.actual.periodo, destino, enviado ? "SI" : "NO", inf.mensaje, textoRegistroIa_(inf.ia).slice(0, 5000),
-      ia ? ia.modelo : "", ia ? ia.entrada : "", ia ? ia.salida : "", ia ? ia.costo : ""]);
+      ia ? ia.modelo : "", ia ? ia.entrada : "", ia ? ia.salida : "", ia ? ia.costo : "", textoVersiones_()]);
   } catch (err) {
     Logger.log("No se pudo registrar el informe: " + err);
   }

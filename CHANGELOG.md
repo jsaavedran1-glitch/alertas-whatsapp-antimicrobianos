@@ -2,6 +2,16 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.0] - 2026-11-23
+
+### Cambiado (auditoría: mantenimiento, sin cambios en los mensajes)
+- **Una sola regla de tratamiento continuo**, que usan los mensajes y el informe semanal: `diaCalendario()`, `inicioTratamientoContinuo()` y `diasTratamientoPrevio()` en `Codigo.gs`. `IA_PROA.gs` ya no tiene su propia copia (`diasPrevios_`). Si se cambia la tolerancia o la ventana, cambia en los dos.
+- **Versión visible:** `VERSION_BOT` (Código) y `VERSION_INFORME` (IA_PROA) deben coincidir. `probarSolicitud_()`, `probarCruceCIE10()` y `probarInformeProa()` la escriben, y la pestaña `INFORMES_PROA` tiene la columna `Versión`. Si los dos archivos pegados no son de la misma versión, la prueba y el informe lo avisan.
+
+### Retirado
+- **Resumen diario de las 7:00** (apagado desde la v1.31.0): `enviarResumenProlongados()`, `probarResumenProlongados()`, `crearTriggerResumenProlongados()`, `CONFIG.PROLONGADO_RESUMEN_DIARIO`/`_HORA` y el estado `PENDIENTE`. La revisión de duración sale al llegar la solicitud, como hasta ahora.
+- `CONFIG.ENCABEZADOS_DESTACADOS` y `encabezadosDestacados()` (vacíos desde la v1.32.0), y `lineaEsquema()`, `frecuenciaTexto()`, `pertinenciaDesdeEvento()` y `diasTexto()`, que nada usaba.
+
 ## [1.35.3] - 2026-11-23
 
 ### Corregido (tercera prueba con la matriz real: 39 cruzadas, 24 sin código; los cruces equivocados ya no aparecen)
