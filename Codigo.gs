@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.23';
+var VERSION_BOT = '1.36.24';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -1302,7 +1302,7 @@ function duracionFrenteReferencia(diagnosticos, tipoIndicacion, antifungico, tot
   var nivel = valorarDuracion(elegido, total).nivel;
   return { encabezado: elegido.sindrome + ' ' + rangoDuracion(elegido) + ' d (' + elegido.fuente + ')' +
     (conMax.length > 1 ? ', la más larga de sus patologías' : ''),
-    nivel: nivel, texto: ['dentro de la referencia', 'supera la referencia', 'duplica la referencia'][nivel], rango: rangoDuracion(elegido),
+    nivel: nivel, texto: ['dentro de la referencia', 'supera la referencia', 'duplica la referencia'][nivel],
     motivo: ['Dentro de la duración de referencia', 'Supera la duración de referencia', 'Más del doble de la duración de referencia'][nivel] +
       ' para ' + minusculaInicial(elegido.sindrome) + ' (' + rangoDuracion(elegido) + ' d)' };
 }
@@ -1373,23 +1373,6 @@ function lineaPorAntimicrobiano(episodio, actuales, negrita) {
   });
   orden.sort(function(a, c) { return ((esta[c] ? 1 : 0) - (esta[a] ? 1 : 0)) || (suma[c] - suma[a]); });
   return 'Por antimicrobiano: ' + orden.map(function(nm) { return nm + ' ' + b(formatoNumero(suma[nm], 0) + ' d'); }).join(' · ');
-}
-
-// Revision de duracion (v1.36.23, reemplaza "Por antimicrobiano"): "Con esta orden: MEROPENEM 27 d · LINEZOLID 29 d", los
-// antimicrobianos de esta orden con sus dias en el tratamiento continuo (los de antes mas los de esta orden), en el orden
-// de la solicitud. '' si ninguno venia de antes: entonces solo repetiria el ultimo item de la lista.
-function lineaConEstaOrden(episodio, actuales) {
-  var suma = {}, nombres = [], dePrevio = false;
-  episodio.solicitudes.forEach(function(x) { x.nombres.forEach(function(nm) { suma[nm] = (suma[nm] || 0) + x.dias; }); });
-  actuales.forEach(function(am) {
-    if (nombres.indexOf(am.nombre) > -1) return;
-    nombres.push(am.nombre);
-    if (suma[am.nombre] > 0) dePrevio = true;
-    var n = numeroONulo(am.dias);
-    suma[am.nombre] = (suma[am.nombre] || 0) + ((n !== null && n > 0) ? n : 0);
-  });
-  if (!dePrevio) return '';
-  return 'Con esta orden: ' + nombres.map(function(nm) { return nm + ' ' + formatoNumero(suma[nm], 0) + ' d'; }).join(' · ');
 }
 
 // Referencia de duracion del caso: la del diagnostico actual o, si el tratamiento continuo de algun
@@ -1803,8 +1786,8 @@ function revisionProlongado(e, coincidenciasOpt) {
   var nivel = dur.nivel >= 0 ? dur.nivel : 1;   // sin referencia para sus patologias, se sugiere verificar
 
   // Formato simple (decisiones del referente, 2026-11-22 y 2026-11-25: mensajes cortos). El registro guarda estas lineas
-  // sin negrita: [0] paciente, [1] foco o diagnostico, [2] dias y motivo del color, la lista, avisos, via oral, "Con esta
-  // orden" y 📏 (solo registro).
+  // sin negrita: [0] paciente, [1] foco o diagnostico, [2] dias, la lista, avisos, via oral y 📏 (solo registro; trae la
+  // referencia con su fuente).
   var cama = campo('CAMA'), servicio = campo('SERVICIO');
   var bloque = ['HC ' + campo('HC') + ' · ' + edadTexto(campo('EDAD_ANIOS'), campo('EDAD_MESES'), campo('EDAD_DIAS')) +
     (servicio !== '-' ? ' · ' + servicioCorto(servicio) : '') + (cama !== '-' ? ' · Cama ' + cama : '')];
@@ -1818,24 +1801,19 @@ function revisionProlongado(e, coincidenciasOpt) {
   } else {
     bloque.push(E(0x1F4CB) + ' ' + diagnosticoCorto(dxActual || '-') + conSepsis);
   }
-  // "⏱️ Lleva 45 d; con esta orden 59 d: más del doble de la referencia (7-14 d)" (v1.36.23: dias y motivo en una linea;
-  // el color ya va en la linea del paciente)
-  var motivo = dur.rango ? ['dentro de la referencia', 'supera la referencia', 'más del doble de la referencia'][dur.nivel] + ' (' + dur.rango + ' d)'
-    : minusculaInicial(dur.motivo);
+  // "⏱️ Lleva 45 d; con esta orden 59 d" (v1.36.24: sin el motivo; el color de la linea del paciente lo indica y la
+  // referencia queda en la linea 📏 del registro)
   bloque.push(E(0x23F1) + E(0xFE0F) + ' Lleva ' + formatoNumero(p.dias, 0) + ' d' + (p.antifungico ? ' de antifúngico' : '') +
-    (p.proyectado > p.dias ? '; con esta orden ' + formatoNumero(p.proyectado, 0) + ' d' : '') + ': ' + motivo);
+    (p.proyectado > p.dias ? '; con esta orden ' + formatoNumero(p.proyectado, 0) + ' d' : ''));
   var diasOrden = p.proyectado - p.dias;
   lineasPrescripciones(p.episodio, { texto: actuales.map(function(am) {
     var d = numeroONulo(am.dosis);
     return am.nombre + ' ' + (d !== null ? formatoNumero(d, 2) + ' mg' : am.dosis) + ' ' + viaCorta(am.via) + ' ' + frecuenciaCorta(am.frecuencia);
   }).join(' + '), inicio: fechaSolicitud.getTime(), dias: diasOrden }, false).forEach(function(l) { bloque.push(l); });
   actuales.forEach(function(am) { if (avisoFrecuencia(am)) bloque.push(E(0x26A0) + E(0xFE0F) + ' ' + avisoFrecuencia(am)); });
+  // v1.36.24 (decision del referente): sin "💉 … no viene en esta orden" ni "Con esta orden" (el caso PROA conserva la 💉)
   var viaOral = lineaViaOral(e, actuales, true);
   if (viaOral) bloque.push(viaOral);
-  var dentro = seguimientoPaciente(e).dentroDeDias.filter(function(x) { return x.antifungico === p.antifungico; });
-  if (dentro.length) bloque.push(lineaDentroDeDias(dentro));
-  var conEsta = lineaConEstaOrden(p.episodio, actuales);
-  if (conEsta) bloque.push(conEsta);
   bloque.push(E(0x1F4CF) + ' ' + (dur.encabezado
     ? dur.encabezado + (dur.nivel >= 0 ? ': ' + formatoNumero(p.proyectado, 0) + ' d ' + dur.texto : '')
     : (dur.texto ? capitalizar(dur.texto) : 'Sin duración de referencia en las tablas para estas patologías')));
@@ -1843,11 +1821,10 @@ function revisionProlongado(e, coincidenciasOpt) {
 }
 
 // Mensaje de la revision de duracion ("REVISION DE DURACION DE TTO", nombre elegido por el referente). Formato simple
-// (2026-11-22; mas corto desde la v1.36.23): paciente, foco, dias que lleva y con esta orden con el motivo del color, la
-// lista y los dias de los antimicrobianos de esta orden. Sin lineas en blanco para que WhatsApp no lo corte. Negrita
-// (decision del referente, 2026-11-25): los dias que lleva y con esta orden, la orden nueva completa y sus antimicrobianos
-// con sus dias en "Con esta orden"; las ordenes anteriores van sin negrita. La linea 📏 (referencia completa con su
-// fuente) queda solo en el registro. item: { nivel, bloque }.
+// (2026-11-22; mas corto desde la v1.36.23-24): paciente con el color, foco, dias que lleva y con esta orden, la lista y
+// la via oral. Sin lineas en blanco para que WhatsApp no lo corte. Negrita (decision del referente, 2026-11-25): los dias
+// que lleva y con esta orden, y la orden nueva completa; las ordenes anteriores van sin negrita. La linea 📏 (referencia
+// completa con su fuente) queda solo en el registro. item: { nivel, bloque }.
 function mensajeProlongado(item) {
   var E = function(cp) { return String.fromCodePoint(cp); };
   var color = [E(0x1F7E2), E(0x1F7E1), E(0x1F534)];
@@ -1855,14 +1832,8 @@ function mensajeProlongado(item) {
   var lineas = ['*' + E(0x1F4C6) + ' REVISIÓN DE DURACIÓN DE TTO*', color[nivel] + ' *' + item.bloque[0] + '*'];
   item.bloque.slice(1).forEach(function(l) {
     if (l.indexOf(E(0x1F4CF)) === 0) return;
-    if (l.indexOf(E(0x23F1)) === 0) {
-      var i = l.indexOf(': ');   // los dias antes del motivo; el rango de la referencia sin negrita
-      l = (i > -1 ? l.slice(0, i) : l).replace(/(\d+ d)\b/g, '*$1*') + (i > -1 ? l.slice(i) : '');
-    } else if (/^\d+(-\d+)?\. /.test(l) && / \(esta orden\)$/.test(l)) {
-      l = '*' + l + '*';
-    } else if (l.indexOf('Con esta orden: ') === 0) {
-      l = 'Con esta orden: ' + l.slice('Con esta orden: '.length).split(' · ').map(function(x) { return '*' + x + '*'; }).join(' · ');
-    }
+    if (l.indexOf(E(0x23F1)) === 0) l = l.replace(/(\d+ d)\b/g, '*$1*');
+    else if (/^\d+(-\d+)?\. /.test(l) && / \(esta orden\)$/.test(l)) l = '*' + l + '*';
     lineas.push(l);
   });
   return lineas.join('\n');

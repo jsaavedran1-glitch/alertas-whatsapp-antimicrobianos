@@ -2,6 +2,15 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.24] - 2026-11-25 (solo Codigo.gs)
+
+### Retirado de la revisión de duración (decisión del referente; el caso PROA no cambia)
+- La línea `💉 VANCOMICINA no viene en esta orden; si no se suspendió, sigue hasta 01/12` (el caso PROA la conserva).
+- La línea `Con esta orden: CEFEPIME 22 d` (se quita `lineaConEstaOrden()`).
+- El motivo del color en la línea de días: queda `⏱️ Lleva 12 d; con esta orden 26 d`. El color de la línea del paciente indica el nivel y la referencia con su fuente sigue en la línea 📏 del registro.
+
+El mensaje del 24/11 de 26 d (paciente de 32 años) queda en 8 líneas.
+
 ## [1.36.23] - 2026-11-25 (Codigo.gs e IA_PROA.gs)
 
 ### Cambiado (decisión del referente: mensaje de duración más corto)
