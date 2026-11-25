@@ -2,6 +2,21 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.25] - 2026-11-25 (solo Codigo.gs)
+
+### Cambiado (decisión del referente): la línea de vía oral solo cuando el paciente es candidato
+`💊 Tolera vía oral: …` (revisión de duración y caso PROA) sale solo si se cumplen **todos** (`motivoSinViaOral_()`, `CONFIG.VIA_ORAL_DIAS_MINIMOS`, `CONFIG.VIA_ORAL_FOCOS_IV`):
+- tolera la vía oral (por boca o por sonda) y el antimicrobiano va IV con presentación oral de biodisponibilidad alta (como antes);
+- adulto (≥18 años; los criterios de consenso son para adultos);
+- **sin sepsis ni choque séptico** marcados en la solicitud (paciente estable);
+- al menos **48 h** de tratamiento continuo del mismo tipo (antibacteriano o antifúngico);
+- foco que no exige IV: no SNC, endocarditis ni neutropenia febril;
+- sin bacteriemia por *S. aureus* (foco bacteriemia o catéter con *S. aureus*).
+
+Evidencia: consenso nacional IVOS (Harvey et al., *J Clin Med* 2023, doi 10.3390/jcm12062086); paso temprano a oral en bacteriemia y sepsis (Li et al., *Clin Microbiol Infect* 2025, doi 10.1016/j.cmi.2024.11.035); *S. aureus* de bajo riesgo tras 5-7 d IV (SABATO, *Lancet Infect Dis* 2024, doi 10.1016/S1473-3099(23)00756-9); endocarditis (POET, *N Engl J Med* 2019, doi 10.1056/NEJMoa1808312); neutropenia febril de bajo riesgo (EASI-SWITCH, *Health Technol Assess*, doi 10.3310/RGTP7112). Temperatura, signos vitales y mejoría clínica no están en el formulario: la línea sigue siendo una sugerencia para el equipo.
+
+Con los datos del 23 al 25/11, las dos solicitudes que mostraban la línea (linezolid y levofloxacino) tenían "Sepsis" marcada: ya no la mostrarían.
+
 ## [1.36.24] - 2026-11-25 (solo Codigo.gs)
 
 ### Retirado de la revisión de duración (decisión del referente; el caso PROA no cambia)

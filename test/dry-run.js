@@ -629,7 +629,9 @@ prueba('formulario del 2026-11-23: frecuencias nuevas, fenotipo, terapia de reem
   assert.strictEqual(frecuenciaHoras('Infusión extendida'), null); assert.strictEqual(frecuenciaHoras('Dosis única'), null);
   assert.strictEqual(avisoFrecuencia({ nombre: 'VANCOMICINA', frecuencia: '3 dosis y suspender' }), '');
   assert.strictEqual(avisoFrecuencia({ nombre: 'VANCOMICINA', frecuencia: '3' }), 'Verificar frecuencia de VANCOMICINA: c/3 h');
-  // caso PROA: fenotipo junto al aislamiento, terapia de reemplazo renal y via oral; la creatinina no va en el mensaje
+  // caso PROA: fenotipo junto al aislamiento, terapia de reemplazo renal y via oral; la creatinina no va en el mensaje.
+  // La via oral exige 48 h de tratamiento (v1.36.25): el paciente viene con cefepime desde el 17/11
+  HOJAS['Respuestas de formulario 1']._filas.push(filaMatriz('17/11/2026 08:00:00', '889020', [['CEFEPIME', '2000', '8', '7']]));
   var e = eventoSeguimiento('20/11/2026 10:00:00', '889020', 'A419', [['CEFTAZIDIMA / AVIBACTAM', '2500', '8', '14'], ['LINEZOLID', '600', '12', '14']]);
   var nv = e.namedValues;
   nv[CAMPOS.MICROORGANISMO] = ['Klebsiella pneumoniae']; nv[CAMPOS.FENOTIPO] = ['Carbapenemasa (KPC, NDM, OXA-48)'];
@@ -645,6 +647,35 @@ prueba('formulario del 2026-11-23: frecuencias nuevas, fenotipo, terapia de reem
   // sin la respuesta de via oral o si no tolera, no hay linea
   nv[CAMPOS.TOLERA_VO] = ['No']; assert.strictEqual(lineaViaOral(e, leerSlots(e)), '');
   nv[CAMPOS.TOLERA_VO] = ['']; assert.strictEqual(lineaViaOral(e, leerSlots(e)), '');
+});
+
+prueba('via oral (v1.36.25): solo adultos estables, desde las 48 h, sin foco que exija IV ni bacteriemia por S. aureus', function () {
+  var filas = HOJAS['Respuestas de formulario 1']._filas;
+  filas.push(filaMatriz('17/11/2026 08:00:00', '889060', [['CEFEPIME', '2000', '8', '7']]));
+  var ev = function (hc, cambios) {
+    var e = eventoSeguimiento('20/11/2026 10:00:00', hc, 'J189', [['LINEZOLID', '600', '12', '14']]);
+    var nv = e.namedValues; nv[CAMPOS.TOLERA_VO] = ['Sí, por boca']; nv[CAMPOS.SEPSIS] = ['No']; nv[CAMPOS.FOCO] = ['Neumonía nosocomial o asociada a ventilador'];
+    Object.keys(cambios || {}).forEach(function (k) { nv[k] = [cambios[k]]; });
+    return e;
+  };
+  var linea = function (e) { return lineaViaOral(e, leerSlots(e), true); };
+  var esperada = '💊 Tolera vía oral: LINEZOLID tiene presentación oral';
+  assert.strictEqual(linea(ev('889060')), esperada);   // 3 d de tratamiento, estable, adulto
+  var c = function (campo, valor) { var o = {}; o[campo] = valor; return o; };
+  assert.strictEqual(linea(ev('889060', c(CAMPOS.SEPSIS, 'Sepsis'))), '');
+  assert.strictEqual(linea(ev('889060', c(CAMPOS.SEPSIS, 'Choque séptico'))), '');
+  assert.strictEqual(linea(ev('889060', c(CAMPOS.EDAD_ANIOS, '12'))), '');
+  assert.strictEqual(linea(ev('889060', c(CAMPOS.FOCO, 'Sistema nervioso central (meningitis, absceso)'))), '');
+  assert.strictEqual(linea(ev('889060', c(CAMPOS.FOCO, 'Endocarditis'))), '');
+  assert.strictEqual(linea(ev('889060', c(CAMPOS.FOCO, 'Neutropenia febril'))), '');
+  var sab = ev('889060', c(CAMPOS.FOCO, 'Bacteriemia / sepsis sin foco claro')); sab.namedValues[CAMPOS.MICROORGANISMO] = ['Staphylococcus aureus'];
+  assert.strictEqual(linea(sab), '');
+  assert.strictEqual(motivoSinViaOral_(sab), 'bacteriemia por S. aureus');
+  // S. aureus en otro foco (neumonia) si permite la sugerencia
+  var neu = ev('889060'); neu.namedValues[CAMPOS.MICROORGANISMO] = ['Staphylococcus aureus'];
+  assert.strictEqual(linea(neu), esperada);
+  // primer dia de tratamiento: aun no (revision a las 48 h)
+  assert.strictEqual(linea(ev('889061')), '');
 });
 
 prueba('foco infeccioso del formulario: define la duracion de referencia por encima del CIE10; sepsis en el caso', function () {

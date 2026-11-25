@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.24';
+var VERSION_BOT = '1.36.25';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -217,7 +217,15 @@ var CONFIG = {
   // Antimicrobianos con presentacion oral de biodisponibilidad alta: si van IV y el paciente tolera la via oral (pregunta
   // del 2026-11-23), el caso PROA y la revision lo informan (v1.36.15).
   ORAL_BIODISPONIBLE: ['LINEZOLID', 'CIPROFLOXACINO', 'LEVOFLOXACINO', 'MOXIFLOXACINO', 'FLUCONAZOL', 'VORICONAZOL',
-    'METRONIDAZOL', 'CLINDAMICINA', 'TRIMETOPRIM', 'DOXICICLINA', 'RIFAMPICINA']
+    'METRONIDAZOL', 'CLINDAMICINA', 'TRIMETOPRIM', 'DOXICICLINA', 'RIFAMPICINA'],
+  // Criterios para sugerir el paso a oral (v1.36.25, decision del referente; consenso nacional IVOS, Harvey et al.,
+  // J Clin Med 2023, doi 10.3390/jcm12062086): adulto que tolera la via oral, sin sepsis ni choque septico marcados en la
+  // solicitud, con al menos VIA_ORAL_DIAS_MINIMOS dias de tratamiento (revision a las 48 h), sin un foco que exija IV
+  // (SNC; endocarditis, POET: oral solo tras >= 10 d IV con especialista; neutropenia febril, solo de bajo riesgo) y sin
+  // bacteriemia por S. aureus (SABATO: solo bajo riesgo tras 5-7 d IV). Lo que el formulario no trae (temperatura, signos
+  // vitales, mejoria clinica) lo valora el equipo: la linea es una sugerencia.
+  VIA_ORAL_DIAS_MINIMOS: 2,
+  VIA_ORAL_FOCOS_IV: ['SISTEMA NERVIOSO', 'ENDOCARDITIS', 'NEUTROPENIA']
 };
 
 /* =====================================================================
@@ -1964,16 +1972,39 @@ function notificarAjusteRenal_(e, coincidencias) {
   }
 }
 
+// Motivo por el que el paciente no es candidato a pasar a oral segun los criterios de CONFIG (VIA_ORAL_*), o '' si lo es.
+// No mira el antimicrobiano ni los dias (eso lo hace lineaViaOral).
+function motivoSinViaOral_(e) {
+  var v = (e && e.namedValues) || {};
+  if (!/^S/.test(normalizarTexto(campoDelEvento(v, CAMPOS.TOLERA_VO)))) return 'no tolera la vía oral o no se respondió';
+  var edad = numeroONulo(campoDelEvento(v, CAMPOS.EDAD_ANIOS));
+  if (edad === null || edad < 18) return 'menor de 18 años o sin edad';
+  if (/^(SEPSIS|CHOQUE)/.test(normalizarTexto(campoDelEvento(v, CAMPOS.SEPSIS)))) return 'sepsis o choque séptico';
+  var foco = normalizarTexto(campoDelEvento(v, CAMPOS.FOCO));
+  if ((CONFIG.VIA_ORAL_FOCOS_IV || []).some(function(f) { return foco.indexOf(f) > -1; })) return 'foco que exige vía IV';
+  if (/BACTERIEMIA/.test(foco) && /AUREUS/.test(normalizarTexto(microorganismoDe(lectorDeValores(v))))) return 'bacteriemia por S. aureus';
+  return '';
+}
+
 // "💊 Tolera la vía oral (sí, por sonda): LINEZOLID tiene presentación oral con biodisponibilidad alta" si algun
-// antimicrobiano de CONFIG.ORAL_BIODISPONIBLE va IV y el paciente tolera la via oral; '' si no. corta (revision de
-// duracion, v1.36.23): "💊 Tolera vía oral: LINEZOLID tiene presentación oral".
+// antimicrobiano de CONFIG.ORAL_BIODISPONIBLE va IV, el paciente cumple los criterios del paso a oral (motivoSinViaOral_)
+// y el tratamiento continuo de ese tipo (antibacteriano o antifungico) ya lleva CONFIG.VIA_ORAL_DIAS_MINIMOS dias; '' si
+// no. corta (revision de duracion, v1.36.23): "💊 Tolera vía oral: LINEZOLID tiene presentación oral".
 function lineaViaOral(e, ams, corta) {
   var tolera = String(campoDelEvento((e && e.namedValues) || {}, CAMPOS.TOLERA_VO) || '').trim();
-  if (!/^s/i.test(normalizarTexto(tolera))) return '';
+  if (motivoSinViaOral_(e)) return '';
+  var porAm = seguimientoPaciente(e).porAm;
+  var diasDelTipo = function(antifungico) {
+    return Object.keys(porAm).reduce(function(max, k) {
+      var c = porAm[k];
+      return (c.episodio && c.episodio.antifungico === antifungico && c.transcurridos > max) ? c.transcurridos : max;
+    }, 0);
+  };
   var nombres = [];
   (ams || []).forEach(function(am) {
     var n = normalizarTexto(am.nombre);
     if (normalizarTexto(am.via).indexOf('INTRAVEN') !== 0 || nombres.indexOf(am.nombre) > -1) return;
+    if (diasDelTipo(esAntifungico(am.nombre)) < (CONFIG.VIA_ORAL_DIAS_MINIMOS || 0)) return;
     if ((CONFIG.ORAL_BIODISPONIBLE || []).some(function(x) { return n.indexOf(x) === 0; })) nombres.push(am.nombre);
   });
   if (!nombres.length) return '';
