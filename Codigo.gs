@@ -1,5 +1,5 @@
 // Version del codigo; sale en las funciones de prueba para saber que version esta pegada en el editor.
-var VERSION_BOT = '1.36.21';
+var VERSION_BOT = '1.36.22';
 
 var CONFIG = {
   SPREADSHEET_ID: '1ZsjuygpRz1wPhCRxmL8LPLTNOo8kujGXplX8JRs6SZY',
@@ -196,10 +196,6 @@ var CONFIG = {
   // (horas entre dosis), dosisMax (mg por dosis), diariaMax (mg/dia); ref: lo que indica la ficha para ese tramo.
   AJUSTE_RENAL_ACTIVO: true,
   AJUSTE_RENAL_ENVIAR: false,
-  // v1.36.21 (decision del referente, 2026-11-25): si el caso PROA o la revision de duracion se envian y la revision renal
-  // encuentra algo, va como una sola linea dentro de ese mensaje (lineaAjusteRenal), no como mensaje aparte. El mensaje
-  // aparte sigue dependiendo de AJUSTE_RENAL_ENVIAR.
-  AJUSTE_RENAL_EN_MENSAJE: true,
   AJUSTE_RENAL: [
     { am: 'CEFEPIME', tramos: [{ cl: 10, intervaloMin: 24, dosisMax: 1000, ref: '0,25-1 g c/24 h' },
       { cl: 29, intervaloMin: 24, ref: '0,5-2 g c/24 h' }, { cl: 60, intervaloMin: 12, ref: '0,5-2 g c/12-24 h (2 g c/12 h si el régimen era 2 g c/8 h)' }] },
@@ -515,43 +511,40 @@ function rangoTexto(min, max) {
    ===================================================================== */
 function notificarNuevaRespuesta(e) {
   var coincidencias = filtrarAntimicrobianosRestringidos(e);
-  var enviado = notificarCaso_(e, coincidencias);
+  notificarCaso_(e, coincidencias);
   // Mensaje aparte, tenga o no restringido: tratamiento continuo largo con varias solicitudes.
-  enviado = notificarTratamientoProlongado(e, coincidencias) || enviado;
-  // Ajuste renal: va como linea del mensaje enviado (v1.36.21); si no hubo mensaje, en modo prueba solo deja la fila.
-  notificarAjusteRenal_(e, coincidencias, enviado);
+  notificarTratamientoProlongado(e, coincidencias);
+  // Ajuste renal (v1.36.15): en modo prueba solo deja la fila en el registro. No va en los mensajes (decision del
+  // referente, 2026-11-25: la linea de la v1.36.21 se retiro en la v1.36.22).
+  notificarAjusteRenal_(e, coincidencias);
 }
 
 // Caso PROA. Si no sale, queda en el registro solo cuando hay un restringido que dispara alerta (con el motivo: no
 // supera CONFIG.CASO_DIAS_MINIMOS). Vancomicina o linezolid solos no dejan fila (v1.36.4): no generan mensaje y eran dos
-// de cada tres filas del registro. Devuelve true si el mensaje se envio.
+// de cada tres filas del registro.
 function notificarCaso_(e, coincidencias) {
   if (!generaCasoProa(e, coincidencias)) {
     if (debeAlertar(coincidencias)) registrarRevision(e, coincidencias, { enviado: false,
       destino: 'no se envía: ' + formatoNumero(diasCasoProa(e, coincidencias), 0) + ' d (caso PROA desde más de ' + CONFIG.CASO_DIAS_MINIMOS + ' d)' });
-    return false;
+    return;
   }
   // El mensaje ya se encabeza con "CASO PROA": no lleva la linea de titulo del bot.
   var envio = enviarAlertaWhatsApp(construirMensajeDesdeEvento(e, coincidencias), { sinFirma: true });
   registrarRevision(e, coincidencias, { enviado: !!(envio && envio.ok), destino: 'PRODUCCION' });
-  return !!(envio && envio.ok);
 }
 
 // Revision por tratamiento prolongado, sin modelo (son datos de la matriz y la tabla de duracion): sale al llegar la
-// solicitud (el resumen diario de las 7:00 se retiro en la v1.36.0). Un error aqui no afecta al caso PROA. Devuelve true
-// si el mensaje se envio.
+// solicitud (el resumen diario de las 7:00 se retiro en la v1.36.0). Un error aqui no afecta al caso PROA.
 function notificarTratamientoProlongado(e, coincidencias) {
   try {
     var revision = revisionProlongado(e, coincidencias);
-    if (!revision) return false;
+    if (!revision) return;
     var accion = accionProlongado(revision, e, coincidencias), envio = null;
     if (accion === 'ENVIAR') envio = enviarAlertaWhatsApp(revision.mensaje, { sinFirma: true });
     registrarRevision(e, coincidencias, { fuente: FUENTE_PROLONGADO, nivelFinal: revision.nivel, detalle: revision.bloque.join('\n'),
       enviado: !!(envio && envio.ok), destino: accion === 'ENVIAR' ? 'PRODUCCION' : TEXTO_ACCION_PROLONGADO[accion] });
-    return !!(envio && envio.ok);
   } catch (err) {
     Logger.log('Revision por tratamiento prolongado no disponible: ' + err);
-    return false;
   }
 }
 
@@ -1802,8 +1795,6 @@ function revisionProlongado(e, coincidenciasOpt) {
     return am.nombre + ' ' + (d !== null ? formatoNumero(d, 2) + ' mg' : am.dosis) + ' ' + viaCorta(am.via) + ' ' + frecuenciaCorta(am.frecuencia);
   }).join(' + '), inicio: fechaSolicitud.getTime(), dias: diasOrden }, false).forEach(function(l) { bloque.push(l); });
   actuales.forEach(function(am) { if (avisoFrecuencia(am)) bloque.push(E(0x26A0) + E(0xFE0F) + ' ' + avisoFrecuencia(am)); });
-  var renal = lineaAjusteRenal(e);
-  if (renal) bloque.push(renal);
   var viaOral = lineaViaOral(e, actuales);
   if (viaOral) bloque.push(viaOral);
   var dentro = seguimientoPaciente(e).dentroDeDias.filter(function(x) { return x.antifungico === p.antifungico; });
@@ -1945,29 +1936,15 @@ function revisionAjusteRenal(e) {
     mensaje: '*' + E(0x1F4A7) + ' VERIFICAR AJUSTE RENAL*\n*' + bloque[0] + '*\n' + bloque.slice(1).join('\n') };
 }
 
-// Linea del ajuste renal dentro del caso PROA y de la revision de duracion (CONFIG.AJUSTE_RENAL_EN_MENSAJE, v1.36.21):
-// "💧 Depuración estimada 29 ml/min · ficha técnica: MEROPENEM la misma dosis c/12 h"; '' si no hay nada que verificar.
-function lineaAjusteRenal(e) {
-  if (!CONFIG.AJUSTE_RENAL_EN_MENSAJE) return '';
-  var r = revisionAjusteRenal(e);
-  if (!r) return '';
-  return String.fromCodePoint(0x1F4A7) + ' Depuración estimada ' + formatoNumero(r.depuracion.valor, 0) + ' ml/min · ficha técnica: ' +
-    r.hallazgos.map(function(x) { return x.nombre + ' ' + x.tramo.ref; }).join('; ');
-}
-
-// Fila del ajuste renal en REGISTRO_REVISIONES. enMensaje: el caso PROA o la revision de esta solicitud se enviaron, asi que
-// el hallazgo ya fue como linea de ese mensaje (lineaAjusteRenal). Si no, mensaje aparte solo con AJUSTE_RENAL_ENVIAR (en
-// modo prueba, solo la fila). Nunca interrumpe el flujo.
-function notificarAjusteRenal_(e, coincidencias, enMensaje) {
+// Modo prueba (CONFIG.AJUSTE_RENAL_ENVIAR = false): una fila en REGISTRO_REVISIONES, sin enviar. Nunca interrumpe el flujo.
+function notificarAjusteRenal_(e, coincidencias) {
   try {
     var r = revisionAjusteRenal(e);
     if (!r) return;
-    var enLinea = !!(enMensaje && CONFIG.AJUSTE_RENAL_EN_MENSAJE);
-    var envio = (!enLinea && CONFIG.AJUSTE_RENAL_ENVIAR) ? enviarAlertaWhatsApp(r.mensaje, { sinFirma: true }) : null;
+    var envio = CONFIG.AJUSTE_RENAL_ENVIAR ? enviarAlertaWhatsApp(r.mensaje, { sinFirma: true }) : null;
     registrarRevision(e, coincidencias || filtrarAntimicrobianosRestringidos(e), { fuente: FUENTE_AJUSTE_RENAL, nivelFinal: 1,
-      detalle: r.bloque.join('\n'), enviado: enLinea || !!(envio && envio.ok),
-      destino: enLinea ? 'va como línea del mensaje enviado (caso PROA o revisión)' :
-        CONFIG.AJUSTE_RENAL_ENVIAR ? 'PRODUCCION' : 'prueba: no se envía (AJUSTE_RENAL_ENVIAR = false)' });
+      detalle: r.bloque.join('\n'), enviado: !!(envio && envio.ok),
+      destino: CONFIG.AJUSTE_RENAL_ENVIAR ? 'PRODUCCION' : 'prueba: no se envía (AJUSTE_RENAL_ENVIAR = false)' });
   } catch (err) {
     Logger.log('Revision de ajuste renal no disponible: ' + err);
   }
@@ -2228,8 +2205,6 @@ function construirMensajeDesdeEvento(e, coincidenciasOpt) {
       (am.delDia ? ' · otra solicitud de hoy' : ''));
     if (avisoFrecuencia(am)) lineas.push('   ' + adv + ' ' + avisoFrecuencia(am));
   });
-  var renal = lineaAjusteRenal(e);
-  if (renal) lineas.push(renal);
   var viaOral = lineaViaOral(e, esquemas);
   if (viaOral) lineas.push(viaOral);
   seguimientoPaciente(e).lineas.forEach(function(l) { lineas.push(l); });

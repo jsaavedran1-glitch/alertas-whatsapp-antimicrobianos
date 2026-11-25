@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.22] - 2026-11-25 (solo Codigo.gs)
+
+### Retirado (decisión del referente, mismo día)
+- La línea `💧 Depuración estimada … · ficha técnica: …` de la v1.36.21 ya no va en el caso PROA ni en la revisión de duración (se quitan `lineaAjusteRenal()` y `CONFIG.AJUSTE_RENAL_EN_MENSAJE`). El ajuste renal vuelve a estar solo en modo prueba: una fila en `REGISTRO_REVISIONES`, sin mensaje.
+- Se mantiene la fecha de fin en lo formulado antes (`💉 VANCOMICINA no viene en esta orden; si no se suspendió, sigue hasta 01/12`).
+
 ## [1.36.21] - 2026-11-25 (solo Codigo.gs)
 
 ### Cambiado (decisión del referente; mensajes cortos)

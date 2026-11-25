@@ -620,11 +620,6 @@ prueba('formularios separados entre dias: lo que sigue dentro de sus dias se inf
   var e2 = eventoSeguimiento('01/11/2026 10:00:00', '889011', 'J189', [['VANCOMICINA', '1000', '12', '7']]);
   assert.deepStrictEqual(seguimientoPaciente(e2).dentroDeDias.map(function (x) { return x.nombre; }), ['MEROPENEM']);
   incluye(seguimientoPaciente(e2).lineas.join('\n'), '💉 MEROPENEM no viene en esta orden; si no se suspendió, sigue hasta 04/11/2026');
-  // la linea del ajuste renal va en la revision, antes de la via oral (aqui simulada: la amikacina no tiene regla)
-  var renalReal = global.lineaAjusteRenal;
-  global.lineaAjusteRenal = function () { return '💧 Depuración estimada 29 ml/min · ficha técnica: X'; };
-  try { incluye(revisionProlongado(e, []).mensaje, '(esta orden)\n💧 Depuración estimada 29 ml/min · ficha técnica: X\n💉 No vienen'); }
-  finally { global.lineaAjusteRenal = renalReal; }
 });
 
 prueba('formulario del 2026-11-23: frecuencias nuevas, fenotipo, terapia de reemplazo renal y via oral', function () {
@@ -717,9 +712,7 @@ prueba('ajuste renal en modo prueba: Cockcroft-Gault, tabla por tramos y solo un
   incluye(r.hallazgos[1].texto, 'con depuración 30-60 ml/min'); incluye(r.hallazgos[2].texto, 'PIPERACILINA / TAZOBACTAM 4500 mg c/6 h: con depuración 20-40 ml/min');
   incluye(r.bloque[1], '💧 Creatinina 2 mg/dL · depuración estimada 39 ml/min (Cockcroft-Gault, 70 kg, hombre)');
   incluye(r.mensaje, '*💧 VERIFICAR AJUSTE RENAL*'); noIncluye(r.mensaje, 'no pertinente');
-  // v1.36.21: una sola linea corta para el caso PROA y la revision
-  assert.strictEqual(lineaAjusteRenal(ev('889031', [['MEROPENEM', '1000', '8', '7']])), '💧 Depuración estimada 39 ml/min · ficha técnica: MEROPENEM la misma dosis c/12 h');
-  assert.strictEqual(lineaAjusteRenal(ev('889032', [['MEROPENEM', '1000', '12', '7']])), '');
+
   // dosis ya ajustadas: nada que verificar
   assert.strictEqual(revisionAjusteRenal(ev('889032', [['MEROPENEM', '1000', '12', '7'], ['PIPERACILINA / TAZOBACTAM', '4500', '8', '7'], ['CEFEPIME', '2000', '12', '7']])), null);
   // sin evaluar: terapia de reemplazo renal, menor de 18 anos, sin creatinina, antimicrobiano sin regla, depuracion normal
@@ -742,14 +735,13 @@ prueba('ajuste renal en modo prueba: Cockcroft-Gault, tabla por tramos y solo un
       // con la dosis ajustada no queda fila
       notificarNuevaRespuesta(ev('889036', [['MEROPENEM', '1000', '12', '7']]));
       assert.strictEqual(reg.length, 2);
-      // v1.36.21: si sale el caso PROA, el hallazgo va como linea de ese mensaje y la fila lo dice
+      // v1.36.22: con caso PROA, el hallazgo renal no va en el mensaje; solo la fila del registro (modo prueba)
       notificarNuevaRespuesta(ev('889037', [['CEFTAZIDIMA / AVIBACTAM', '2500', '8', '21']]));
       assert.strictEqual(envios.length, 1); incluye(envios[0].message, 'CASO PROA');
-      incluye(envios[0].message, '💧 Depuración estimada 39 ml/min · ficha técnica: CEFTAZIDIMA / AVIBACTAM 1,25 g c/8 h');
-      noIncluye(envios[0].message, 'VERIFICAR AJUSTE RENAL');
+      noIncluye(envios[0].message, 'Depuración'); noIncluye(envios[0].message, 'VERIFICAR AJUSTE RENAL');
       var filaRenal = reg[reg.length - 1];
-      assert.strictEqual(filaRenal[col('Fuente del análisis')], 'AJUSTE RENAL'); assert.strictEqual(filaRenal[col('Enviado al grupo')], 'SI');
-      incluye(filaRenal[col('Destino')], 'va como línea del mensaje enviado');
+      assert.strictEqual(filaRenal[col('Fuente del análisis')], 'AJUSTE RENAL'); assert.strictEqual(filaRenal[col('Enviado al grupo')], 'NO');
+      incluye(filaRenal[col('Destino')], 'prueba: no se envía');
     });
   } finally { global.PropertiesService = propsReal; }
 });
