@@ -2,6 +2,8 @@
 
 **Estado: MODO PRUEBA y PENDIENTE de validación por el comité PROA.** Mientras `CONFIG.AJUSTE_RENAL_ENVIAR` sea `false`, el bot no envía nada: deja una fila en `REGISTRO_REVISIONES` (fuente `AJUSTE RENAL`, destino "prueba: no se envía") por cada solicitud con una dosis que no coincide con la tabla. Esas filas sirven para medir cuántos avisos son útiles antes de enviarlos al grupo.
 
+**Desde la v1.36.21 (decisión del referente, 2026-11-25):** si la solicitud ya genera un caso PROA o una revisión de duración que se envía al grupo, el hallazgo va como **una línea dentro de ese mensaje** (`CONFIG.AJUSTE_RENAL_EN_MENSAJE = true`): `💧 Depuración estimada 29 ml/min · ficha técnica: MEROPENEM la misma dosis c/12 h`. La fila del registro queda con destino "va como línea del mensaje enviado". El mensaje renal aparte sigue apagado.
+
 ## Cómo calcula
 
 - **Creatinina:** la pregunta nueva `Creatinina sérica (mg/dL)` (formulario del 2026-11-23). **No** usa la pregunta antigua "depuración de creatinina en (mg/dl)": en 90 días, 107 de 137 valores eran creatininas y no depuraciones.

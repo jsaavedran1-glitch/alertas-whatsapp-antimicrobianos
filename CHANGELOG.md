@@ -2,6 +2,12 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.21] - 2026-11-25 (solo Codigo.gs)
+
+### Cambiado (decisión del referente; mensajes cortos)
+- **Ajuste renal dentro del mismo mensaje** (`CONFIG.AJUSTE_RENAL_EN_MENSAJE = true`, `lineaAjusteRenal()`): si sale el caso PROA o la revisión de duración y la revisión renal encuentra algo, va una sola línea `💧 Depuración estimada 29 ml/min · ficha técnica: MEROPENEM la misma dosis c/12 h`. No hay mensaje renal aparte: sigue dependiendo de `AJUSTE_RENAL_ENVIAR` (false). La fila `AJUSTE RENAL` del registro dice "va como línea del mensaje enviado". Motivo: el 24/11 la revisión de un paciente de 87 años (meropenem 1 g c/8 h, depuración estimada 29 ml/min) salió sin ese dato; en dos días el modo prueba encontró 3 casos. La tabla sigue pendiente de validación por el comité.
+- **"Formulado antes" con fecha de fin:** `💉 VANCOMICINA no viene en esta orden; si no se suspendió, sigue hasta 01/12` (con varios: `💉 No vienen en esta orden; si no se suspendieron, siguen: VANCOMICINA hasta 01/12 · CEFEPIME hasta 28/11`). Antes decía "desde 17/11 (14 d)" junto a una lista que mostraba "VANCOMICINA 17/11-21/11 · 4 d", y no se entendía si seguía.
+
 ## [1.36.20] - 2026-11-23 (solo IA_PROA.gs)
 
 ### Agregado (decisión del referente)
