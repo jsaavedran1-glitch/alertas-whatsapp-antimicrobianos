@@ -612,7 +612,7 @@ prueba('formularios separados entre dias: lo que sigue dentro de sus dias se inf
   // en la revision va despues de la lista; los dias no cambian (cada orden hasta la siguiente)
   var r = revisionProlongado(e, []);
   incluye(r.bloque.join('\n'), '3. VANCOMICINA 24/10/2026-01/11/2026 · 8 d\n4. AMIKACINA 1000 mg IV c/24 h 01/11/2026-08/11/2026 · 7 d (esta orden)\n' + linea);
-  incluye(r.mensaje, linea); incluye(r.bloque[2], 'Lleva 18 d de antibiótico');
+  incluye(r.mensaje, linea); incluye(r.bloque[2], '⏱️ Lleva 18 d; con esta orden 25 d: más del doble de la referencia (5-7 d)');
   // lo que una orden posterior reemplazo (misma familia) no se informa: el cefepime, con el meropenem del 28/10
   filas.push(filaMatriz('14/10/2026 08:00:00', '889011', [['PIPERACILINA / TAZOBACTAM', '4500', '6', '7']]));
   filas.push(filaMatriz('20/10/2026 08:00:00', '889011', [['CEFEPIME', '2000', '8', '14']]));
@@ -637,6 +637,8 @@ prueba('formulario del 2026-11-23: frecuencias nuevas, fenotipo, terapia de reem
   var m = construirMensajeDesdeEvento(e, filtrarAntimicrobianosRestringidos(e));
   incluye(m, '🦠 Klebsiella pneumoniae (carbapenemasa)'); incluye(m, '💧 Terapia de reemplazo renal: Hemodiálisis intermitente');
   incluye(m, '💊 Tolera la vía oral (sí, por sonda): LINEZOLID tiene presentación oral con biodisponibilidad alta');
+  // la revision de duracion usa la version corta (v1.36.23)
+  assert.strictEqual(lineaViaOral(e, leerSlots(e), true), '💊 Tolera vía oral: LINEZOLID tiene presentación oral');
   noIncluye(m, 'Creatinina'); noIncluye(m, 'depuración');
   assert.strictEqual(fenotipoCorto('Sin aislamiento'), ''); assert.strictEqual(fenotipoCorto('Pendiente'), 'antibiograma pendiente');
   assert.strictEqual(fenotipoCorto('SAMR (S. aureus meticilino resistente)'), 'SAMR'); assert.strictEqual(fenotipoCorto('BLEE'), 'BLEE');
@@ -672,7 +674,14 @@ prueba('foco infeccioso del formulario: define la duracion de referencia por enc
   var e7 = ev('889047', 'R509', 'Osteomielitis / artritis séptica', [['CEFAZOLINA', '2000', '8', '7']], 'Sepsis');
   e7.namedValues['Marca temporal'] = ['01/11/2026 10:00:00'];
   var r7 = revisionProlongado(e7, []);
-  assert.strictEqual(r7.nivel, 0); incluye(r7.bloque.join('\n'), '🎯 Foco: Osteomielitis / artritis séptica · Sepsis');
+  // v1.36.23: en la revision, foco, sepsis y CIE10 en una linea (sin la linea del diagnostico)
+  assert.strictEqual(r7.nivel, 0); assert.strictEqual(r7.bloque[1], '🎯 Osteomielitis / artritis séptica · Sepsis · R509');
+  noIncluye(r7.bloque.join('\n'), '📋');
+  // con foco "Otro", el diagnostico escrito (y la sepsis en la misma linea)
+  var e8 = ev('889047', 'R509', 'Otro', [['CEFAZOLINA', '2000', '8', '7']], 'Sepsis');
+  e8.namedValues['Marca temporal'] = ['01/11/2026 10:00:00'];
+  var b8 = revisionProlongado(e8, []).bloque[1];
+  assert.ok(b8.indexOf('📋 R509') === 0 && / · Sepsis$/.test(b8), b8);
   incluye(r7.bloque[r7.bloque.length - 1], '📏 Osteomielitis / espondilodiscitis 42 d');
   // el caso PROA muestra el foco y el choque, y el diagnostico tal como se escribio (sin la marca interna)
   var m = construirMensajeDesdeEvento(ev('889048', 'J189', 'Neumonía nosocomial o asociada a ventilador', [['MEROPENEM', '1000', '8', '7'], ['ERTAPENEM', '1000', '24', '7']], 'Choque séptico'));
@@ -758,17 +767,19 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, al m
   assert.deepStrictEqual(p.nuevos, ['CEFEPIME']);
   var r = revisionProlongado(e, filtrarAntimicrobianosRestringidos(e));
   assert.strictEqual(r.nivel, 2); assert.strictEqual(r.hc, '888001');
-  // formato simple (2026-11-22): paciente, diagnostico, dias, motivo del color y la lista sin codigos
-  assert.deepStrictEqual(r.bloque.slice(0, 7), ['HC 888001 · 60 años', '📋 J189 · Neumonia, no especificada', '⏱️ Lleva 16 d de antibiótico; con esta orden llegaría a 23 d',
-    '🔴 Más del doble de la duración de referencia para neumonía (5-7 d)',
+  // formato corto (v1.36.23): paciente, diagnostico (sin foco), dias con el motivo del color y la lista sin codigos
+  assert.deepStrictEqual(r.bloque.slice(0, 6), ['HC 888001 · 60 años', '📋 J189 · Neumonia, no especificada',
+    '⏱️ Lleva 16 d; con esta orden 23 d: más del doble de la referencia (5-7 d)',
     '1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · 7 d', '2. MEROPENEM 23/10/2026-01/11/2026 · 9 d',
     '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d (esta orden)']);
-  incluye(r.bloque[7], '📏 Neumonía 5-7 d ('); incluye(r.bloque[7], '): 23 d duplica la referencia');
-  assert.strictEqual(r.bloque.length, 8);   // ningun antimicrobiano se repite: sin "Por antimicrobiano"
+  incluye(r.bloque[6], '📏 Neumonía 5-7 d ('); incluye(r.bloque[6], '): 23 d duplica la referencia');
+  assert.strictEqual(r.bloque.length, 7);   // el cefepime no venia de antes: sin "Con esta orden"
+  // negrita: los dias que lleva y con esta orden, y la orden nueva completa; las anteriores sin negrita
   assert.strictEqual(r.mensaje, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888001 · 60 años*\n📋 J189 · Neumonia, no especificada\n' +
-    '⏱️ Lleva *16 d* de antibiótico; con esta orden llegaría a *23 d*\n🔴 Más del doble de la duración de referencia para neumonía (5-7 d)\n' +
-    '1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · *7 d*\n2. MEROPENEM 23/10/2026-01/11/2026 · *9 d*\n' +
-    '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · *7 d* (esta orden)');
+    '⏱️ Lleva *16 d*; con esta orden *23 d*: más del doble de la referencia (5-7 d)\n' +
+    '1. PIPERACILINA / TAZOBACTAM 16/10/2026-23/10/2026 · 7 d\n2. MEROPENEM 23/10/2026-01/11/2026 · 9 d\n' +
+    '*3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d (esta orden)*');
+  assert.strictEqual(lineaConEstaOrden(tratamientoProlongado(e).episodio, leerSlots(e)), '');
   // un solo antimicrobiano de amplio espectro no es "terapia combinada"
   noIncluye(sugerenciaPROA('Empírico', [], [{ nombre: 'CEFEPIME' }]), 'combinada');
 
@@ -779,15 +790,16 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, al m
   var r6 = revisionProlongado(e6, []);
   assert.strictEqual(r6.nivel, 1);
   incluye(r6.bloque.join('\n'), '1. PIPERACILINA / TAZOBACTAM 16/10/2026-24/10/2026 · 8 d\n2. CEFEPIME 24/10/2026-01/11/2026 · 8 d\n' +
-    '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d (esta orden)\nPor antimicrobiano: CEFEPIME 15 d · PIPERACILINA / TAZOBACTAM 8 d');
-  assert.strictEqual(r6.bloque[3], '🟡 Supera la duración de referencia para bacteriemia / sepsis (7-14 d)');   // la mas larga de sus patologias
+    '3. CEFEPIME 2000 mg IV c/8 h 01/11/2026-08/11/2026 · 7 d (esta orden)\nCon esta orden: CEFEPIME 15 d');
+  incluye(r6.bloque[2], ': supera la referencia (7-14 d)');   // la mas larga de sus patologias
+  incluye(r6.mensaje, '\nCon esta orden: *CEFEPIME 15 d*');
   var u6 = r6.bloque[r6.bloque.length - 1];
   incluye(u6, '📏 Bacteriemia / sepsis 7-14 d ('); incluye(u6, ', la más larga de sus patologías: 23 d supera la referencia');
   filas.push(conDx('10/10/2026 08:00:00', '888007', [['CEFAZOLINA', '2000', '8', '14']], 'M861 - OSTEOMIELITIS'));
   filas.push(conDx('24/10/2026 08:00:00', '888007', [['CEFAZOLINA', '2000', '8', '7']], 'L039 - CELULITIS'));
   var e7 = eventoSeguimiento('01/11/2026 10:00:00', '888007', 'L031', [['CEFAZOLINA', '2000', '8', '7']]);
   var r7 = revisionProlongado(e7, []);
-  assert.strictEqual(r7.nivel, 0); assert.strictEqual(r7.bloque[3], '🟢 Dentro de la duración de referencia para osteomielitis / espondilodiscitis (42 d)');
+  assert.strictEqual(r7.nivel, 0); incluye(r7.bloque[2], ': dentro de la referencia (42 d)');
   incluye(r7.bloque[r7.bloque.length - 1], '📏 Osteomielitis / espondilodiscitis 42 d (');
   incluye(r7.bloque[r7.bloque.length - 1], ', la más larga de sus patologías: 29 d dentro de la referencia');
 
@@ -806,7 +818,8 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, al m
   filas.push(filaMatriz('17/10/2026 20:00:00', '888008', [['ERTAPENEM', '1000', '24', '7']]));
   filas.push(filaMatriz('24/10/2026 08:00:00', '888008', [['ERTAPENEM', '1000', '24', '7']]));
   var r8 = revisionProlongado(eventoSeguimiento('01/11/2026 10:00:00', '888008', 'L031', [['ERTAPENEM', '1000', '24', '7']]), []);
-  assert.strictEqual(r8.bloque[4], '1-2. ERTAPENEM 17/10/2026-01/11/2026 · 15 d'); noIncluye(r8.mensaje, 'MEROPENEM');
+  assert.strictEqual(r8.bloque[3], '1-2. ERTAPENEM 17/10/2026-01/11/2026 · 15 d'); noIncluye(r8.mensaje, 'MEROPENEM');
+  incluye(r8.mensaje, '\nCon esta orden: *ERTAPENEM 22 d*');
 
   // No alcanza: 2 solicitudes aunque sean 22 d; 3 solicitudes con solo 7 d; dos ordenes el mismo dia son una
   filas.push(filaMatriz('10/10/2026 08:00:00', '888002', [['MEROPENEM', '1000', '8', '21']]));
@@ -876,8 +889,8 @@ prueba('tratamiento prolongado: 3 o mas solicitudes seguidas y mas de 10 d, al m
       // renovaciones seguidas del mismo antimicrobiano en una linea
       envios.length = 0;
       notificarNuevaRespuesta(eventoSeguimiento('01/11/2026 10:00:00', '888003', 'J189', [['MEROPENEM', '1000', '8', '14']]));
-      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888003 · 60 años*\n📋 J189 · Neumonia, no especificada\n⏱️ Lleva *22 d* de antibiótico; con esta orden llegaría a *36 d*');
-      incluye(envios[0].message, '\n1-3. MEROPENEM 10/10/2026-01/11/2026 · *22 d*\n4. MEROPENEM 1000 mg IV c/8 h 01/11/2026-15/11/2026 · *14 d* (esta orden)\nPor antimicrobiano: MEROPENEM *36 d*');
+      assert.strictEqual(envios.length, 1); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*\n🔴 *HC 888003 · 60 años*\n📋 J189 · Neumonia, no especificada\n⏱️ Lleva *22 d*; con esta orden *36 d*: ');
+      incluye(envios[0].message, '\n1-3. MEROPENEM 10/10/2026-01/11/2026 · 22 d\n*4. MEROPENEM 1000 mg IV c/8 h 01/11/2026-15/11/2026 · 14 d (esta orden)*\nCon esta orden: *MEROPENEM 36 d*');
       assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI'); assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION');
     });
   } finally { global.PropertiesService = propsReal; }
@@ -979,7 +992,7 @@ prueba('restringido: caso PROA solo si supera 14 d con esta orden; sin listado: 
       reg.splice(1);
       notificarNuevaRespuesta(eventoSeguimiento('15/11/2026 11:00:00', '888010', 'L031', [['MEROPENEM', '1000', '8', '7']]));
       assert.strictEqual(envios.length, 1); assert.strictEqual(ultima()[col('Enviado al grupo')], 'SI');
-      assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION'); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*'); incluye(envios[0].message, 'con esta orden llegaría a *66 d*');
+      assert.strictEqual(ultima()[col('Destino')], 'PRODUCCION'); incluye(envios[0].message, '*📆 REVISIÓN DE DURACIÓN DE TTO*'); incluye(envios[0].message, 'con esta orden *66 d*');
       noIncluye(envios[0].message, 'CASO PROA');
       // restringido que no dispara (vancomicina) cuenta como fuera del listado para la revision
       assert.strictEqual(generaCasoProa(eventoPruebaVancomicinaSola(), filtrarAntimicrobianosRestringidos(eventoPruebaVancomicinaSola())), false);

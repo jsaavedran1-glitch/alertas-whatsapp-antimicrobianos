@@ -29,7 +29,7 @@
 // ultimo numero y basta con pegar este. Si mayor.menor no coincide, la prueba y la pestana INFORMES_PROA lo dicen.
 // =====================================================================
 
-var VERSION_INFORME = "1.36.20";
+var VERSION_INFORME = "1.36.23";
 
 var INFORME_DIAS = 7;
 var INFORME_HORA = 7;                             // lunes, hora de Colombia
@@ -279,12 +279,7 @@ function eventosDesde_(desde) {
 
 function porcentaje(a, b) { return b ? Math.round(100 * a / b) : 0; }
 
-// "Unidad de Cuidado Critico UCI A" -> "UCI A"; "Unidad de Cuidado Critico PEDIATRIA" -> "UCI PEDIATRÍA";
-// "Hospitalizacion Medicina interna" -> "Hosp. Medicina interna"
-function servicioCorto(s) {
-  return String(s || "").replace(/\s+/g, " ").trim().replace(/^Unidad de Cuidado Cr[ií]tico\s*/i, "UCI ").replace(/^UCI UCI\b/, "UCI")
-    .replace(/^Unidad de Cuidados Intermedios\s*/i, "Intermedios ").replace(/^Hospitalizaci[oó]n\s+/i, "Hosp. ").trim() || "Sin servicio";
-}
+// servicioCorto() esta en Codigo.gs desde la v1.36.23 (la usa tambien la revision de duracion).
 
 // Cultivos de la solicitud (v1.36.20): "tomados" si nombra algun cultivo ("UROCULTIVO, NINGUNO" y "HEMOCULTIVO,
 // SOLICITADOS (PENDIENTES DE TOMA)" cuentan como tomados); "pendientes" con la opcion SOLICITADOS (PENDIENTES DE TOMA)

@@ -2,6 +2,17 @@
 
 Todas las fechas en hora de Colombia (America/Bogota).
 
+## [1.36.23] - 2026-11-25 (Codigo.gs e IA_PROA.gs)
+
+### Cambiado (decisión del referente: mensaje de duración más corto)
+Solo la **revisión de duración**; el caso PROA no cambia. En el mensaje del paciente de 87 años del 24/11: de 13 a 11 líneas y de 784 a 556 caracteres, con los mismos datos.
+- Servicio abreviado: `Hosp. Quirúrgicos ortopedia`, `UCI B` (`servicioCorto()`, que pasa de IA_PROA.gs a Codigo.gs; el informe semanal la sigue usando).
+- Foco, sepsis y diagnóstico en una línea: `🎯 Bacteriemia / sepsis sin foco claro · Sepsis · A499`. Con foco "Otro" o sin foco sale el diagnóstico escrito, como antes (con la sepsis en la misma línea).
+- Días y motivo del color en una línea: `⏱️ Lleva 45 d; con esta orden 59 d: más del doble de la referencia (7-14 d)` (el color ya va en la línea del paciente; los antifúngicos dicen "Lleva 20 d de antifúngico").
+- Vía oral corta: `💊 Tolera vía oral: LINEZOLID tiene presentación oral`.
+- "Por antimicrobiano" pasa a `Con esta orden: MEROPENEM 27 d · LINEZOLID 29 d`: solo los antimicrobianos de esta orden con sus días en el tratamiento continuo (`lineaConEstaOrden()`); no sale si ninguno venía de antes.
+- Negrita: los días que lleva y con esta orden, la orden nueva completa y los antimicrobianos de "Con esta orden" con sus días. Las órdenes anteriores van sin negrita.
+
 ## [1.36.22] - 2026-11-25 (solo Codigo.gs)
 
 ### Retirado (decisión del referente, mismo día)
